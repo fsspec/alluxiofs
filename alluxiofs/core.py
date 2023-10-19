@@ -1,7 +1,7 @@
-import os
-import fsspec
 import logging
+import os
 
+import fsspec
 from alluxio import AlluxioFileSystem as AlluxioSystem
 from fsspec.spec import AbstractBufferedFile
 from fsspec.spec import AbstractFileSystem
@@ -11,6 +11,7 @@ logging.basicConfig(
     level=logging.WARN,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+
 
 class AlluxioFileSystem(AbstractFileSystem):
     protocol = "s3"
