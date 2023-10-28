@@ -69,7 +69,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         )
 
     def fetch_range(self, path, mode, start, end):
-        return self.alluxio.read_range(path, start, end - start + 1)
+        return self.alluxio.read_range(path, start, end - start)
 
 
 class AlluxioFile(AbstractBufferedFile):
