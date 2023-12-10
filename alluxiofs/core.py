@@ -24,6 +24,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         logger=None,
         concurrency=64,
         http_port="28080",
+        preload_path=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -31,6 +32,8 @@ class AlluxioFileSystem(AbstractFileSystem):
         self.alluxio = AlluxioSystem(
             etcd_host, worker_hosts, options, logger, concurrency, http_port
         )
+        if preload_path is not None:
+            self.alluxio.load(preload_path)
 
     def ls(self, path, detail=True, **kwargs):
         path = self.unstrip_protocol(path)
@@ -48,6 +51,18 @@ class AlluxioFileSystem(AbstractFileSystem):
             ]
         else:
             return [self._strip_protocol(p["mUfsPath"]) for f in files]
+
+    def info(self, path, **kwargs):
+        file_status = self.alluxio.get_file_status(path)
+        result = {
+            "name": file_status.name,
+            "path": file_status.path,
+            "size": file_status.human_readable_file_size,
+            "type": file_status.type,
+            "ufs_path": file_status.ufs_path,
+            "last_modification_time_ms": file_status.last_modification_time_ms,
+        }
+        return result
 
     def _open(
         self,
