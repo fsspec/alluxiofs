@@ -13,4 +13,11 @@ setup(
     ],
     extras_require={"tests": ["pytest"]},
     python_requires=">=3.8",
+    maintainer="Lu Qiu",
+    maintainer_email="luqiujob@gmail.com",
+    entry_points={
+        "fsspec.specs": [
+            "alluxio=alluxiofs.AlluxioFileSystem",
+        ],
+    },
 )
