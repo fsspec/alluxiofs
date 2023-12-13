@@ -15,6 +15,24 @@ logging.basicConfig(
 )
 
 
+class AlluxioErrorMetrics:
+    def __init__(self):
+        self.error_counts = {}
+        self.last_errors = {}
+
+    def record_error(self, method, error):
+        key = f"{method}_{type(error).__name__}"
+        self.error_counts.setdefault(key, 0)
+        self.error_counts[key] += 1
+        self.last_errors[key] = str(error)
+
+    def get_metrics(self):
+        return {
+            "error_counts": self.error_counts,
+            "last_errors": self.last_errors,
+        }
+
+
 class AlluxioFileSystem(AbstractFileSystem):
     protocol = "alluxio"
 
@@ -60,37 +78,50 @@ class AlluxioFileSystem(AbstractFileSystem):
 
         self._strip_protocol: Callable = _strip_protocol
 
+        self.error_metrics = AlluxioErrorMetrics()
+
     def unstrip_protocol(self, path):
         # avoid adding Alluxio protocol to the full ufs url
         return self.fs.unstrip_protocol(path)
 
+    def get_error_metrics(self):
+        return self.error_metrics.get_metrics()
+
     def ls(self, path, detail=True, **kwargs):
-        path = self.unstrip_protocol(path)
-        paths = self.alluxio.listdir(path)
-        if detail:
-            return [
-                {
-                    "name": p.ufs_path,
-                    "type": p.type,
-                    "size": p.length if p.type == "file" else None,
-                }
-                for p in paths
-            ]
-        else:
-            return [p.ufs_path for p in paths]
+        try:
+            path = self.unstrip_protocol(path)
+            paths = self.alluxio.listdir(path)
+            if detail:
+                return [
+                    {
+                        "name": p.ufs_path,
+                        "type": p.type,
+                        "size": p.length if p.type == "file" else None,
+                    }
+                    for p in paths
+                ]
+            else:
+                return [p.ufs_path for p in paths]
+        except Exception as e:
+            self.error_metrics.record_error("ls", e)
+            return self.fs.ls(path, detail=detail, **kwargs)
 
     def info(self, path, **kwargs):
-        path = self.unstrip_protocol(path)
-        file_status = self.alluxio.get_file_status(path)
-        result = {
-            "name": file_status.name,
-            "path": file_status.path,
-            "size": file_status.length,
-            "type": file_status.type,
-            "ufs_path": file_status.ufs_path,
-            "last_modification_time_ms": file_status.last_modification_time_ms,
-        }
-        return result
+        try:
+            path = self.unstrip_protocol(path)
+            file_status = self.alluxio.get_file_status(path)
+            result = {
+                "name": file_status.name,
+                "path": file_status.path,
+                "size": file_status.length,
+                "type": file_status.type,
+                "ufs_path": file_status.ufs_path,
+                "last_modification_time_ms": file_status.last_modification_time_ms,
+            }
+            return result
+        except Exception as e:
+            self.error_metrics.record_error("info", e)
+            return self.fs.info(path, **kwargs)
 
     def _open(
         self,
@@ -101,20 +132,35 @@ class AlluxioFileSystem(AbstractFileSystem):
         cache_options=None,
         **kwargs,
     ):
-        path = self.unstrip_protocol(path)
-        return AlluxioFile(
-            fs=self,
-            path=path,
-            mode=mode,
-            block_size=block_size,
-            autocommit=autocommit,
-            cache_options=cache_options,
-            **kwargs,
-        )
+        try:
+            path = self.unstrip_protocol(path)
+            return AlluxioFile(
+                fs=self,
+                path=path,
+                mode=mode,
+                block_size=block_size,
+                autocommit=autocommit,
+                cache_options=cache_options,
+                **kwargs,
+            )
+        except Exception as e:
+            self.error_metrics.record_error("open", e)
+            return self.fs._open(
+                path,
+                mode=mode,
+                block_size=block_size,
+                autocommit=autocommit,
+                cache_options=cache_options,
+                **kwargs,
+            )
 
     def fetch_range(self, path, mode, start, end):
-        path = self.unstrip_protocol(path)
-        return self.alluxio.read_range(path, start, end - start)
+        try:
+            path = self.unstrip_protocol(path)
+            return self.alluxio.read_range(path, start, end - start)
+        except Exception as e:
+            self.error_metrics.record_error("fetch_range", e)
+            return self.fs.fetch_range(path, mode, start, end)
 
     def mkdir(self, *args, **kwargs):
         self.fs.mkdir(*args, **kwargs)
