@@ -14,7 +14,7 @@ logging.basicConfig(
 
 
 class AlluxioFileSystem(AbstractFileSystem):
-    protocol = "s3"
+    protocol = "alluxio"
 
     def __init__(
         self,
@@ -25,15 +25,36 @@ class AlluxioFileSystem(AbstractFileSystem):
         concurrency=64,
         http_port="28080",
         preload_path=None,
+        target_protocol=None,
+        target_options=None,
+        fs=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        if not (fs is None) ^ (target_protocol is None):
+            raise ValueError(
+                "Please provide one of filesystem instance (fs) or"
+                " target_protocol, not both"
+            )
+        # TODO(lu) allow not providing ufs?
+        if fs is None and target_protocol is None:
+            raise ValueError(
+                "Please provide filesystem instance(fs) or target_protocol"
+            )
         self.logger = logger or logging.getLogger("AlluxioFileSystem")
         self.alluxio = AlluxioSystem(
             etcd_host, worker_hosts, options, logger, concurrency, http_port
         )
         if preload_path is not None:
             self.alluxio.load(preload_path)
+        self.kwargs = target_options or {}
+        self.fs = fs if fs is not None else filesystem(target_protocol, **self.kwargs)
+
+        def _strip_protocol(path):
+            # acts as a method, since each instance has a difference target
+            return self.fs._strip_protocol(type(self)._strip_protocol(path))
+        
+        self._strip_protocol: Callable = _strip_protocol
 
     def ls(self, path, detail=True, **kwargs):
         path = self.unstrip_protocol(path)
@@ -85,7 +106,24 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def fetch_range(self, path, mode, start, end):
         return self.alluxio.read_range(path, start, end - start)
+    
+    def mkdir(self, *args, **kwargs):
+        self.fs.mkdir(*args, **kwargs)
 
+    def rmdir(self, *args, **kwargs):
+        self.fs.rmdir(*args, **kwargs)
+
+    def copy(self, *args, **kwargs):
+        self.fs.copy(*args, **kwargs)
+
+    def mv(self, *args, **kwargs):
+        self.fs.mv(*args, **kwargs)
+    
+    def __getattr__(self, name):
+        """
+        Delegate attribute access to the underlying filesystem object.
+        """
+        return getattr(self.fs, name)
 
 class AlluxioFile(AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
