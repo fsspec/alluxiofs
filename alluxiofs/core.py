@@ -173,15 +173,15 @@ class AlluxioFileSystem(AbstractFileSystem):
             else:
                 raise e
 
-    def fetch_range(self, path, mode, start, end):
+    def _fetch_range(self, path, mode, start, end):
         try:
             # path = self.unstrip_protocol(path)
             # return self.alluxio.read_range(path, start, end - start)
             raise NotImplementedError("Not implemented")
         except Exception as e:
-            self.error_metrics.record_error("fetch_range", e)
+            self.error_metrics.record_error("_fetch_range", e)
             if self.fs:
-                return self.fs.fetch_range(path, mode, start, end)
+                return self.fs._fetch_range(path, mode, start, end)
             else:
                 raise e
 
@@ -349,7 +349,7 @@ class AlluxioFile(AbstractBufferedFile):
 
     def _fetch_range(self, start, end):
         """Get the specified set of bytes from remote"""
-        return self.fs.fetch_range(self.path, self.mode, start, end)
+        return self.fs._fetch_range(self.path, self.mode, start, end)
 
     def _upload_chunk(self, final=False):
         pass
