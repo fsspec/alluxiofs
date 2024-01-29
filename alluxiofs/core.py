@@ -127,15 +127,15 @@ class AlluxioFileSystem(AbstractFileSystem):
             else:
                 raise e
 
-    def isdir(self, path, **kwargs):
-        try:
-            return self.info(path)["type"] == "directory"
-        except Exception as e:
-            self.error_metrics.record_error("isdir", e)
-            if self.fs:
-                return self.fs.isdir(path, **kwargs)
-            else:
-                raise e
+    # def isdir(self, path, **kwargs):
+    #     try:
+    #         return self.info(path)["type"] == "directory"
+    #     except Exception as e:
+    #         self.error_metrics.record_error("isdir", e)
+    #         if self.fs:
+    #             return self.fs.isdir(path, **kwargs)
+    #         else:
+    #             raise e
 
     def _open(
         self,
@@ -182,12 +182,13 @@ class AlluxioFileSystem(AbstractFileSystem):
             else:
                 raise e
 
-    def cat_file(self, *args, **kwargs):
-        # TODO(lu) implement Alluxio read
-        if self.fs:
-            return self.fs.cat_file(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    # def cat_file(self, *args, **kwargs):
+    #     # TODO(lu) implement Alluxio read
+    #     # TODO(lu) Fallback on this level or open/read() level?
+    #     if self.fs:
+    #         return self.fs.cat_file(*args, **kwargs)
+    #     else:
+    #         raise NotImplementedError
 
     def ukey(self, *args, **kwargs):
         if self.fs:
@@ -225,17 +226,18 @@ class AlluxioFileSystem(AbstractFileSystem):
         else:
             raise NotImplementedError
 
-    def exists(self, *args, **kwargs):
-        if self.fs:
-            return self.fs.exists(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    # def exists(self, *args, **kwargs):
+    #     # TODO(lu) fallback on this level or underlying level?
+    #     if self.fs:
+    #         return self.fs.exists(*args, **kwargs)
+    #     else:
+    #         raise NotImplementedError
 
-    def lexists(self, *args, **kwargs):
-        if self.fs:
-            return self.fs.lexists(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    # def lexists(self, *args, **kwargs):
+    #     if self.fs:
+    #         return self.fs.lexists(*args, **kwargs)
+    #     else:
+    #         raise NotImplementedError
 
     def copy(self, *args, **kwargs):
         if self.fs:
@@ -249,17 +251,17 @@ class AlluxioFileSystem(AbstractFileSystem):
         else:
             raise NotImplementedError
 
-    def get(self, *args, **kwargs):
-        if self.fs:
-            return self.fs.get(*args, **kwargs)
-        else:
-            raise NotImplementedError
-
-    def get_file(self, *args, **kwargs):
-        if self.fs:
-            return self.fs.get_file(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    # def get(self, *args, **kwargs):
+    #     if self.fs:
+    #         return self.fs.get(*args, **kwargs)
+    #     else:
+    #         raise NotImplementedError
+    #
+    # def get_file(self, *args, **kwargs):
+    #     if self.fs:
+    #         return self.fs.get_file(*args, **kwargs)
+    #     else:
+    #         raise NotImplementedError
 
     def put_file(self, *args, **kwargs):
         if self.fs:
