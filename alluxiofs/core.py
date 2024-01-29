@@ -1,13 +1,10 @@
 import logging
-import os
+from typing import Callable
 
-import fsspec
 from alluxio import AlluxioFileSystem as AlluxioSystem
-from alluxio import AlluxioPathStatus
 from fsspec import AbstractFileSystem
 from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
-from fsspec.utils import infer_storage_options
 
 logging.basicConfig(
     level=logging.WARN,
@@ -38,7 +35,7 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def __init__(
         self,
-        etcd_host=None,
+        etcd_hosts=None,
         worker_hosts=None,
         options=None,
         logger=None,
@@ -62,16 +59,17 @@ class AlluxioFileSystem(AbstractFileSystem):
             )
         self.logger = logger or logging.getLogger("AlluxioFileSystem")
         self.alluxio = AlluxioSystem(
-            etcd_host, worker_hosts, options, logger, concurrency, http_port
+            etcd_hosts, worker_hosts, options, logger, concurrency, http_port
         )
         if preload_path is not None:
             self.alluxio.load(preload_path)
         self.kwargs = target_options or {}
-        self.fs = (
-            fs
-            if fs is not None
-            else filesystem(target_protocol, **self.kwargs)
-        )
+
+        self.fs = None
+        if fs is not None:
+            self.fs = fs
+        elif target_protocol is not None:
+            self.fs = filesystem(target_protocol, **self.kwargs)
 
         def _strip_protocol(path):
             return self.fs._strip_protocol(type(self)._strip_protocol(path))
@@ -104,7 +102,10 @@ class AlluxioFileSystem(AbstractFileSystem):
                 return [p.ufs_path for p in paths]
         except Exception as e:
             self.error_metrics.record_error("ls", e)
-            return self.fs.ls(path, detail=detail, **kwargs)
+            if self.fs:
+                return self.fs.ls(path, detail=detail, **kwargs)
+            else:
+                raise e
 
     def info(self, path, **kwargs):
         try:
@@ -121,7 +122,20 @@ class AlluxioFileSystem(AbstractFileSystem):
             return result
         except Exception as e:
             self.error_metrics.record_error("info", e)
-            return self.fs.info(path, **kwargs)
+            if self.fs:
+                return self.fs.info(path, **kwargs)
+            else:
+                raise e
+
+    def isdir(self, path, **kwargs):
+        try:
+            return self.info(path)["type"] == "directory"
+        except Exception as e:
+            self.error_metrics.record_error("isdir", e)
+            if self.fs:
+                return self.fs.isdir(path, **kwargs)
+            else:
+                raise e
 
     def _open(
         self,
@@ -145,14 +159,17 @@ class AlluxioFileSystem(AbstractFileSystem):
             )
         except Exception as e:
             self.error_metrics.record_error("open", e)
-            return self.fs._open(
-                path,
-                mode=mode,
-                block_size=block_size,
-                autocommit=autocommit,
-                cache_options=cache_options,
-                **kwargs,
-            )
+            if self.fs:
+                return self.fs._open(
+                    path,
+                    mode=mode,
+                    block_size=block_size,
+                    autocommit=autocommit,
+                    cache_options=cache_options,
+                    **kwargs,
+                )
+            else:
+                raise e
 
     def fetch_range(self, path, mode, start, end):
         try:
@@ -160,25 +177,161 @@ class AlluxioFileSystem(AbstractFileSystem):
             return self.alluxio.read_range(path, start, end - start)
         except Exception as e:
             self.error_metrics.record_error("fetch_range", e)
-            return self.fs.fetch_range(path, mode, start, end)
+            if self.fs:
+                return self.fs.fetch_range(path, mode, start, end)
+            else:
+                raise e
+
+    def cat_file(self, *args, **kwargs):
+        # TODO(lu) implement Alluxio read
+        if self.fs:
+            return self.fs.cat_file(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def ukey(self, *args, **kwargs):
+        if self.fs:
+            self.fs.ukey(*args, **kwargs)
+        else:
+            raise NotImplementedError
 
     def mkdir(self, *args, **kwargs):
-        self.fs.mkdir(*args, **kwargs)
+        if self.fs:
+            self.fs.mkdir(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def makedirs(self, *args, **kwargs):
+        if self.fs:
+            self.fs.makedirs(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def rm(self, *args, **kwargs):
+        if self.fs:
+            self.fs.rm(*args, **kwargs)
+        else:
+            raise NotImplementedError
 
     def rmdir(self, *args, **kwargs):
-        self.fs.rmdir(*args, **kwargs)
+        if self.fs:
+            self.fs.rmdir(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def _rm(self, *args, **kwargs):
+        if self.fs:
+            self.fs._rm(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def exists(self, *args, **kwargs):
+        if self.fs:
+            return self.fs.exists(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def lexists(self, *args, **kwargs):
+        if self.fs:
+            return self.fs.lexists(*args, **kwargs)
+        else:
+            raise NotImplementedError
 
     def copy(self, *args, **kwargs):
-        self.fs.copy(*args, **kwargs)
+        if self.fs:
+            self.fs.copy(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def cp_file(self, *args, **kwargs):
+        if self.fs:
+            self.fs.cp_file(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def get(self, *args, **kwargs):
+        if self.fs:
+            return self.fs.get(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def get_file(self, *args, **kwargs):
+        if self.fs:
+            return self.fs.get_file(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def put_file(self, *args, **kwargs):
+        if self.fs:
+            self.fs.put_file(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def mv_file(self, *args, **kwargs):
+        if self.fs:
+            self.fs.mv_file(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def pipe_file(self, *args, **kwargs):
+        if self.fs:
+            self.fs.pipe_file(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def link(self, *args, **kwargs):
+        if self.fs:
+            self.fs.link(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def symlink(self, *args, **kwargs):
+        if self.fs:
+            self.fs.symlink(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def islink(self, *args, **kwargs) -> bool:
+        if self.fs:
+            return self.fs.islink(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def rm_file(self, *args, **kwargs):
+        if self.fs:
+            self.fs.rm_file(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def rm(self, *args, **kwargs):
+        if self.fs:
+            self.fs.rm(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def touch(self, *args, **kwargs):
+        if self.fs:
+            self.fs.touch(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def created(self, *args, **kwargs):
+        if self.fs:
+            return self.fs.created(*args, **kwargs)
+        else:
+            raise NotImplementedError
+
+    def modified(self, *args, **kwargs):
+        if self.fs:
+            return self.fs.modified(*args, **kwargs)
+        else:
+            raise NotImplementedError
 
     def mv(self, *args, **kwargs):
-        self.fs.mv(*args, **kwargs)
-
-    def __getattr__(self, name):
-        """
-        Delegate attribute access to the underlying filesystem object.
-        """
-        return getattr(self.fs, name)
+        if self.fs:
+            self.fs.mv(*args, **kwargs)
+        else:
+            raise NotImplementedError
 
 
 class AlluxioFile(AbstractBufferedFile):
@@ -193,8 +346,8 @@ class AlluxioFile(AbstractBufferedFile):
         """Get the specified set of bytes from remote"""
         return self.fs.fetch_range(self.path, self.mode, start, end)
 
-    def __getattr__(self, name):
-        """
-        Delegate attribute access to the underlying filesystem object.
-        """
-        return getattr(self.fs, name)
+    def _upload_chunk(self, final=False):
+        pass
+
+    def _initiate_upload(self):
+        pass
