@@ -87,19 +87,20 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def ls(self, path, detail=True, **kwargs):
         try:
-            path = self.unstrip_protocol(path)
-            paths = self.alluxio.listdir(path)
-            if detail:
-                return [
-                    {
-                        "name": p.ufs_path,
-                        "type": p.type,
-                        "size": p.length if p.type == "file" else None,
-                    }
-                    for p in paths
-                ]
-            else:
-                return [p.ufs_path for p in paths]
+            # path = self.unstrip_protocol(path)
+            # paths = self.alluxio.listdir(path)
+            # if detail:
+            #     return [
+            #         {
+            #             "name": p.ufs_path,
+            #             "type": p.type,
+            #             "size": p.length if p.type == "file" else None,
+            #         }
+            #         for p in paths
+            #     ]
+            # else:
+            #     return [p.ufs_path for p in paths]
+            raise NotImplementedError("Not implemented")
         except Exception as e:
             self.error_metrics.record_error("ls", e)
             if self.fs:
@@ -109,17 +110,18 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def info(self, path, **kwargs):
         try:
-            path = self.unstrip_protocol(path)
-            file_status = self.alluxio.get_file_status(path)
-            result = {
-                "name": file_status.name,
-                "path": file_status.path,
-                "size": file_status.length,
-                "type": file_status.type,
-                "ufs_path": file_status.ufs_path,
-                "last_modification_time_ms": file_status.last_modification_time_ms,
-            }
-            return result
+            # path = self.unstrip_protocol(path)
+            # file_status = self.alluxio.get_file_status(path)
+            # result = {
+            #     "name": file_status.name,
+            #     "path": file_status.path,
+            #     "size": file_status.length,
+            #     "type": file_status.type,
+            #     "ufs_path": file_status.ufs_path,
+            #     "last_modification_time_ms": file_status.last_modification_time_ms,
+            # }
+            # return result
+            raise NotImplementedError("Not implemented")
         except Exception as e:
             self.error_metrics.record_error("info", e)
             if self.fs:
@@ -173,8 +175,9 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def fetch_range(self, path, mode, start, end):
         try:
-            path = self.unstrip_protocol(path)
-            return self.alluxio.read_range(path, start, end - start)
+            # path = self.unstrip_protocol(path)
+            # return self.alluxio.read_range(path, start, end - start)
+            raise NotImplementedError("Not implemented")
         except Exception as e:
             self.error_metrics.record_error("fetch_range", e)
             if self.fs:
