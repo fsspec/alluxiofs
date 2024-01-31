@@ -1,17 +1,17 @@
 import fsspec.tests.abstract as abstract
 
 from alluxiofs.tests.derived.local.local_fallback_fixtures import (
-    AlluxioLocalFixtures,
+    LocalFallbackFixtures,
 )
 
 
-class TestAlluxioGet(abstract.AbstractGetTests, AlluxioLocalFixtures):
+class TestAlluxioGet(abstract.AbstractGetTests, LocalFallbackFixtures):
     pass
 
 
-class TestAlluxioCopy(abstract.AbstractCopyTests, AlluxioLocalFixtures):
+class TestAlluxioCopy(abstract.AbstractCopyTests, LocalFallbackFixtures):
     pass
 
 
-class TestAlluxioPut(abstract.AbstractPutTests, AlluxioLocalFixtures):
+class TestAlluxioPut(abstract.AbstractPutTests, LocalFallbackFixtures):
     pass

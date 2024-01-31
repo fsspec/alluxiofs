@@ -5,7 +5,7 @@ from fsspec.tests.abstract import AbstractFixtures
 from alluxiofs import AlluxioFileSystem
 
 
-class AlluxioMemoryFixtures(AbstractFixtures):
+class MemoryFallbackFixtures(AbstractFixtures):
     @pytest.fixture(scope="class")
     def fs(self):
         m = filesystem("memory")

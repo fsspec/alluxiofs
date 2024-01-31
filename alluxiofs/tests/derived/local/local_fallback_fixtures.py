@@ -5,7 +5,7 @@ from fsspec.tests.abstract import AbstractFixtures
 from alluxiofs import AlluxioFileSystem
 
 
-class AlluxioLocalFixtures(AbstractFixtures):
+class LocalFallbackFixtures(AbstractFixtures):
     @pytest.fixture(scope="class")
     def fs(self):
         return AlluxioFileSystem(
