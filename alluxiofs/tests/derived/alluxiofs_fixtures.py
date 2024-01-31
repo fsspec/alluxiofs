@@ -7,7 +7,11 @@ from alluxiofs import AlluxioFileSystem
 class AlluxiofsFixtures(AbstractFixtures):
     @pytest.fixture(scope="class")
     def fs(self):
-        return AlluxioFileSystem(etcd_hosts="localhost", target_protocol="s3")
+        return AlluxioFileSystem(
+            etcd_hosts="localhost",
+            target_protocol="s3",
+            test_options={"skip_alluxio": True},
+        )
 
     @pytest.fixture
     def fs_path(self):
