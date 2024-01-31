@@ -126,31 +126,30 @@ class AlluxioFileSystem(AbstractFileSystem):
     def ls(self, path, detail=True, **kwargs):
         path = self.unstrip_protocol(path)
         paths = self.alluxio.listdir(path)
-        if detail:
-            return [
-                {
-                    "name": p.ufs_path,
-                    "type": p.type,
-                    "size": p.length if p.type == "file" else None,
-                }
-                for p in paths
-            ]
-        else:
-            return [p.ufs_path for p in paths]
+        return [
+            self._translate_alluxio_to_fsspec_info(p, detail) for p in paths
+        ]
 
     @alluxio_with_fallback_handler
     def info(self, path, **kwargs):
         path = self.unstrip_protocol(path)
         file_status = self.alluxio.get_file_status(path)
-        result = {
-            "name": file_status.name,
-            "path": file_status.path,
-            "size": file_status.length,
-            "type": file_status.type,
-            "ufs_path": file_status.ufs_path,
-            "last_modification_time_ms": file_status.last_modification_time_ms,
-        }
-        return result
+        return self._translate_alluxio_info_to_fsspec_info(file_status, True)
+
+    def _translate_alluxio_info_to_fsspec_info(self, file_status, detail):
+        if detail:
+            return {
+                "name": self._strip_protocol(file_status.ufs_path),
+                "type": file_status.type,
+                "size": file_status.length
+                if file_status.type == "file"
+                else None,
+                "last_modification_time_ms": getattr(
+                    file_status, "last_modification_time_ms", None
+                ),
+            }
+        else:
+            return file_status.ufs_path
 
     @alluxio_with_fallback_handler
     def _open(
