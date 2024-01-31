@@ -4,7 +4,7 @@ from fsspec.tests.abstract import AbstractFixtures
 from alluxiofs import AlluxioFileSystem
 
 
-class AlluxiofsFixtures(AbstractFixtures):
+class AlluxioS3Fixtures(AbstractFixtures):
     @pytest.fixture(scope="class")
     def fs(self):
         return AlluxioFileSystem(
