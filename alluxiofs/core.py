@@ -105,6 +105,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                     # Call the equivalent method on self.fs if available
                     fs_method = getattr(self.fs, alluxio_impl.__name__, None)
                     if fs_method:
+                        # TODO(lu) deal with the parameter sequence mismatch issue
                         return fs_method(*args, **kwargs)
                 raise RuntimeError("Alluxio system is not initialized.")
 
@@ -312,7 +313,7 @@ class AlluxioFile(AbstractBufferedFile):
 
     def _fetch_range(self, start, end):
         """Get the specified set of bytes from remote"""
-        return self.fs.fetch_range(self.path, start, end)
+        return self.fs.cat_file(path=self.path, start=start, end=end)
 
     def _upload_chunk(self, final=False):
         pass
