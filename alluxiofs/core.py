@@ -128,7 +128,8 @@ class AlluxioFileSystem(AbstractFileSystem):
         path = self.unstrip_protocol(path)
         paths = self.alluxio.listdir(path)
         return [
-            self._translate_alluxio_to_fsspec_info(p, detail) for p in paths
+            self._translate_alluxio_info_to_fsspec_info(p, detail)
+            for p in paths
         ]
 
     @alluxio_with_fallback_handler
