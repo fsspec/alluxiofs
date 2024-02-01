@@ -102,7 +102,6 @@ class AlluxioFileSystem(AbstractFileSystem):
         def fallback_wrapper(self, *args, **kwargs):
             if self.alluxio is None:
                 if self.fs:
-                    # Call the equivalent method on self.fs if available
                     fs_method = getattr(self.fs, alluxio_impl.__name__, None)
                     if fs_method:
                         # TODO(lu) deal with the parameter sequence mismatch issue
@@ -114,7 +113,6 @@ class AlluxioFileSystem(AbstractFileSystem):
             except Exception as e:
                 self.error_metrics.record_error(alluxio_impl.__name__, e)
                 if self.fs:
-                    # Call the equivalent method on self.fs in case of exception
                     fs_method = getattr(self.fs, alluxio_impl.__name__, None)
                     if fs_method:
                         return fs_method(*args, **kwargs)
@@ -151,7 +149,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                 ),
             }
         else:
-            return file_status.ufs_path
+            return self._strip_protocol(file_status.ufs_path)
 
     @alluxio_with_fallback_handler
     def _open(
