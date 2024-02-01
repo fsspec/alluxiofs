@@ -2,7 +2,6 @@ import argparse
 import time
 
 import fsspec
-import humanfriendly
 import ray
 
 from alluxiofs import AlluxioFileSystem
@@ -13,11 +12,11 @@ def parse_args():
         description="Benchmarking script for reading files with Alluxio"
     )
     parser.add_argument(
-        "--etcd_host",
+        "--etcd_hosts",
         type=str,
         default="localhost",
         required=False,
-        help="The host address for etcd",
+        help="The host addresses for etcd",
     )
     parser.add_argument(
         "--dataset",
@@ -38,8 +37,10 @@ def parse_args():
 def main(args):
     start_time = time.time()
 
-    fsspec.register_implementation("s3", AlluxioFileSystem, clobber=True)
-    alluxio = fsspec.filesystem("s3", etcd_host=args.etcd_host)
+    fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+    alluxio = fsspec.filesystem(
+        "alluxio", etcd_hosts=args.etcd_hosts, target_protocol="s3"
+    )
 
     ds = ray.data.read_images(args.dataset, filesystem=alluxio)
     if args.materialize:
