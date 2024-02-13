@@ -42,6 +42,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         logger=None,
         concurrency=64,
         http_port="28080",
+        etcd_port="2379",
         preload_path=None,
         target_protocol=None,
         target_options=None,
@@ -79,6 +80,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                 logger,
                 concurrency,
                 http_port,
+                etcd_port,
             )
             if preload_path is not None:
                 self.alluxio.load(preload_path)
