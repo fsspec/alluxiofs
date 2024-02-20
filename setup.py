@@ -9,7 +9,6 @@ setup(
     zip_safe=False,
     install_requires=[
         "fsspec",
-        "alluxio",
     ],
     extras_require={"tests": ["pytest"]},
     python_requires=">=3.8",
