@@ -50,6 +50,34 @@ class AlluxioFileSystem(AbstractFileSystem):
         test_options=None,
         **kwargs,
     ):
+        """
+        Initializes an Alluxio filesystem on top of underlying filesystem
+        to leveraging the data caching and management features of Alluxio.
+
+        The Alluxio args:
+            etcd_hosts (str, optional): A comma-separated list of ETCD server hosts in the format "host1:port1,host2:port2,...".
+                ETCD is used for dynamic discovery of Alluxio workers. Either `etcd_hosts` or `worker_hosts` must be specified, not both.
+            worker_hosts (str, optional): A comma-separated list of Alluxio worker hosts in the format "host1:port1,host2:port2,...".
+                Directly specifies workers without using ETCD. Either `etcd_hosts` or `worker_hosts` must be specified, not both.
+            options (dict, optional): A dictionary of Alluxio configuration options where keys are property names and values are property values.
+                These options configure the Alluxio client behavior.
+            logger (logging.Logger, optional): A logger instance for logging messages. If not provided, a default logger with the name "AlluxioFileSystem" is used.
+            concurrency (int, optional): The maximum number of concurrent operations (e.g., reads, writes) that the file system interface will allow.
+                Defaults to 64.
+            http_port (str, optional): The port number used by the HTTP server on each Alluxio worker. Defaults to "28080".
+                This is used for accessing Alluxio's HTTP-based APIs.
+            etcd_port (str, optional): The port number used by each etcd server. Relevant only if `etcd_hosts` is specified. Defaults to "2379".
+            preload_path (str, optional): Specifies a path to preload into the Alluxio file system cache at initialization. This can be useful for ensuring
+                that certain critical data is immediately available in the cache.
+        The underlying filesystem args
+            target_protocol (str, optional): Specifies the under storage protocol to create the under storage file system object. Common examples include 's3' for Amazon S3, 'hdfs' for Hadoop Distributed File System, and others.
+            target_options (dict, optional): Provides a set of configuration options relevant to the `target_protocol`. These options might include credentials, endpoint URLs, and other protocol-specific settings required to successfully interact with the under storage system.
+            fs (object, optional): Directly supplies an instance of a file system object for accessing the underlying storage of Alluxio
+        Other args:
+            test_options (dict, optional): A dictionary of options used exclusively for testing purposes. These might include mock interfaces or specific
+                configuration overrides for test scenarios.
+            **kwargs: other parameters for core session.
+        """
         super().__init__(**kwargs)
         if not (fs is None) ^ (target_protocol is None):
             raise ValueError(
