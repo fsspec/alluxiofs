@@ -41,8 +41,8 @@ class AlluxioFileSystem(AbstractFileSystem):
         options=None,
         logger=None,
         concurrency=64,
-        http_port="28080",
-        etcd_port="2379",
+        etcd_port=2379,
+        worker_http_port=28080,
         preload_path=None,
         target_protocol=None,
         target_options=None,
@@ -66,10 +66,10 @@ class AlluxioFileSystem(AbstractFileSystem):
             logger (logging.Logger, optional): A logger instance for logging messages.
                 If not provided, a default logger with the name "AlluxioFileSystem" is used.
             concurrency (int, optional): The maximum number of concurrent operations (e.g., reads, writes) that the file system interface will allow. Defaults to 64.
-            http_port (str, optional): The port number used by the HTTP server on each Alluxio worker.
-                Defaults to "28080". This is used for accessing Alluxio's HTTP-based APIs.
-            etcd_port (str, optional): The port number used by each etcd server.
-                Relevant only if `etcd_hosts` is specified. Defaults to "2379".
+            etcd_port (int, optional): The port number used by each etcd server.
+                Relevant only if `etcd_hosts` is specified.
+            worker_http_port (int, optional): The port number used by the HTTP server on each Alluxio worker.
+                This is used for accessing Alluxio's HTTP-based APIs.
             preload_path (str, optional): Specifies a path to preload into the Alluxio file system cache at initialization.
                 This can be useful for ensuring that certain critical data is immediately available in the cache.
         The underlying filesystem args
@@ -94,7 +94,6 @@ class AlluxioFileSystem(AbstractFileSystem):
                 "Please provide filesystem instance(fs) or target_protocol"
             )
         self.logger = logger or logging.getLogger("Alluxiofs")
-
         self.kwargs = target_options or {}
         self.fs = None
         if fs is not None:
@@ -107,13 +106,13 @@ class AlluxioFileSystem(AbstractFileSystem):
             self.alluxio = None
         else:
             self.alluxio = AlluxioSystem(
-                etcd_hosts,
-                worker_hosts,
-                options,
-                logger,
-                concurrency,
-                http_port,
-                etcd_port,
+                etcd_hosts=etcd_hosts,
+                worker_hosts=worker_hosts,
+                options=options,
+                logger=logger,
+                concurrency=concurrency,
+                etcd_port=etcd_port,
+                worker_http_port=worker_http_port,
             )
             if preload_path is not None:
                 self.alluxio.load(preload_path)
