@@ -10,7 +10,7 @@ Alluxio filesystem spec implementation
 ## Install alluxiofs
 
 ```
-cd /Users/alluxio/alluxioFolder/alluxiofs && python3 setup.py bdist_wheel && pip3 install dist/alluxiofs-0.1-py3-none-any.whl --force-reinstall --no-deps
+cd alluxiofs && python3 setup.py bdist_wheel && pip3 install dist/alluxiofs-0.1-py3-none-any.whl
 ```
 
 ## Launch Alluxio FileSystem
@@ -22,6 +22,7 @@ pip install alluxiofs
 fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
 alluxio = fsspec.filesystem("alluxio", etcd_host=args.etcd_host, target_protocol="s3")
 ```
+See concrete options descriptions at [Alluxio filesystem initialization description](alluxiofs/core.py)
 See a more concrete example at [tests/test_alluxio_fsspec.py](tests/test_alluxio_fsspec.py)
 
 ## Development
