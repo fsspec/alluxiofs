@@ -39,14 +39,14 @@ class AlluxioFileSystem(AbstractFileSystem):
         etcd_hosts=None,
         worker_hosts=None,
         options=None,
-        logger=None,
         concurrency=64,
         etcd_port=2379,
         worker_http_port=28080,
-        preload_path=None,
+        alluxio_fs=None,
         target_protocol=None,
         target_options=None,
         fs=None,
+        logger=None,
         test_options=None,
         **kwargs,
     ):
@@ -55,6 +55,8 @@ class AlluxioFileSystem(AbstractFileSystem):
         to leveraging the data caching and management features of Alluxio.
 
         The Alluxio args:
+            alluxio_fs (object, optional): Directly supplies an instance of an Alluxio Python file system object for accessing the Alluxio.
+                Otherwise the Alluxio Python file system will be created by supplying the other Alluxio args
             etcd_hosts (str, optional): A comma-separated list of ETCD server hosts in the format "host1:port1,host2:port2,...".
                 ETCD is used for dynamic discovery of Alluxio workers.
                 Either `etcd_hosts` or `worker_hosts` must be specified, not both.
@@ -70,8 +72,6 @@ class AlluxioFileSystem(AbstractFileSystem):
                 Relevant only if `etcd_hosts` is specified.
             worker_http_port (int, optional): The port number used by the HTTP server on each Alluxio worker.
                 This is used for accessing Alluxio's HTTP-based APIs.
-            preload_path (str, optional): Specifies a path to preload into the Alluxio file system cache at initialization.
-                This can be useful for ensuring that certain critical data is immediately available in the cache.
         The underlying filesystem args
             target_protocol (str, optional): Specifies the under storage protocol to create the under storage file system object.
                 Common examples include 's3' for Amazon S3, 'hdfs' for Hadoop Distributed File System, and others.
@@ -104,6 +104,8 @@ class AlluxioFileSystem(AbstractFileSystem):
         test_options = test_options or {}
         if test_options.get("skip_alluxio") is True:
             self.alluxio = None
+        elif alluxio_fs is not None:
+            self.alluxio = alluxio_fs
         else:
             self.alluxio = AlluxioSystem(
                 etcd_hosts=etcd_hosts,
@@ -114,8 +116,6 @@ class AlluxioFileSystem(AbstractFileSystem):
                 etcd_port=etcd_port,
                 worker_http_port=worker_http_port,
             )
-            if preload_path is not None:
-                self.alluxio.load(preload_path)
 
         def _strip_protocol(path):
             return self.fs._strip_protocol(type(self)._strip_protocol(path))
