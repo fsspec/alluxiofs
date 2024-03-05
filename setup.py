@@ -11,7 +11,7 @@ setup(
     zip_safe=False,
     install_requires=[
         "fsspec",
-        "alluxio==1.0.0",
+        "alluxio==1.0.1-SNAPSHOT",
     ],
     extras_require={"tests": ["pytest"]},
     python_requires=">=3.8",

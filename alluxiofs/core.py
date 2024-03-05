@@ -2,7 +2,7 @@ import logging
 from functools import wraps
 from typing import Callable
 
-from alluxio import AlluxioFileSystem as AlluxioSystem
+from alluxio import AlluxioClient
 from fsspec import AbstractFileSystem
 from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
@@ -42,7 +42,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         concurrency=64,
         etcd_port=2379,
         worker_http_port=28080,
-        alluxio_fs=None,
+        alluxio_client=None,
         target_protocol=None,
         target_options=None,
         fs=None,
@@ -54,9 +54,9 @@ class AlluxioFileSystem(AbstractFileSystem):
         Initializes an Alluxio filesystem on top of underlying filesystem
         to leveraging the data caching and management features of Alluxio.
 
-        The Alluxio args:
-            alluxio_fs (object, optional): Directly supplies an instance of an Alluxio Python file system object for accessing the Alluxio.
-                Otherwise the Alluxio Python file system will be created by supplying the other Alluxio args
+        The Alluxio client args:
+            alluxio_client (object, optional): Directly supplies an instance of an Alluxio client object for interacting with the Alluxio servers.
+                Otherwise, the Alluxio client will be created by supplying the other Alluxio client args
             etcd_hosts (str, optional): A comma-separated list of ETCD server hosts in the format "host1:port1,host2:port2,...".
                 ETCD is used for dynamic discovery of Alluxio workers.
                 Either `etcd_hosts` or `worker_hosts` must be specified, not both.
@@ -103,11 +103,11 @@ class AlluxioFileSystem(AbstractFileSystem):
 
         test_options = test_options or {}
         if test_options.get("skip_alluxio") is True:
-            self.alluxio = None
-        elif alluxio_fs is not None:
-            self.alluxio = alluxio_fs
+            self.alluxio_client = None
+        elif alluxio_client is not None:
+            self.alluxio_client = alluxio_client
         else:
-            self.alluxio = AlluxioSystem(
+            self.alluxio_client = AlluxioClient(
                 etcd_hosts=etcd_hosts,
                 worker_hosts=worker_hosts,
                 options=options,
@@ -134,7 +134,7 @@ class AlluxioFileSystem(AbstractFileSystem):
     def alluxio_with_fallback_handler(alluxio_impl):
         @wraps(alluxio_impl)
         def fallback_wrapper(self, *args, **kwargs):
-            if self.alluxio is None:
+            if self.alluxio_client is None:
                 if self.fs:
                     fs_method = getattr(self.fs, alluxio_impl.__name__, None)
                     if fs_method:
@@ -158,7 +158,7 @@ class AlluxioFileSystem(AbstractFileSystem):
     @alluxio_with_fallback_handler
     def ls(self, path, detail=True, **kwargs):
         path = self.unstrip_protocol(path)
-        paths = self.alluxio.listdir(path)
+        paths = self.alluxio_client.listdir(path)
         return [
             self._translate_alluxio_info_to_fsspec_info(p, detail)
             for p in paths
@@ -167,7 +167,7 @@ class AlluxioFileSystem(AbstractFileSystem):
     @alluxio_with_fallback_handler
     def info(self, path, **kwargs):
         path = self.unstrip_protocol(path)
-        file_status = self.alluxio.get_file_status(path)
+        file_status = self.alluxio_client.get_file_status(path)
         return self._translate_alluxio_info_to_fsspec_info(file_status, True)
 
     def _translate_alluxio_info_to_fsspec_info(self, file_status, detail):
@@ -213,7 +213,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         else:
             length = end - start
         path = self.unstrip_protocol(path)
-        return self.alluxio.read_range(path, start, length)
+        return self.alluxio_client.read_range(path, start, length)
 
     def ukey(self, *args, **kwargs):
         if self.fs:
