@@ -22,7 +22,7 @@ def test_hash_ring():
     hash_ring_path = os.path.join(hash_res_dir, "activeNodesMap.json")
     validate_hash_ring(hash_provider.hash_ring, hash_ring_path)
 
-    worker_list_path = "tests/hash_res/workerList.json"
+    worker_list_path = os.path.join(hash_res_dir, "workerList.json")
     with open(worker_list_path, "r") as file:
         workers_data = json.load(file)
 
