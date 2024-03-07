@@ -3,7 +3,8 @@ from collections import defaultdict
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
-from alluxio.core import AlluxioAsyncFileSystem
+
+from alluxiofs.client import AlluxioAsyncFileSystem
 
 pytestmark = pytest.mark.asyncio
 

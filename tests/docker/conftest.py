@@ -12,7 +12,9 @@ from alluxio.core import AlluxioClient
 LOGGER = logging.getLogger("alluxio_test")
 TEST_ROOT = os.getenv("TEST_ROOT", "file:///opt/alluxio/ufs/")
 # This is the path to the file you want to access
-TEST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+TEST_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "assets"
+)
 LOCAL_FILE_PATH = os.path.join(TEST_DIR, "test.csv")
 ALLUXIO_FILE_PATH = "file://{}".format("/opt/alluxio/ufs/test.csv")
 

@@ -1,10 +1,9 @@
 import os
 import random
 
-from alluxio import AlluxioClient
-
-from tests.conftest import ALLUXIO_FILE_PATH
-from tests.conftest import LOCAL_FILE_PATH
+from alluxiofs import AlluxioClient
+from tests.docker.conftest import ALLUXIO_FILE_PATH
+from tests.docker.conftest import LOCAL_FILE_PATH
 
 NUM_TESTS = 10
 

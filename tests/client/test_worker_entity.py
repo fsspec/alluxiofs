@@ -1,7 +1,7 @@
 import json
 import re
 
-from alluxio.worker_ring import WorkerEntity
+from alluxiofs.client.worker_ring import WorkerEntity
 
 
 def test_worker_entity_from_info_dynamic():

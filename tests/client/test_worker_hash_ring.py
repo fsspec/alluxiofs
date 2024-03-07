@@ -1,12 +1,15 @@
 import json
+import os
 
-from alluxio.worker_ring import ConsistentHashProvider
-from alluxio.worker_ring import WorkerIdentity
-from alluxio.worker_ring import WorkerNetAddress
+from alluxiofs.client.worker_ring import ConsistentHashProvider
+from alluxiofs.client.worker_ring import WorkerIdentity
+from alluxiofs.client.worker_ring import WorkerNetAddress
 
 
 def test_hash_ring():
-    worker_hostnames_path = "tests/hash_res/workerHostnames.json"
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    hash_res_dir = os.path.join(current_dir, "..", "assets/hash_res")
+    worker_hostnames_path = os.path.join(hash_res_dir, "workerHostnames.json")
     with open(worker_hostnames_path, "r") as file:
         worker_hostnames = json.load(file)
 
@@ -16,7 +19,7 @@ def test_hash_ring():
         etcd_refresh_workers_interval=100000000,
     )
 
-    hash_ring_path = "tests/hash_res/activeNodesMap.json"
+    hash_ring_path = os.path.join(hash_res_dir, "activeNodesMap.json")
     validate_hash_ring(hash_provider.hash_ring, hash_ring_path)
 
     worker_list_path = "tests/hash_res/workerList.json"
@@ -35,7 +38,7 @@ def test_hash_ring():
     hash_provider._update_hash_ring(worker_info_map)
     validate_hash_ring(hash_provider.hash_ring, hash_ring_path)
 
-    file_workers_path = "tests/hash_res/fileUrlWorkers.json"
+    file_workers_path = os.path.join(hash_res_dir, "fileUrlWorkers.json")
     with open(file_workers_path, "r") as file:
         file_workers_data = json.load(file)
 

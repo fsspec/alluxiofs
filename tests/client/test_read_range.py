@@ -2,7 +2,7 @@ import argparse
 import os
 import random
 
-from alluxio import AlluxioClient
+from alluxiofs import AlluxioClient
 
 
 def parse_args():
