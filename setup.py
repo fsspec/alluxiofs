@@ -10,10 +10,19 @@ setup(
     include_package_data=True,
     zip_safe=False,
     install_requires=[
+        # Alluxio fs dependencies
         "fsspec",
-        "alluxio==1.0.0",
+        # Alluxio client dependencies
+        "aiohttp",
+        "decorator",
+        "humanfriendly",
+        "requests",
+        "etcd3",
+        "mmh3",
+        "sortedcontainers",
+        "protobuf>=3.20.0,<3.21.0",
     ],
-    extras_require={"tests": ["pytest"]},
+    extras_require={"tests": ["pytest", "pytest-aiohttp"]},
     python_requires=">=3.8",
     maintainer="Lu Qiu",
     maintainer_email="luqiujob@gmail.com",
