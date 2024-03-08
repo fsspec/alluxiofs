@@ -2,10 +2,11 @@ import logging
 from functools import wraps
 from typing import Callable
 
-from alluxio import AlluxioFileSystem as AlluxioSystem
 from fsspec import AbstractFileSystem
 from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
+
+from alluxiofs.client import AlluxioClient
 
 logging.basicConfig(
     level=logging.WARN,
@@ -105,7 +106,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         if test_options.get("skip_alluxio") is True:
             self.alluxio = None
         else:
-            self.alluxio = AlluxioSystem(
+            self.alluxio = AlluxioClient(
                 etcd_hosts=etcd_hosts,
                 worker_hosts=worker_hosts,
                 options=options,

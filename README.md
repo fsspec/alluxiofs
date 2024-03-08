@@ -23,7 +23,7 @@ fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
 alluxio = fsspec.filesystem("alluxio", etcd_host=args.etcd_host, target_protocol="s3")
 ```
 See concrete options descriptions at [Alluxio filesystem initialization description](alluxiofs/core.py)
-See a more concrete example at [tests/test_alluxio_fsspec.py](tests/test_alluxio_fsspec.py)
+See a more concrete example at [tests/test_alluxio_fsspec.py](tests/alluxiofs/test_alluxio_fsspec.py)
 
 ## Development
 
