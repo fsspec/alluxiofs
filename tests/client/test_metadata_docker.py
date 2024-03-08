@@ -1,7 +1,6 @@
 import os
 
-from alluxio import AlluxioClient
-
+from alluxiofs import AlluxioClient
 from tests.conftest import TEST_DIR
 from tests.conftest import TEST_ROOT
 
