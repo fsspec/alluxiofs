@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name="alluxiofs",
-    version="1.0.1-SNAPSHOT",
+    version="1.0.1.dev1",
     description="Alluxio Fsspec provides Alluxio filesystem spec implementation.",
     url="https://github.com/fsspec/alluxiofs",
     packages=find_packages(exclude=["tests", "tests.*"]),
@@ -22,7 +22,13 @@ setup(
         "sortedcontainers",
         "protobuf>=3.20.0,<3.21.0",
     ],
-    extras_require={"tests": ["pytest", "pytest-aiohttp"]},
+    extras_require={
+        "tests": [
+            "pytest",
+            "pytest-aiohttp",
+            "ray",
+        ]
+    },
     python_requires=">=3.8",
     maintainer="Lu Qiu",
     maintainer_email="luqiujob@gmail.com",
