@@ -120,7 +120,9 @@ class AlluxioFileSystem(AbstractFileSystem):
 
         def _strip_protocol(path):
             if self.fs:
-                return self.fs._strip_protocol(type(self)._strip_protocol(path))
+                return self.fs._strip_protocol(
+                    type(self)._strip_protocol(path)
+                )
             return path
 
         self._strip_protocol: Callable = _strip_protocol
