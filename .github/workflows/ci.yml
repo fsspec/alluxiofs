@@ -34,6 +34,10 @@ jobs:
           conda list
           conda --version
 
+      - name: Install dependencies
+        run: |
+          pip install .[tests]
+
       - name: Run tests
         run: |
           pytest -vv \
