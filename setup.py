@@ -22,7 +22,13 @@ setup(
         "sortedcontainers",
         "protobuf>=3.20.0,<3.21.0",
     ],
-    extras_require={"tests": ["pytest", "pytest-aiohttp"]},
+    extras_require={
+        "tests": [
+            "pytest",
+            "pytest-aiohttp",
+            "ray",
+        ]
+    },
     python_requires=">=3.8",
     maintainer="Lu Qiu",
     maintainer_email="luqiujob@gmail.com",
