@@ -119,15 +119,21 @@ class AlluxioFileSystem(AbstractFileSystem):
                 self.alluxio.load(preload_path)
 
         def _strip_protocol(path):
-            return self.fs._strip_protocol(type(self)._strip_protocol(path))
+            if self.fs:
+                return self.fs._strip_protocol(
+                    type(self)._strip_protocol(path)
+                )
+            return path
 
         self._strip_protocol: Callable = _strip_protocol
 
         self.error_metrics = AlluxioErrorMetrics()
 
     def unstrip_protocol(self, path):
-        # avoid adding Alluxio protocol to the full ufs url
-        return self.fs.unstrip_protocol(path)
+        if self.fs:
+            # avoid adding Alluxio protocol to the full ufs url
+            return self.fs.unstrip_protocol(path)
+        return path
 
     def get_error_metrics(self):
         return self.error_metrics.get_metrics()
