@@ -12,7 +12,7 @@ class LocalFallbackFixtures(AbstractFixtures):
             etcd_hosts="localhost",
             target_protocol="file",
             target_options={"auto_mkdir": True},
-            test_options={"skip_alluxio": True},
+            skip_alluxio=True,
         )
 
     @pytest.fixture

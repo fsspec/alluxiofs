@@ -37,52 +37,26 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def __init__(
         self,
-        etcd_hosts=None,
-        worker_hosts=None,
-        options=None,
-        logger=None,
-        concurrency=64,
-        etcd_port=2379,
-        worker_http_port=28080,
-        preload_path=None,
         target_protocol=None,
         target_options=None,
         fs=None,
-        test_options=None,
+        alluxio_client=None,
         **kwargs,
     ):
         """
         Initializes an Alluxio filesystem on top of underlying filesystem
         to leveraging the data caching and management features of Alluxio.
 
-        The Alluxio args:
-            etcd_hosts (str, optional): A comma-separated list of ETCD server hosts in the format "host1:port1,host2:port2,...".
-                ETCD is used for dynamic discovery of Alluxio workers.
-                Either `etcd_hosts` or `worker_hosts` must be specified, not both.
-            worker_hosts (str, optional): A comma-separated list of Alluxio worker hosts in the format "host1:port1,host2:port2,...".
-                Directly specifies workers without using ETCD.
-                Either `etcd_hosts` or `worker_hosts` must be specified, not both.
-            options (dict, optional): A dictionary of Alluxio configuration options where keys are property names and values are property values.
-                These options configure the Alluxio client behavior.
-            logger (logging.Logger, optional): A logger instance for logging messages.
-                If not provided, a default logger with the name "AlluxioFileSystem" is used.
-            concurrency (int, optional): The maximum number of concurrent operations (e.g., reads, writes) that the file system interface will allow. Defaults to 64.
-            etcd_port (int, optional): The port number used by each etcd server.
-                Relevant only if `etcd_hosts` is specified.
-            worker_http_port (int, optional): The port number used by the HTTP server on each Alluxio worker.
-                This is used for accessing Alluxio's HTTP-based APIs.
-            preload_path (str, optional): Specifies a path to preload into the Alluxio file system cache at initialization.
-                This can be useful for ensuring that certain critical data is immediately available in the cache.
         The underlying filesystem args
             target_protocol (str, optional): Specifies the under storage protocol to create the under storage file system object.
                 Common examples include 's3' for Amazon S3, 'hdfs' for Hadoop Distributed File System, and others.
             target_options (dict, optional): Provides a set of configuration options relevant to the `target_protocol`.
                 These options might include credentials, endpoint URLs, and other protocol-specific settings required to successfully interact with the under storage system.
             fs (object, optional): Directly supplies an instance of a file system object for accessing the underlying storage of Alluxio
-        Other args:
-            test_options (dict, optional): A dictionary of options used exclusively for testing purposes.
-                These might include mock interfaces or specific configuration overrides for test scenarios.
-            **kwargs: other parameters for core session.
+        The Alluxio client args:
+            alluxio_client (AlluxioClient, Optional): the alluxio client to connects to Alluxio servers.
+                If not provided, please add Alluxio client arguments to init a new Alluxio Client.
+        **kwargs: other parameters for initializing Alluxio client or fsspec.
         """
         super().__init__(**kwargs)
         if not (fs is None) ^ (target_protocol is None):
@@ -94,7 +68,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             raise ValueError(
                 "Please provide filesystem instance(fs) or target_protocol"
             )
-        self.logger = logger or logging.getLogger("Alluxiofs")
+        self.logger = kwargs.get("logger", logging.getLogger("Alluxiofs"))
         self.kwargs = target_options or {}
         self.fs = None
         if fs is not None:
@@ -102,21 +76,13 @@ class AlluxioFileSystem(AbstractFileSystem):
         elif target_protocol is not None:
             self.fs = filesystem(target_protocol, **self.kwargs)
 
-        test_options = test_options or {}
-        if test_options.get("skip_alluxio") is True:
+        skip_alluxio = kwargs.get("skip_alluxio", False)
+        if skip_alluxio:
             self.alluxio = None
+        elif alluxio_client:
+            self.alluxio = alluxio_client
         else:
-            self.alluxio = AlluxioClient(
-                etcd_hosts=etcd_hosts,
-                worker_hosts=worker_hosts,
-                options=options,
-                logger=logger,
-                concurrency=concurrency,
-                etcd_port=etcd_port,
-                worker_http_port=worker_http_port,
-            )
-            if preload_path is not None:
-                self.alluxio.load(preload_path)
+            self.alluxio = AlluxioClient(**kwargs)
 
         def _strip_protocol(path):
             if self.fs:
