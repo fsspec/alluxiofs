@@ -1,6 +1,6 @@
 import fsspec.tests.abstract as abstract
 
-from tests.fs.derived.local.local_fallback_fixtures import (
+from tests.fs.fallback.local.local_fallback_fixtures import (
     LocalFallbackFixtures,
 )
 

@@ -1,7 +1,7 @@
 import fsspec.tests.abstract as abstract
 import pytest
 
-from tests.fs.derived.s3.s3_fallback_fixtures import S3FallbackFixtures
+from tests.fs.fallback.s3.s3_fallback_fixtures import S3FallbackFixtures
 
 
 @pytest.mark.skip(reason="S3 credentials not set.")
