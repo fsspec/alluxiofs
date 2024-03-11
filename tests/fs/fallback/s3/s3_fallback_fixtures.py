@@ -15,7 +15,7 @@ class S3FallbackFixtures(AbstractFixtures):
 
     @pytest.fixture
     def fs_path(self):
-        return "lu-ai-test"
+        return "ai-ref-arch"
 
     @pytest.fixture
     def supports_empty_directories(self):

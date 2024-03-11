@@ -38,7 +38,7 @@ jobs:
         run: |
           pip install .[tests]
 
-      - name: Run tests
+      - name: Run Alluxio FileSystem tests
         run: |
           pytest -vv \
           --log-format="%(asctime)s %(levelname)s %(message)s" \
