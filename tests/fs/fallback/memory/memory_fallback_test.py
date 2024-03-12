@@ -1,6 +1,6 @@
 import fsspec.tests.abstract as abstract
 
-from alluxiofs.tests.derived.memory.memory_fallback_fixtures import (
+from tests.fs.fallback.memory.memory_fallback_fixtures import (
     MemoryFallbackFixtures,
 )
 
