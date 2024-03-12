@@ -10,7 +10,7 @@ class S3FallbackFixtures(AbstractFixtures):
         return AlluxioFileSystem(
             etcd_hosts="localhost",
             target_protocol="s3",
-            test_options={"skip_alluxio": True},
+            skip_alluxio=True,
         )
 
     @pytest.fixture
