@@ -5,10 +5,12 @@ import subprocess
 import time
 from urllib.parse import urlparse
 
+import fsspec
 import pytest
 import requests
 
 from alluxiofs import AlluxioClient
+from alluxiofs import AlluxioFileSystem
 
 LOGGER = logging.getLogger("alluxio_test")
 TEST_ROOT = os.getenv("TEST_ROOT", "file:///opt/alluxio/ufs/")
@@ -119,7 +121,7 @@ def stop_alluxio_dockers(with_etcd=False):
         stop_docker(ETCD_CONTAINER)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def docker_alluxio():
     if "ALLUXIO_URL" in os.environ:
         # assume we already have a server already set up
@@ -130,7 +132,7 @@ def docker_alluxio():
     stop_alluxio_dockers()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def docker_alluxio_with_etcd():
     if "ALLUXIO_URL" in os.environ:
         # assume we already have a server already set up
@@ -160,3 +162,35 @@ def etcd_alluxio_client(docker_alluxio_with_etcd):
     host = parsed_url.hostname
     etcd_alluxio_client = AlluxioClient(etcd_hosts=host)
     yield etcd_alluxio_client
+
+
+@pytest.fixture
+def alluxio_file_system(docker_alluxio):
+    LOGGER.debug(f"get AlluxioFileSystem connect to {docker_alluxio}")
+    parsed_url = urlparse(docker_alluxio)
+    host = parsed_url.hostname
+    fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+    alluxio_file_system = fsspec.filesystem(
+        "alluxio",
+        worker_hosts=host,
+        target_protocol="file",
+        preload_path=ALLUXIO_FILE_PATH,
+    )
+    yield alluxio_file_system
+
+
+@pytest.fixture
+def etcd_alluxio_file_system(docker_alluxio_with_etcd):
+    LOGGER.debug(
+        f"get etcd AlluxioFileSystem connect to {docker_alluxio_with_etcd}"
+    )
+    parsed_url = urlparse(docker_alluxio_with_etcd)
+    host = parsed_url.hostname
+    fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+    etcd_alluxio_file_system = fsspec.filesystem(
+        "alluxio",
+        etcd_hosts=host,
+        target_protocol="file",
+        preload_path=ALLUXIO_FILE_PATH,
+    )
+    yield etcd_alluxio_file_system
