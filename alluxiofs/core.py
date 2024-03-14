@@ -85,16 +85,18 @@ class AlluxioFileSystem(AbstractFileSystem):
             **kwargs: other parameters for core session.
         """
         super().__init__(**kwargs)
-        if not (fs is None) ^ (target_protocol is None):
+        self.logger = logger or logging.getLogger("Alluxiofs")
+        if fs and target_protocol:
             raise ValueError(
                 "Please provide one of filesystem instance (fs) or"
                 " target_protocol, not both"
             )
         if fs is None and target_protocol is None:
-            raise ValueError(
-                "Please provide filesystem instance(fs) or target_protocol"
+            self.logger.warning(
+                "Neither filesystem instance(fs) nor target_protocol is "
+                "provided. Will not fall back to under file systems when "
+                "accessed files are not in Alluxiofs"
             )
-        self.logger = logger or logging.getLogger("Alluxiofs")
         self.kwargs = target_options or {}
         self.fs = None
         if fs is not None:
