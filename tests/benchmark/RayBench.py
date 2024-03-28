@@ -1,13 +1,13 @@
 from enum import Enum
 
 from tests.benchmark.AbstractBench import AbstractArgumentParser, AbstractBench
-import ray.data
+# import ray.data
 
 class Op(Enum):
     read_parquet = "read_parquet"
     read_images = "read_images"
 
-class AlluxioRESTArgumentParser(AbstractArgumentParser):
+class RayArgumentParser(AbstractArgumentParser):
     def __init__(self, main_parser):
         self.parser = main_parser
         self.parser.add_argument(
@@ -27,7 +27,7 @@ class AlluxioRESTArgumentParser(AbstractArgumentParser):
         args = self.parser.parse_args(args, namespace)
         return args
 
-class AlluxioRESTBench(AbstractBench):
+class RayBench(AbstractBench):
     def __init__(self, args, **kwargs):
         self.args = args
 
@@ -39,7 +39,7 @@ class AlluxioRESTBench(AbstractBench):
             print(f"Executing AlluxioRESTBench! Op:{self.args.op}")
             self.test_read_parquet()
         elif self.args.op == Op.read_images.name:
-            pass
+            self.test_read_images()
         else:
             raise Exception(f"Unknown Op:{self.args.op} for {self.__class__.__name__}")
 

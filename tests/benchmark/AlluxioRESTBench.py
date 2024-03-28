@@ -54,11 +54,18 @@ class AlluxioRESTBench(AbstractBench):
             if match:
                 nums = [int(x) for x in match.group().split('-')]
                 self.page_id_range = (nums[0], nums[1])
-                print(f"{self.page_id_range}")
+                # print(f"{self.page_id_range}")
+
+        # Init session
+        self.session = requests.Session()
+        adapter = HTTPAdapter(
+            pool_connections=1, pool_maxsize=1
+        )
+        self.session.mount("http://", adapter)
 
     def execute(self):
         if self.args.op == Op.GetPage.name:
-            print(f"Executing AlluxioRESTBench! Op:{self.args.op}")
+            # print(f"Executing AlluxioRESTBench! Op:{self.args.op}")
             self.testGetPage()
         elif self.args.op == Op.GetPage.name:
             pass
@@ -82,7 +89,7 @@ class AlluxioRESTBench(AbstractBench):
                 raise Exception(f"Missing args for {self.args.op}, required args:[fileid, page_id_range]")
 
             if self.args.page_id_range is not None:
-                print(f"self.args.page_id_range:{self.args.page_id_range}")
+                # print(f"self.args.page_id_range:{self.args.page_id_range}")
                 match = re.match(r"\d+-\d+", self.args.page_id_range)
                 if match:
                     nums = [int(x) for x in match.group().split('-')]
@@ -98,11 +105,6 @@ class AlluxioRESTBench(AbstractBench):
             pass
 
     def testGetPage(self):
-        self.session = requests.Session()
-        adapter = HTTPAdapter(
-            pool_connections=1, pool_maxsize=1
-        )
-        self.session.mount("http://", adapter)
         page_idx = random.randint(self.page_id_range[0],self.page_id_range[1])
         try:
             response = self.session.get(

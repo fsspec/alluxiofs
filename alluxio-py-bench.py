@@ -1,7 +1,9 @@
+#!/bin/python3
 import os, time
 import argparse
 from enum import Enum
-from tests.benchmark import AbstractBench, AlluxioFSSpecBench, AlluxioRESTBench
+from tests.benchmark import AbstractBench, AlluxioFSSpecBench, AlluxioRESTBench, RayBench
+
 
 class TestSuite(Enum):
     REST = "REST"
@@ -28,35 +30,40 @@ def init_main_parser():
         help="The test suite name, choices:{}".format(list(TestSuite)),
     )
     parser.add_argument(
+        "--runtime",
+        type=int,
+        required=True,
+        help="run time in seconds",
+    )
+    parser.add_argument(
         "--etcd_hosts",
         type=str,
-        # default="localhost",
         required=False,
         help="The host address(es) for etcd",
     )
     parser.add_argument(
         "--worker_hosts",
         type=str,
-        # default="localhost",
         required=False,
         help="The host address(es) for etcd",
     )
     return parser
 
 
-def main(test_suite=AbstractBench):
+def main(main_args, test_suite=AbstractBench):
     if not test_suite:
         print("No test suite specified, bail.")
         return
     test_suite.init()
-    st = time.time()
+    start_time = time.time()
     i_am_child = False
     for i in range(main_args.numjobs):
         processid = os.fork()
         if processid <= 0:
             i_am_child = True
             print(f"Child Process:{i}")
-            test_suite.execute()
+            while time.time() - start_time < main_args.runtime:
+                test_suite.execute()
             print(f"Child Process:{i} exit")
             break
         else:
@@ -72,7 +79,10 @@ if __name__ == "__main__":
     if main_args.testsuite == TestSuite.REST.name:
         suite_parser = AlluxioRESTBench.AlluxioRESTArgumentParser(main_parser)
         testsuite = AlluxioRESTBench.AlluxioRESTBench(suite_parser.parse_args())
-    elif main_args.testsuite == TestSuite.FSSPEC:
+    elif main_args.testsuite == TestSuite.FSSPEC.name:
         suite_parser = AlluxioFSSpecBench.AlluxioRESTArgumentParser()
         testsuite = AlluxioFSSpecBench(suite_parser.parse_args())
-    main(testsuite)
+    elif main_args.testsuite == TestSuite.RAY.name:
+        suite_parser = RayBench.RayArgumentParser()
+        testsuite = RayBench(suite_parser.parse_args())
+    main(main_args, testsuite)

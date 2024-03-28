@@ -3,7 +3,7 @@ import re
 from enum import Enum
 
 from alluxiofs import AlluxioClient
-from benchmark.AbstractBench import AbstractBench, AbstractArgumentParser
+from tests.benchmark.AbstractBench import AbstractBench, AbstractArgumentParser
 import argparse
 
 class Op(Enum):
