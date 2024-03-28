@@ -1,9 +1,7 @@
 import os, time
 import argparse
 from enum import Enum
-
 from tests.benchmark import AbstractBench, AlluxioFSSpecBench, AlluxioRESTBench
-
 
 class TestSuite(Enum):
     REST = "REST"
@@ -50,7 +48,7 @@ def main(test_suite=AbstractBench):
     if not test_suite:
         print("No test suite specified, bail.")
         return
-    test_suite.validate_args()
+    test_suite.init()
     st = time.time()
     i_am_child = False
     for i in range(main_args.numjobs):

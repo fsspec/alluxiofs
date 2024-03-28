@@ -11,7 +11,7 @@ class AbstractBench(ABC):
         pass
 
     @abstractmethod
-    def validate_args(self):
+    def init(self):
         pass
 
 class AbstractArgumentParser(ABC):
