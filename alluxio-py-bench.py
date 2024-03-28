@@ -70,8 +70,8 @@ def main(main_args, test_suite=AbstractBench):
             print(f"Parent Process, {i}th Child process, id:{processid}")
     if not i_am_child:
         os.wait()
-        ed = time.time()
-        print(f"total time:{ed-st}")
+        # end_time = time.time()
+        # print(f"total time:{end_time-start_time}")
 
 if __name__ == "__main__":
     main_parser = init_main_parser()
