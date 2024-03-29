@@ -1,20 +1,24 @@
 #!/bin/python3
-import os, time
 import argparse
+import os
+import time
 from enum import Enum
-from tests.benchmark import AbstractBench, AlluxioFSSpecBench, AlluxioRESTBench, RayBench
+
+from tests.benchmark import AbstractBench
+from tests.benchmark import AlluxioFSSpecBench
+from tests.benchmark import AlluxioRESTBench
+from tests.benchmark import RayBench
 
 
 class TestSuite(Enum):
     REST = "REST"
-    FSSPEC = "ALLUXIOFSSPEC"
+    FSSPEC = "FSSPEC"
     RAY = "ALLUXIORAY"
     PYTORCH = "PYTORCH"
 
+
 def init_main_parser():
-    parser = argparse.ArgumentParser(
-        description="Main parser"
-    )
+    parser = argparse.ArgumentParser(description="Main parser")
     parser.add_argument(
         "--numjobs",
         type=int,
@@ -73,15 +77,22 @@ def main(main_args, test_suite=AbstractBench):
         # end_time = time.time()
         # print(f"total time:{end_time-start_time}")
 
+
 if __name__ == "__main__":
     main_parser = init_main_parser()
     main_args, remaining_args = main_parser.parse_known_args()
     if main_args.testsuite == TestSuite.REST.name:
         suite_parser = AlluxioRESTBench.AlluxioRESTArgumentParser(main_parser)
-        testsuite = AlluxioRESTBench.AlluxioRESTBench(suite_parser.parse_args())
+        testsuite = AlluxioRESTBench.AlluxioRESTBench(
+            suite_parser.parse_args()
+        )
     elif main_args.testsuite == TestSuite.FSSPEC.name:
-        suite_parser = AlluxioFSSpecBench.AlluxioRESTArgumentParser()
-        testsuite = AlluxioFSSpecBench(suite_parser.parse_args())
+        suite_parser = AlluxioFSSpecBench.AlluxioFSSpecArgumentParser(
+            main_parser
+        )
+        testsuite = AlluxioFSSpecBench.AlluxioFSSpecBench(
+            suite_parser.parse_args()
+        )
     elif main_args.testsuite == TestSuite.RAY.name:
         suite_parser = RayBench.RayArgumentParser()
         testsuite = RayBench(suite_parser.parse_args())
