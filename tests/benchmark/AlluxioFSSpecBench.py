@@ -6,7 +6,6 @@ from alluxiofs import AlluxioFileSystem
 from tests.benchmark.AbstractBench import AbstractArgumentParser
 from tests.benchmark.AbstractBench import AbstractBench
 
-
 class Op(Enum):
     ls = "ls"
     info = "info"
@@ -39,7 +38,7 @@ class AlluxioFSSpecArgumentParser(AbstractArgumentParser):
 
     def parse_args(self, args=None, namespace=None):
         args = self.parser.parse_args(args, namespace)
-        print("args:{}", args)
+        # print("args:{}", args)
         return args
 
 
@@ -49,6 +48,7 @@ class AlluxioFSSpecBench(AbstractBench):
 
     def __init__(self, args, **kwargs):
         self.args = args
+        print(f"init AlluxioFSSpecBench:{self.args}")
 
     def init(self):
         print(f"{self.args.etcd_hosts}, {self.args.worker_hosts}")

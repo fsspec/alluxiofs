@@ -126,5 +126,6 @@ class AlluxioRESTBench(AbstractBench):
             )
             response.raise_for_status()
             len(response.content)
+            content_len = len(response.content)
         except Exception as e:
             print("Exception during testGetPage:", e)

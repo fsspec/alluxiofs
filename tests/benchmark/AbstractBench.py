@@ -2,13 +2,17 @@ from abc import ABC
 from abc import abstractmethod
 
 
+class Metrics:
+    def __init__(self):
+        self.total = 0
+
 class AbstractBench(ABC):
     def __init__(self, *args, **kwargs):
         # Initialize any fields needed
         pass
 
     @abstractmethod
-    def execute(self):
+    def execute(self) -> Metrics:
         # This method is abstract and should be implemented in the concrete subclass
         pass
 

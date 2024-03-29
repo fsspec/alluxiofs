@@ -9,7 +9,6 @@ from tests.benchmark import AlluxioFSSpecBench
 from tests.benchmark import AlluxioRESTBench
 from tests.benchmark import RayBench
 
-
 class TestSuite(Enum):
     REST = "REST"
     FSSPEC = "FSSPEC"
@@ -76,6 +75,7 @@ def main(main_args, test_suite=AbstractBench):
         os.wait()
         # end_time = time.time()
         # print(f"total time:{end_time-start_time}")
+    print(f"i_am_child:{i_am_child},metrics:{test_suite.metrics.total}")
 
 
 if __name__ == "__main__":
@@ -94,6 +94,6 @@ if __name__ == "__main__":
             suite_parser.parse_args()
         )
     elif main_args.testsuite == TestSuite.RAY.name:
-        suite_parser = RayBench.RayArgumentParser()
-        testsuite = RayBench(suite_parser.parse_args())
+        suite_parser = RayBench.RayArgumentParser(main_parser)
+        testsuite = RayBench.RayBench(suite_parser.parse_args())
     main(main_args, testsuite)
