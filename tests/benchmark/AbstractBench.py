@@ -1,4 +1,6 @@
-from abc import ABC, abstractmethod
+from abc import ABC
+from abc import abstractmethod
+
 
 class AbstractBench(ABC):
     def __init__(self, *args, **kwargs):
@@ -13,6 +15,7 @@ class AbstractBench(ABC):
     @abstractmethod
     def init(self):
         pass
+
 
 class AbstractArgumentParser(ABC):
     @abstractmethod
