@@ -75,7 +75,6 @@ def main(main_args, test_suite=AbstractBench):
         os.wait()
         # end_time = time.time()
         # print(f"total time:{end_time-start_time}")
-    print(f"i_am_child:{i_am_child},metrics:{test_suite.metrics.total}")
 
 
 if __name__ == "__main__":

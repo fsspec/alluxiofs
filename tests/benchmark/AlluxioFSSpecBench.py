@@ -48,7 +48,6 @@ class AlluxioFSSpecBench(AbstractBench):
 
     def __init__(self, args, **kwargs):
         self.args = args
-        print(f"init AlluxioFSSpecBench:{self.args}")
 
     def init(self):
         print(f"{self.args.etcd_hosts}, {self.args.worker_hosts}")
