@@ -1,0 +1,28 @@
+caller,operation,path,start,end
+main,info,ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_0.parquet,,
+main,info,ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_0.parquet,,
+main,_open,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_0.parquet,,
+main,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_0.parquet,278425364,278490900
+_fetch_metadata_serialization_wrapper pid=17393,info,ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_7.parquet,,
+_fetch_metadata_serialization_wrapper pid=17393,info,ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_7.parquet,,
+_fetch_metadata_serialization_wrapper pid=17393,_open,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_7.parquet,,
+_sample_fragment pid=18466,,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_356.parquet,4,285020129
+ReadParquet->Map(decode_image_crop_and_flip) pid=20711,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_0.parquet,4,278490900
+ReadParquet->Map(decode_image_crop_and_flip) pid=20718,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_15.parquet,4,176711989
+ReadParquet->Map(decode_image_crop_and_flip) pid=20720,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_33.parquet,4,253825748
+ReadParquet->Map(decode_image_crop_and_flip) pid=20720,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_42.parquet,4,307004341
+ReadParquet->Map(decode_image_crop_and_flip) pid=20720,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_48.parquet,4,220135347
+ReadParquet->Map(decode_image_crop_and_flip) pid=20720,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_58.parquet,4,233814447
+ReadParquet->Map(decode_image_crop_and_flip) pid=20714,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_64.parquet,4,239938641
+ReadParquet->Map(decode_image_crop_and_flip) pid=20711,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_70.parquet,4,207568043
+ReadParquet->Map(decode_image_crop_and_flip) pid=23350,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_80.parquet,4,216469050
+ReadParquet->Map(decode_image_crop_and_flip) pid=24081,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_87.parquet,4,205865703
+ReadParquet->Map(decode_image_crop_and_flip) pid=23767,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_96.parquet,4,220995855
+ReadParquet->Map(decode_image_crop_and_flip) pid=24970,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_106.parquet,4,231017473
+ReadParquet->Map(decode_image_crop_and_flip) pid=25027,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_114.parquet,4,215369576
+ReadParquet->Map(decode_image_crop_and_flip) pid=27394,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_106.parquet,4,231017473
+ReadParquet->Map(decode_image_crop_and_flip) pid=25027,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_132.parquet,4,222217365
+ReadParquet->Map(decode_image_crop_and_flip) pid=27206,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_141.parquet,4,211294178
+ReadParquet->Map(decode_image_crop_and_flip) pid=23767,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_153.parquet,4,191755700
+ReadParquet->Map(decode_image_crop_and_flip) pid=29610,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_141.parquet,4,211294178
+ReadParquet->Map(decode_image_crop_and_flip) pid=28120,cat_file,s3://ai-ref-arch/imagenet-full-parquet/train/3Xd3defc4/imagenet_170.parquet,4,180528254
