@@ -1,9 +1,12 @@
 from enum import Enum
 
-import ray.data
+try:
+    import ray.data
+except ModuleNotFoundError as e:
+    print("[WARNING]pkg 'ray' not installed, relative tests unable to run.")
 
 from alluxiofs import AlluxioFileSystem
-from tests.benchmark.AbstractBench import AbstractArgumentParser
+from tests.benchmark.AbstractBench import AbstractArgumentParser, Metrics
 from tests.benchmark.AbstractBench import AbstractBench
 
 
@@ -45,8 +48,9 @@ class RayBench(AbstractBench):
 
     def init(self):
         self.validate_args()
+        self.metrics = Metrics()
 
-    def execute(self):
+    def execute(self) -> Metrics:
         if self.args.op == Op.read_parquet.name:
             print(f"Executing AlluxioRESTBench! Op:{self.args.op}")
             self.test_read_parquet()
@@ -56,6 +60,7 @@ class RayBench(AbstractBench):
             raise Exception(
                 f"Unknown Op:{self.args.op} for {self.__class__.__name__}"
             )
+        return self.metrics
 
     def validate_args(self):
         if self.args.op == Op.read_parquet.name:
@@ -66,11 +71,13 @@ class RayBench(AbstractBench):
     def test_read_parquet(self):
         try:
             ray.data.read_parquet(self.args.dataset, filesystem=self.alluxio)
+            self.metrics.update(Metrics.TOTAL_OPS, 1)
         except Exception as e:
             print("Exception during test_read_parquet:", e)
 
     def test_read_images(self):
         try:
             ray.data.read_images(self.args.dataset, filesystem=self.alluxio)
+            self.metrics.update(Metrics.TOTAL_OPS, 1)
         except Exception as e:
             print("Exception during test_read_images:", e)

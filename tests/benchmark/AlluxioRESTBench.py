@@ -7,10 +7,12 @@ import requests
 from requests.adapters import HTTPAdapter
 
 from alluxiofs.client.const import (
-    ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE, LIST_URL_FORMAT, GET_FILE_STATUS_URL_FORMAT,
+    ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
+    LIST_URL_FORMAT,
+    GET_FILE_STATUS_URL_FORMAT,
 )
 from alluxiofs.client.const import FULL_PAGE_URL_FORMAT
-from tests.benchmark.AbstractBench import AbstractArgumentParser
+from tests.benchmark.AbstractBench import AbstractArgumentParser, Metrics
 from tests.benchmark.AbstractBench import AbstractBench
 
 
@@ -27,6 +29,7 @@ class AlluxioRESTArgumentParser(AbstractArgumentParser):
         self.parser.add_argument(
             "--op",
             type=str,
+            choices=[op.value for op in Op],
             default=Op.GetPage.name,
             required=True,
             help="REST Op to bench against",
@@ -76,8 +79,9 @@ class AlluxioRESTBench(AbstractBench):
         self.session = requests.Session()
         adapter = HTTPAdapter(pool_connections=1, pool_maxsize=1)
         self.session.mount("http://", adapter)
+        self.metrics = Metrics()
 
-    def execute(self):
+    def execute(self) -> Metrics:
         if self.args.op == Op.GetPage.name:
             self.testGetPage()
         elif self.args.op == Op.GetFileInfo.name:
@@ -90,6 +94,7 @@ class AlluxioRESTBench(AbstractBench):
             raise Exception(
                 f"Unknown Op:{self.args.op} for {self.__class__.__name__}"
             )
+        return self.metrics
 
     def validate_args(self):
         if self.args.worker_hosts is None:
@@ -137,6 +142,8 @@ class AlluxioRESTBench(AbstractBench):
             response.raise_for_status()
             len(response.content)
             content_len = len(response.content)
+            self.metrics.update(Metrics.TOTAL_OPS, 1)
+            self.metrics.update(Metrics.TOTAL_BYTES, content_len)
         except Exception as e:
             raise Exception(
                 f"Error ListFiles, path:{self.path}: error {e}"
@@ -155,6 +162,7 @@ class AlluxioRESTBench(AbstractBench):
             response.raise_for_status()
             # just read full content but do nothing
             result = json.loads(response.content)
+            self.metrics.update(Metrics.TOTAL_OPS, 1)
         except Exception as e:
             raise Exception(
                 f"Error ListFiles, path:{self.path}: error {e}"
@@ -172,6 +180,7 @@ class AlluxioRESTBench(AbstractBench):
             )
             response.raise_for_status()
             data = json.loads(response.content)[0]
+            self.metrics.update(Metrics.TOTAL_OPS, 1)
         except Exception as e:
             raise Exception(
                 f"Error GetFileInfo, path:{self.path}: error {e}"

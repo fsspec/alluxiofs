@@ -8,6 +8,8 @@ from tests.benchmark import AbstractBench
 from tests.benchmark import AlluxioFSSpecBench
 from tests.benchmark import AlluxioRESTBench
 from tests.benchmark import RayBench
+from tests.benchmark.AbstractBench import Metrics
+
 
 class TestSuite(Enum):
     REST = "REST"
@@ -53,7 +55,9 @@ def init_main_parser():
     return parser
 
 
-def main(main_args, test_suite=AbstractBench):
+def main(main_args,
+         remaining_args,
+         test_suite=AbstractBench):
     if not test_suite:
         print("No test suite specified, bail.")
         return
@@ -66,7 +70,20 @@ def main(main_args, test_suite=AbstractBench):
             i_am_child = True
             print(f"Child Process:{i}")
             while time.time() - start_time < main_args.runtime:
-                test_suite.execute()
+                result_metrics = test_suite.execute()
+                if result_metrics.get(Metrics.TOTAL_OPS):
+                    print(
+                        f"Benchmark against {remaining_args.op}: total ops: {result_metrics.get(Metrics.TOTAL_OPS)}, ops/second: {result_metrics[Metrics.TOTAL_OPS] / duration}"
+                    )
+                if self.metrics.get(Metrics.TOTAL_BYTES):
+                    print(
+                        f"Benchmark against {remaining_args.op}: total bytes: {result_metrics.get(Metrics.TOTAL_BYTES)}, bytes/second: {result_metrics[Metrics.TOTAL_BYTES] / duration}"
+                    )
+
+                if not result_metrics:
+                    print(
+                        f"Benchmark against {remaining_args.op}: iteration: {remaining_args.iteration} total time: {duration} seconds"
+                    )
             print(f"Child Process:{i} exit")
             break
         else:
@@ -95,4 +112,4 @@ if __name__ == "__main__":
     elif main_args.testsuite == TestSuite.RAY.name:
         suite_parser = RayBench.RayArgumentParser(main_parser)
         testsuite = RayBench.RayBench(suite_parser.parse_args())
-    main(main_args, testsuite)
+    main(main_args, remaining_args, testsuite)
