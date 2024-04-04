@@ -5,6 +5,7 @@ from enum import Enum
 from alluxiofs import AlluxioFileSystem
 from tests.benchmark.AbstractBench import AbstractArgumentParser
 from tests.benchmark.AbstractBench import AbstractBench
+from tests.benchmark.AbstractBench import Metrics
 
 
 class Op(Enum):
@@ -39,14 +40,11 @@ class AlluxioFSSpecArgumentParser(AbstractArgumentParser):
 
     def parse_args(self, args=None, namespace=None):
         args = self.parser.parse_args(args, namespace)
-        print("args:{}", args)
+        # print("args:{}", args)
         return args
 
 
 class AlluxioFSSpecBench(AbstractBench):
-    TOTAL_OPS = "total_ops"
-    TOTAL_BYTES = "total_bytes"
-
     def __init__(self, args, **kwargs):
         self.args = args
 
@@ -59,11 +57,11 @@ class AlluxioFSSpecBench(AbstractBench):
         self.directories = []
         self.files = {}
         self.traverse(self.args.path, self.directories, self.files)
+        self.metrics = Metrics()
 
-    def execute(self):
+    def execute(self) -> Metrics:
         start_time = time.time()
-        result_metrics = {}
-        for _ in range(self.args.iteration):
+        for i in range(self.args.iteration):
             if self.args.op == Op.ls.value:
                 result_metrics = self.bench_ls()
             elif self.args.op == Op.info.value:
@@ -78,21 +76,24 @@ class AlluxioFSSpecBench(AbstractBench):
                 raise Exception(
                     f"Unknown Op:{self.args.op} for {self.__class__.__name__}"
                 )
+            for _, (k, v) in enumerate(result_metrics.items()):
+                self.metrics.update(k, v)
         duration = time.time() - start_time
 
-        if result_metrics.get(self.TOTAL_OPS):
+        if self.metrics.get(Metrics.TOTAL_OPS):
             print(
-                f"Benchmark against {self.args.op}: total ops: {result_metrics[self.TOTAL_OPS]} ops/second: {result_metrics[self.TOTAL_OPS] / duration}"
+                f"Benchmark against {self.args.op}: total ops: {self.metrics.get(Metrics.TOTAL_OPS)}, ops/second: {result_metrics[Metrics.TOTAL_OPS] / duration}"
             )
-        if result_metrics.get(self.TOTAL_BYTES):
+        if self.metrics.get(Metrics.TOTAL_BYTES):
             print(
-                f"Benchmark against {self.args.op}: total bytes: {result_metrics[self.TOTAL_BYTES]} bytes/second: {result_metrics[self.TOTAL_BYTES] / duration}"
+                f"Benchmark against {self.args.op}: total bytes: {self.metrics.get(Metrics.TOTAL_BYTES)}, bytes/second: {result_metrics[Metrics.TOTAL_BYTES] / duration}"
             )
 
         if not result_metrics:
             print(
                 f"Benchmark against {self.args.op}: iteration: {self.args.iteration} total time: {duration} seconds"
             )
+        return self.metrics
 
     def traverse(self, path, directories, files):
         entry = self.alluxio_fs.info(path)
@@ -107,12 +108,12 @@ class AlluxioFSSpecBench(AbstractBench):
     def bench_ls(self):
         for directory in self.directories:
             self.alluxio_fs.ls(directory)
-        return {self.TOTAL_OPS: len(self.directories)}
+        return {Metrics.TOTAL_OPS: len(self.directories)}
 
     def bench_info(self):
         for file in self.files.keys():
             self.alluxio_fs.info(file)
-        return {self.TOTAL_OPS: len(self.files.keys())}
+        return {Metrics.TOTAL_OPS: len(self.files.keys())}
 
     def bench_cat_file(self):
         total_bytes = 0
@@ -124,8 +125,8 @@ class AlluxioFSSpecBench(AbstractBench):
                 file_read += read_bytes
             total_bytes += file_size
         return {
-            self.TOTAL_OPS: len(self.files.keys()),
-            self.TOTAL_BYTES: total_bytes,
+            Metrics.TOTAL_OPS: len(self.files.keys()),
+            Metrics.TOTAL_BYTES: total_bytes,
         }
 
     def bench_open_seq_read(self):
@@ -138,8 +139,8 @@ class AlluxioFSSpecBench(AbstractBench):
                         break
             total_bytes += file_size
         return {
-            self.TOTAL_OPS: len(self.files.keys()),
-            self.TOTAL_BYTES: total_bytes,
+            Metrics.TOTAL_OPS: len(self.files.keys()),
+            Metrics.TOTAL_BYTES: total_bytes,
         }
 
     def bench_open_random_read(self):
@@ -158,4 +159,4 @@ class AlluxioFSSpecBench(AbstractBench):
                     total_ops += 1
             total_bytes += bytes_read
 
-        return {self.TOTAL_OPS: total_ops, self.TOTAL_BYTES: total_bytes}
+        return {Metrics.TOTAL_OPS: total_ops, Metrics.TOTAL_BYTES: total_bytes}
