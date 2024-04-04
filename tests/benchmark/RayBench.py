@@ -2,7 +2,7 @@ from enum import Enum
 
 try:
     import ray.data
-except ModuleNotFoundError as e:
+except ModuleNotFoundError:
     print("[WARNING]pkg 'ray' not installed, relative tests unable to run.")
 
 from alluxiofs import AlluxioFileSystem
