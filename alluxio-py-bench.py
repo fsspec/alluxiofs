@@ -55,9 +55,7 @@ def init_main_parser():
     return parser
 
 
-def main(main_args,
-         remaining_args,
-         test_suite=AbstractBench):
+def main(main_args, remaining_args, test_suite=AbstractBench):
     if not test_suite:
         print("No test suite specified, bail.")
         return
@@ -70,12 +68,14 @@ def main(main_args,
             i_am_child = True
             print(f"Child Process:{i}")
             while time.time() - start_time < main_args.runtime:
+                before_time = time.time()
                 result_metrics = test_suite.execute()
+                duration = time.time() - before_time
                 if result_metrics.get(Metrics.TOTAL_OPS):
                     print(
                         f"Benchmark against {remaining_args.op}: total ops: {result_metrics.get(Metrics.TOTAL_OPS)}, ops/second: {result_metrics[Metrics.TOTAL_OPS] / duration}"
                     )
-                if self.metrics.get(Metrics.TOTAL_BYTES):
+                if result_metrics.get(Metrics.TOTAL_BYTES):
                     print(
                         f"Benchmark against {remaining_args.op}: total bytes: {result_metrics.get(Metrics.TOTAL_BYTES)}, bytes/second: {result_metrics[Metrics.TOTAL_BYTES] / duration}"
                     )

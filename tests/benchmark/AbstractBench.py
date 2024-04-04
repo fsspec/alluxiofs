@@ -1,14 +1,15 @@
 from abc import ABC
 from abc import abstractmethod
 
+
 class Metrics(ABC):
     TOTAL_OPS = "total_ops"
     TOTAL_BYTES = "total_bytes"
 
     def __init__(self):
         self.metrics_dict = {
-            Metrics.TOTAL_OPS:0,
-            Metrics.TOTAL_BYTES:0,
+            Metrics.TOTAL_OPS: 0,
+            Metrics.TOTAL_BYTES: 0,
         }
 
     def update(self, metrics_key, metrics_value):
@@ -18,7 +19,7 @@ class Metrics(ABC):
         return self.metrics_dict[metrics_key]
 
     def merge(self, metrics):
-        for _,(k,v) in enumerate(metrics.metrics_dict.items()):
+        for _, (k, v) in enumerate(metrics.metrics_dict.items()):
             self.metrics_dict[k] += v
 
     def to_str(self):
@@ -29,6 +30,7 @@ class Metrics(ABC):
 
     def __repr__(self):
         return self.to_str()
+
 
 class AbstractBench(ABC):
     def __init__(self, *args, **kwargs):
@@ -49,4 +51,3 @@ class AbstractArgumentParser(ABC):
     @abstractmethod
     def parse_args(self, args=None, namespace=None):
         pass
-

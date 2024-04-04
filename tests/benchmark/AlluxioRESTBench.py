@@ -8,12 +8,13 @@ from requests.adapters import HTTPAdapter
 
 from alluxiofs.client.const import (
     ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
-    LIST_URL_FORMAT,
-    GET_FILE_STATUS_URL_FORMAT,
 )
 from alluxiofs.client.const import FULL_PAGE_URL_FORMAT
-from tests.benchmark.AbstractBench import AbstractArgumentParser, Metrics
+from alluxiofs.client.const import GET_FILE_STATUS_URL_FORMAT
+from alluxiofs.client.const import LIST_URL_FORMAT
+from tests.benchmark.AbstractBench import AbstractArgumentParser
 from tests.benchmark.AbstractBench import AbstractBench
+from tests.benchmark.AbstractBench import Metrics
 
 
 class Op(Enum):
@@ -117,8 +118,10 @@ class AlluxioRESTBench(AbstractBench):
                         raise Exception("Invalid page_id_range")
                 else:
                     raise Exception("Incorrect page_id_range param passed.")
-        elif self.args.op == Op.ListFiles.name \
-            or self.args.op == Op.GetFileInfo.name:
+        elif (
+            self.args.op == Op.ListFiles.name
+            or self.args.op == Op.GetFileInfo.name
+        ):
             required_args = [self.args.path]
             required_args_absence = any(arg is None for arg in required_args)
             if required_args_absence:
@@ -154,14 +157,14 @@ class AlluxioRESTBench(AbstractBench):
         try:
             response = self.session.get(
                 LIST_URL_FORMAT.format(
-                    worker_host= self.worker_host,
-                    http_port=ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE
+                    worker_host=self.worker_host,
+                    http_port=ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
                 ),
                 params=params,
             )
             response.raise_for_status()
             # just read full content but do nothing
-            result = json.loads(response.content)
+            json.loads(response.content)
             self.metrics.update(Metrics.TOTAL_OPS, 1)
         except Exception as e:
             raise Exception(
@@ -179,7 +182,7 @@ class AlluxioRESTBench(AbstractBench):
                 params=params,
             )
             response.raise_for_status()
-            data = json.loads(response.content)[0]
+            json.loads(response.content)[0]
             self.metrics.update(Metrics.TOTAL_OPS, 1)
         except Exception as e:
             raise Exception(

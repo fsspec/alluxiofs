@@ -3,8 +3,10 @@ import time
 from enum import Enum
 
 from alluxiofs import AlluxioFileSystem
-from tests.benchmark.AbstractBench import AbstractArgumentParser, Metrics
+from tests.benchmark.AbstractBench import AbstractArgumentParser
 from tests.benchmark.AbstractBench import AbstractBench
+from tests.benchmark.AbstractBench import Metrics
+
 
 class Op(Enum):
     ls = "ls"
@@ -43,7 +45,6 @@ class AlluxioFSSpecArgumentParser(AbstractArgumentParser):
 
 
 class AlluxioFSSpecBench(AbstractBench):
-
     def __init__(self, args, **kwargs):
         self.args = args
 
@@ -75,7 +76,7 @@ class AlluxioFSSpecBench(AbstractBench):
                 raise Exception(
                     f"Unknown Op:{self.args.op} for {self.__class__.__name__}"
                 )
-            for _,(k,v) in enumerate(result_metrics.items()):
+            for _, (k, v) in enumerate(result_metrics.items()):
                 self.metrics.update(k, v)
         duration = time.time() - start_time
 
