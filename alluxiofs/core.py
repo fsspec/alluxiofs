@@ -153,11 +153,11 @@ class AlluxioFileSystem(AbstractFileSystem):
     def alluxio_with_fallback_handler(alluxio_impl):
         @wraps(alluxio_impl)
         def fallback_wrapper(self, path, *args, **kwargs):
+            path = self._strip_protocol(path)
             if self.alluxio is None:
                 if self.fs:
                     fs_method = getattr(self.fs, alluxio_impl.__name__, None)
                     if fs_method:
-                        path = self._strip_protocol(path)
                         # TODO(lu) deal with the parameter sequence mismatch issue
                         return fs_method(path, *args, **kwargs)
                     raise RuntimeError(
@@ -166,13 +166,13 @@ class AlluxioFileSystem(AbstractFileSystem):
                 raise RuntimeError("Alluxio system is not initialized.")
 
             try:
-                return alluxio_impl(self, *args, **kwargs)
+                return alluxio_impl(self, path, *args, **kwargs)
             except Exception as e:
                 self.error_metrics.record_error(alluxio_impl.__name__, e)
                 if self.fs:
                     fs_method = getattr(self.fs, alluxio_impl.__name__, None)
                     if fs_method:
-                        return fs_method(*args, **kwargs)
+                        return fs_method(path, *args, **kwargs)
                 else:
                     raise
 
