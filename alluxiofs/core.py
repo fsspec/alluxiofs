@@ -121,9 +121,17 @@ class AlluxioFileSystem(AbstractFileSystem):
                 self.alluxio.load(preload_path)
 
         def _strip_alluxio_protocol(path):
-            if path.startswith(self.protocol + ":"):
-                path = path[len(self.protocol) + 1 :]
-            return path
+            def _strip_individual_path(p):
+                if p.startswith(self.protocol + ":"):
+                    return p[len(self.protocol) + 1 :]
+                return p
+
+            if isinstance(path, str):
+                return _strip_individual_path(path)
+            elif isinstance(path, list):
+                return [_strip_individual_path(p) for p in path]
+            else:
+                raise TypeError("Path must be a string or a list of strings")
 
         self._strip_alluxio_protocol: Callable = _strip_alluxio_protocol
 
@@ -282,35 +290,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         pass
 
     @fallback_handler
-    def copy(self, src_path, dst_path, *args, **kwargs):
-        pass
-
-    @fallback_handler
-    def cp_file(self, src_path, dst_path, *args, **kwargs):
-        pass
-
-    @fallback_handler
-    def put_file(self, lpath, rpath, *args, **kwargs):
-        pass
-
-    @fallback_handler
-    def mv_file(self, path, *args, **kwargs):
-        pass
-
-    @fallback_handler
-    def pipe_file(self, path, value, *args, **kwargs):
-        pass
-
-    @fallback_handler
-    def link(self, target, source, *args, **kwargs):
-        pass
-
-    @fallback_handler
-    def symlink(self, target, source, *args, **kwargs):
-        pass
-
-    @fallback_handler
-    def islink(self, path, *args, **kwargs):
+    def pipe_file(self, path, *args, **kwargs):
         pass
 
     @fallback_handler
@@ -329,9 +309,49 @@ class AlluxioFileSystem(AbstractFileSystem):
     def modified(self, path, *args, **kwargs):
         pass
 
-    @fallback_handler
-    def mv(self, src_path, dst_path, *args, **kwargs):
-        pass
+    def mv(self, path1, path2, *args, **kwargs):
+        if self.fs:
+            return self.fs.mv(
+                self._strip_alluxio_protocol(path1),
+                self._strip_alluxio_protocol(path2),
+                *args,
+                **kwargs,
+            )
+        else:
+            raise NotImplementedError
+
+    def copy(self, path1, path2, *args, **kwargs):
+        if self.fs:
+            return self.fs.copy(
+                self._strip_alluxio_protocol(path1),
+                self._strip_alluxio_protocol(path2),
+                *args,
+                **kwargs,
+            )
+        else:
+            raise NotImplementedError
+
+    def cp_file(self, path1, path2, *args, **kwargs):
+        if self.fs:
+            return self.fs.cp_file(
+                self._strip_alluxio_protocol(path1),
+                self._strip_alluxio_protocol(path2),
+                *args,
+                **kwargs,
+            )
+        else:
+            raise NotImplementedError
+
+    def put_file(self, lpath, rpath, *args, **kwargs):
+        if self.fs:
+            return self.fs.mv(
+                self._strip_alluxio_protocol(lpath),
+                self._strip_alluxio_protocol(rpath),
+                *args,
+                **kwargs,
+            )
+        else:
+            raise NotImplementedError
 
 
 class AlluxioFile(AbstractBufferedFile):
