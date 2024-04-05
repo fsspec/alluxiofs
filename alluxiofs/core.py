@@ -122,8 +122,8 @@ class AlluxioFileSystem(AbstractFileSystem):
 
         def _strip_alluxio_protocol(path):
             def _strip_individual_path(p):
-                if p.startswith(self.protocol + ":"):
-                    return p[len(self.protocol) + 1 :]
+                if p.startswith(self.protocol + "::"):
+                    return p[len(self.protocol) + 2 :]
                 return p
 
             if isinstance(path, str):
