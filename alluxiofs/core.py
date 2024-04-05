@@ -157,35 +157,29 @@ class AlluxioFileSystem(AbstractFileSystem):
     def get_error_metrics(self):
         return self.error_metrics.get_metrics()
 
-    def alluxio_with_fallback_handler(alluxio_impl):
+    def fallback_handler(alluxio_impl):
         @wraps(alluxio_impl)
         def fallback_wrapper(self, path, *args, **kwargs):
-            path = self._strip_protocol(path)
-            if self.alluxio is None:
-                if self.fs:
-                    fs_method = getattr(self.fs, alluxio_impl.__name__, None)
-                    if fs_method:
-                        # TODO(lu) deal with the parameter sequence mismatch issue
-                        return fs_method(path, *args, **kwargs)
-                    raise RuntimeError(
-                        "Alluxio system is not initialized and method not found"
-                    )
-                raise RuntimeError("Alluxio system is not initialized.")
-
+            path = self._strip_alluxio_protocol(path)
             try:
-                return alluxio_impl(self, path, *args, **kwargs)
+                if self.alluxio:
+                    return alluxio_impl(self, path, *args, **kwargs)
             except Exception as e:
-                self.error_metrics.record_error(alluxio_impl.__name__, e)
-                if self.fs:
-                    fs_method = getattr(self.fs, alluxio_impl.__name__, None)
-                    if fs_method:
-                        return fs_method(path, *args, **kwargs)
-                else:
-                    raise
+                if not isinstance(e, NotImplementedError):
+                    self.error_metrics.record_error(alluxio_impl.__name__, e)
+                if self.fs is None:
+                    raise e
+
+            fs_method = getattr(self.fs, alluxio_impl.__name__, None)
+            if fs_method:
+                return fs_method(path, *args, **kwargs)
+            raise NotImplementedError(
+                f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem."
+            )
 
         return fallback_wrapper
 
-    @alluxio_with_fallback_handler
+    @fallback_handler
     def ls(self, path, detail=True, **kwargs):
         path = self.unstrip_protocol(path)
         paths = self.alluxio.listdir(path)
@@ -194,7 +188,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             for p in paths
         ]
 
-    @alluxio_with_fallback_handler
+    @fallback_handler
     def info(self, path, **kwargs):
         path = self.unstrip_protocol(path)
         file_status = self.alluxio.get_file_status(path)
@@ -215,7 +209,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         else:
             return self._strip_protocol(file_status.ufs_path)
 
-    @alluxio_with_fallback_handler
+    @fallback_handler
     def _open(
         self,
         path,
@@ -236,7 +230,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             **kwargs,
         )
 
-    @alluxio_with_fallback_handler
+    @fallback_handler
     def cat_file(self, path, start=None, end=None, **kwargs):
         if end is None:
             length = -1
@@ -245,68 +239,49 @@ class AlluxioFileSystem(AbstractFileSystem):
         path = self.unstrip_protocol(path)
         return self.alluxio.read_range(path, start, length)
 
-    def fallback_handler(func):
-        @wraps(func)
-        def fallback_wrapper(self, path, *args, **kwargs):
-            if self.fs:
-                fs_method = getattr(self.fs, func.__name__, None)
-                if fs_method:
-                    return fs_method(
-                        self._strip_alluxio_protocol(path), *args, **kwargs
-                    )
-                raise NotImplementedError(
-                    f"The method {func.__name__} is not implemented in the underlying filesystem."
-                )
-            else:
-                raise NotImplementedError(
-                    "Underlying filesystem is not available."
-                )
-
-        return fallback_wrapper
-
     @fallback_handler
     def ukey(self, path, *args, **kwargs):
-        pass
+        raise NotImplementedError
 
     @fallback_handler
     def mkdir(self, path, *args, **kwargs):
-        pass
+        raise NotImplementedError
 
     @fallback_handler
     def makedirs(self, path, *args, **kwargs):
-        pass
+        raise NotImplementedError
 
     @fallback_handler
     def rm(self, path, *args, **kwargs):
-        pass
+        raise NotImplementedError
 
     @fallback_handler
     def rmdir(self, path, *args, **kwargs):
-        pass
+        raise NotImplementedError
 
     @fallback_handler
     def _rm(self, path, *args, **kwargs):
-        pass
+        raise NotImplementedError
 
     @fallback_handler
     def pipe_file(self, path, *args, **kwargs):
-        pass
+        raise NotImplementedError
 
     @fallback_handler
     def rm_file(self, path, *args, **kwargs):
-        pass
+        raise NotImplementedError
 
     @fallback_handler
     def touch(self, path, *args, **kwargs):
-        pass
+        raise NotImplementedError
 
     @fallback_handler
     def created(self, path, *args, **kwargs):
-        pass
+        raise NotImplementedError
 
     @fallback_handler
     def modified(self, path, *args, **kwargs):
-        pass
+        raise NotImplementedError
 
     def mv(self, path1, path2, *args, **kwargs):
         if self.fs:
