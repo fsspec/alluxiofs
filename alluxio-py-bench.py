@@ -55,7 +55,7 @@ def init_main_parser():
     return parser
 
 
-def main(main_args, remaining_args, test_suite=AbstractBench):
+def main(main_args, test_suite=AbstractBench):
     if not test_suite:
         print("No test suite specified, bail.")
         return
@@ -67,23 +67,27 @@ def main(main_args, remaining_args, test_suite=AbstractBench):
         if processid <= 0:
             i_am_child = True
             print(f"Child Process:{i}")
+            before_time = time.time()
             while time.time() - start_time < main_args.runtime:
-                before_time = time.time()
                 result_metrics = test_suite.execute()
-                duration = time.time() - before_time
-                if result_metrics.get(Metrics.TOTAL_OPS):
-                    print(
-                        f"Benchmark against {remaining_args.op}: total ops: {result_metrics.get(Metrics.TOTAL_OPS)}, ops/second: {result_metrics[Metrics.TOTAL_OPS] / duration}"
-                    )
-                if result_metrics.get(Metrics.TOTAL_BYTES):
-                    print(
-                        f"Benchmark against {remaining_args.op}: total bytes: {result_metrics.get(Metrics.TOTAL_BYTES)}, bytes/second: {result_metrics[Metrics.TOTAL_BYTES] / duration}"
-                    )
+            duration = time.time() - before_time
+            if result_metrics.get(Metrics.TOTAL_OPS):
+                print(
+                    f"Benchmark against {test_suite.args.op}: "
+                    f"total ops: {result_metrics.get(Metrics.TOTAL_OPS)}, "
+                    f"ops/second: {result_metrics.get(Metrics.TOTAL_OPS) / duration}"
+                )
+            if result_metrics.get(Metrics.TOTAL_BYTES):
+                print(
+                    f"Benchmark against {test_suite.args.op}: "
+                    f"total bytes: {result_metrics.get(Metrics.TOTAL_BYTES)}, "
+                    f"bytes/second: {result_metrics.get(Metrics.TOTAL_BYTES) / duration}"
+                )
 
-                if not result_metrics:
-                    print(
-                        f"Benchmark against {remaining_args.op}: iteration: {remaining_args.iteration} total time: {duration} seconds"
-                    )
+            if not result_metrics:
+                print(
+                    f"Benchmark against {test_suite.args.op}: iteration: {test_suite.args.iteration} total time: {duration} seconds"
+                )
             print(f"Child Process:{i} exit")
             break
         else:
@@ -112,4 +116,4 @@ if __name__ == "__main__":
     elif main_args.testsuite == TestSuite.RAY.name:
         suite_parser = RayBench.RayArgumentParser(main_parser)
         testsuite = RayBench.RayBench(suite_parser.parse_args())
-    main(main_args, remaining_args, testsuite)
+    main(main_args, testsuite)

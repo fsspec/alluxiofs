@@ -136,7 +136,7 @@ class AlluxioRESTBench(AbstractBench):
         try:
             response = self.session.get(
                 FULL_PAGE_URL_FORMAT.format(
-                    worker_host=self.worker,
+                    worker_host=self.worker_host,
                     http_port=ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
                     path_id=self.args.fileid,
                     page_index=page_idx,
@@ -149,7 +149,7 @@ class AlluxioRESTBench(AbstractBench):
             self.metrics.update(Metrics.TOTAL_BYTES, content_len)
         except Exception as e:
             raise Exception(
-                f"Error ListFiles, path:{self.path}: error {e}"
+                f"Error GetPage, path:{self.path}: error {e}"
             ) from e
 
     def testListFiles(self):

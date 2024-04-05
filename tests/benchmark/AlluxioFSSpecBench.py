@@ -78,21 +78,6 @@ class AlluxioFSSpecBench(AbstractBench):
                 )
             for _, (k, v) in enumerate(result_metrics.items()):
                 self.metrics.update(k, v)
-        duration = time.time() - start_time
-
-        if self.metrics.get(Metrics.TOTAL_OPS):
-            print(
-                f"Benchmark against {self.args.op}: total ops: {self.metrics.get(Metrics.TOTAL_OPS)}, ops/second: {result_metrics[Metrics.TOTAL_OPS] / duration}"
-            )
-        if self.metrics.get(Metrics.TOTAL_BYTES):
-            print(
-                f"Benchmark against {self.args.op}: total bytes: {self.metrics.get(Metrics.TOTAL_BYTES)}, bytes/second: {result_metrics[Metrics.TOTAL_BYTES] / duration}"
-            )
-
-        if not result_metrics:
-            print(
-                f"Benchmark against {self.args.op}: iteration: {self.args.iteration} total time: {duration} seconds"
-            )
         return self.metrics
 
     def traverse(self, path, directories, files):
