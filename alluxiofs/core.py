@@ -343,7 +343,7 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def put_file(self, lpath, rpath, *args, **kwargs):
         if self.fs:
-            return self.fs.mv(
+            return self.fs.put_file(
                 self._strip_alluxio_protocol(lpath),
                 self._strip_alluxio_protocol(rpath),
                 *args,

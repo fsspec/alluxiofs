@@ -6,6 +6,8 @@ from alluxiofs import AlluxioFileSystem
 
 
 class LocalFallbackAlluxioPrefixFixtures(AbstractFixtures):
+    protocol = "alluxio:file://"
+
     @pytest.fixture(scope="class")
     def fs(self):
         return AlluxioFileSystem(
@@ -17,7 +19,15 @@ class LocalFallbackAlluxioPrefixFixtures(AbstractFixtures):
 
     @pytest.fixture
     def fs_path(self, tmpdir):
-        return "alluxio:file://" + str(tmpdir)
+        return self.protocol + str(tmpdir)
+
+    @pytest.fixture
+    def fs_join(self):
+        def join_function(*args):
+            processed_args = [arg.replace(self.protocol, "") for arg in args]
+            return "/".join(processed_args)
+
+        return join_function
 
     @pytest.fixture
     def fs_sanitize_path(self):
