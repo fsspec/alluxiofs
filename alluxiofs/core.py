@@ -120,7 +120,15 @@ class AlluxioFileSystem(AbstractFileSystem):
             if preload_path is not None:
                 self.alluxio.load(preload_path)
 
+        def _strip_alluxio_protocol(path):
+            if path.startswith(self.protocol + ":"):
+                path = path[len(self.protocol) + 1 :]
+            return path
+
+        self._strip_alluxio_protocol: Callable = _strip_alluxio_protocol
+
         def _strip_protocol(path):
+            path = self._strip_alluxio_protocol(path)
             if self.fs:
                 return self.fs._strip_protocol(
                     type(self)._strip_protocol(path)
@@ -132,9 +140,11 @@ class AlluxioFileSystem(AbstractFileSystem):
         self.error_metrics = AlluxioErrorMetrics()
 
     def unstrip_protocol(self, path):
+        path = self._strip_alluxio_protocol(path)
         if self.fs:
             # avoid adding Alluxio protocol to the full ufs url
-            return self.fs.unstrip_protocol(path)
+            path = self.fs.unstrip_protocol(path)
+            return path
         return path
 
     def get_error_metrics(self):
@@ -142,13 +152,17 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def alluxio_with_fallback_handler(alluxio_impl):
         @wraps(alluxio_impl)
-        def fallback_wrapper(self, *args, **kwargs):
+        def fallback_wrapper(self, path, *args, **kwargs):
             if self.alluxio is None:
                 if self.fs:
                     fs_method = getattr(self.fs, alluxio_impl.__name__, None)
                     if fs_method:
+                        path = self._strip_protocol(path)
                         # TODO(lu) deal with the parameter sequence mismatch issue
-                        return fs_method(*args, **kwargs)
+                        return fs_method(path, *args, **kwargs)
+                    raise RuntimeError(
+                        "Alluxio system is not initialized and method not found"
+                    )
                 raise RuntimeError("Alluxio system is not initialized.")
 
             try:
@@ -224,125 +238,100 @@ class AlluxioFileSystem(AbstractFileSystem):
         path = self.unstrip_protocol(path)
         return self.alluxio.read_range(path, start, length)
 
-    def ukey(self, *args, **kwargs):
-        if self.fs:
-            self.fs.ukey(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    def fallback_handler(func):
+        @wraps(func)
+        def fallback_wrapper(self, path, *args, **kwargs):
+            if self.fs:
+                fs_method = getattr(self.fs, func.__name__, None)
+                if fs_method:
+                    return fs_method(
+                        self._strip_alluxio_protocol(path), *args, **kwargs
+                    )
+                raise NotImplementedError(
+                    f"The method {func.__name__} is not implemented in the underlying filesystem."
+                )
+            else:
+                raise NotImplementedError(
+                    "Underlying filesystem is not available."
+                )
 
-    def mkdir(self, *args, **kwargs):
-        if self.fs:
-            self.fs.mkdir(*args, **kwargs)
-        else:
-            raise NotImplementedError
+        return fallback_wrapper
 
-    def makedirs(self, *args, **kwargs):
-        if self.fs:
-            self.fs.makedirs(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def ukey(self, path, *args, **kwargs):
+        pass
 
-    def rm(self, *args, **kwargs):
-        if self.fs:
-            self.fs.rm(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def mkdir(self, path, *args, **kwargs):
+        pass
 
-    def rmdir(self, *args, **kwargs):
-        if self.fs:
-            self.fs.rmdir(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def makedirs(self, path, *args, **kwargs):
+        pass
 
-    def _rm(self, *args, **kwargs):
-        if self.fs:
-            self.fs._rm(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def rm(self, path, *args, **kwargs):
+        pass
 
-    def copy(self, *args, **kwargs):
-        if self.fs:
-            self.fs.copy(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def rmdir(self, path, *args, **kwargs):
+        pass
 
-    def cp_file(self, *args, **kwargs):
-        if self.fs:
-            self.fs.cp_file(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def _rm(self, path, *args, **kwargs):
+        pass
 
-    def put_file(self, *args, **kwargs):
-        if self.fs:
-            self.fs.put_file(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def copy(self, src_path, dst_path, *args, **kwargs):
+        pass
 
-    def mv_file(self, *args, **kwargs):
-        if self.fs:
-            self.fs.mv_file(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def cp_file(self, src_path, dst_path, *args, **kwargs):
+        pass
 
-    def pipe_file(self, *args, **kwargs):
-        if self.fs:
-            self.fs.pipe_file(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def put_file(self, lpath, rpath, *args, **kwargs):
+        pass
 
-    def link(self, *args, **kwargs):
-        if self.fs:
-            self.fs.link(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def mv_file(self, path, *args, **kwargs):
+        pass
 
-    def symlink(self, *args, **kwargs):
-        if self.fs:
-            self.fs.symlink(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def pipe_file(self, path, value, *args, **kwargs):
+        pass
 
-    def islink(self, *args, **kwargs) -> bool:
-        if self.fs:
-            return self.fs.islink(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def link(self, target, source, *args, **kwargs):
+        pass
 
-    def rm_file(self, *args, **kwargs):
-        if self.fs:
-            self.fs.rm_file(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def symlink(self, target, source, *args, **kwargs):
+        pass
 
-    def rm(self, *args, **kwargs):
-        if self.fs:
-            self.fs.rm(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def islink(self, path, *args, **kwargs):
+        pass
 
-    def touch(self, *args, **kwargs):
-        if self.fs:
-            self.fs.touch(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def rm_file(self, path, *args, **kwargs):
+        pass
 
-    def created(self, *args, **kwargs):
-        if self.fs:
-            return self.fs.created(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def touch(self, path, *args, **kwargs):
+        pass
 
-    def modified(self, *args, **kwargs):
-        if self.fs:
-            return self.fs.modified(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def created(self, path, *args, **kwargs):
+        pass
 
-    def mv(self, *args, **kwargs):
-        if self.fs:
-            self.fs.mv(*args, **kwargs)
-        else:
-            raise NotImplementedError
+    @fallback_handler
+    def modified(self, path, *args, **kwargs):
+        pass
+
+    @fallback_handler
+    def mv(self, src_path, dst_path, *args, **kwargs):
+        pass
 
 
 class AlluxioFile(AbstractBufferedFile):

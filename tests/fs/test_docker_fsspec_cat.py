@@ -42,10 +42,10 @@ def validate_read_range(
         raise AssertionError(error_message)
 
 
-def test_alluxio_fsspec_cat_file(alluxio_file_system: AlluxioFileSystem):
-    file_size = os.path.getsize(LOCAL_FILE_PATH)
+def alluxio_fsspec_cat_file(alluxio_file_system, alluxio_path, local_path):
+    file_size = os.path.getsize(local_path)
 
-    alluxio_file_system.ls(ALLUXIO_FILE_PATH)
+    alluxio_file_system.ls(alluxio_path)
 
     # Validate normal case
     max_length = 13 * 1024
@@ -54,8 +54,8 @@ def test_alluxio_fsspec_cat_file(alluxio_file_system: AlluxioFileSystem):
         length = min(random.randint(1, file_size - offset), max_length)
         validate_read_range(
             alluxio_file_system,
-            ALLUXIO_FILE_PATH,
-            LOCAL_FILE_PATH,
+            alluxio_path,
+            local_path,
             offset,
             length,
         )
@@ -73,12 +73,21 @@ def test_alluxio_fsspec_cat_file(alluxio_file_system: AlluxioFileSystem):
     for offset, length in special_test_cases:
         validate_read_range(
             alluxio_file_system,
-            ALLUXIO_FILE_PATH,
-            LOCAL_FILE_PATH,
+            alluxio_path,
+            local_path,
             offset,
             length,
         )
     LOGGER.debug("Passed corner test cases")
+
+
+def test_alluxio_fsspec_cat_file(alluxio_file_system: AlluxioFileSystem):
+    alluxio_fsspec_cat_file(
+        alluxio_file_system, ALLUXIO_FILE_PATH, LOCAL_FILE_PATH
+    )
+    alluxio_fsspec_cat_file(
+        alluxio_file_system, "alluxio:" + ALLUXIO_FILE_PATH, LOCAL_FILE_PATH
+    )
 
 
 def test_etcd_alluxio_fsspec_cat_file(
