@@ -16,7 +16,8 @@ import requests
 from requests.adapters import HTTPAdapter
 
 from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
-from .const import ALLUXIO_HASH_NODE_PER_WORKER_KEY
+from .const import ALLUXIO_HASH_NODE_PER_WORKER_KEY1
+from .const import ALLUXIO_HASH_NODE_PER_WORKER_KEY2
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
 from .const import ALLUXIO_SUCCESS_IDENTIFIER
@@ -180,9 +181,16 @@ class AlluxioClient:
             if ALLUXIO_PAGE_SIZE_KEY in options:
                 page_size = options[ALLUXIO_PAGE_SIZE_KEY]
                 self.logger.debug(f"Page size is set to {page_size}")
-            if ALLUXIO_HASH_NODE_PER_WORKER_KEY in options:
+            if ALLUXIO_HASH_NODE_PER_WORKER_KEY1 in options:
                 hash_node_per_worker = int(
-                    options[ALLUXIO_HASH_NODE_PER_WORKER_KEY]
+                    options[ALLUXIO_HASH_NODE_PER_WORKER_KEY1]
+                )
+                self.logger.debug(
+                    f"Hash node per worker is set to {hash_node_per_worker}"
+                )
+            if ALLUXIO_HASH_NODE_PER_WORKER_KEY2 in options:
+                hash_node_per_worker = int(
+                    options[ALLUXIO_HASH_NODE_PER_WORKER_KEY2]
                 )
                 self.logger.debug(
                     f"Hash node per worker is set to {hash_node_per_worker}"
