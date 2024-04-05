@@ -151,8 +151,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         path = self._strip_alluxio_protocol(path)
         if self.fs:
             # avoid adding Alluxio protocol to the full ufs url
-            path = self.fs.unstrip_protocol(path)
-            return path
+            return self.fs.unstrip_protocol(path)
         return path
 
     def get_error_metrics(self):

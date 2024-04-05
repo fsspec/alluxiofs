@@ -5,7 +5,7 @@ from fsspec.tests.abstract import AbstractFixtures
 from alluxiofs import AlluxioFileSystem
 
 
-class LocalFallbackFixtures(AbstractFixtures):
+class LocalFallbackAlluxioPrefixFixtures(AbstractFixtures):
     @pytest.fixture(scope="class")
     def fs(self):
         return AlluxioFileSystem(
@@ -17,7 +17,7 @@ class LocalFallbackFixtures(AbstractFixtures):
 
     @pytest.fixture
     def fs_path(self, tmpdir):
-        return str(tmpdir)
+        return "alluxio:file://" + str(tmpdir)
 
     @pytest.fixture
     def fs_sanitize_path(self):
