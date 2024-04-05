@@ -86,7 +86,7 @@ def test_alluxio_fsspec_cat_file(alluxio_file_system: AlluxioFileSystem):
         alluxio_file_system, ALLUXIO_FILE_PATH, LOCAL_FILE_PATH
     )
     alluxio_fsspec_cat_file(
-        alluxio_file_system, "alluxio:" + ALLUXIO_FILE_PATH, LOCAL_FILE_PATH
+        alluxio_file_system, "alluxio::" + ALLUXIO_FILE_PATH, LOCAL_FILE_PATH
     )
 
 
