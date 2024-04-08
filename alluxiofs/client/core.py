@@ -44,9 +44,9 @@ class AlluxioPathStatus:
     name: str
     path: str
     ufs_path: str
-    last_modification_time_ms: float
+    last_modification_time_ms: int
     human_readable_file_size: str
-    length: float
+    length: int
 
 
 class LoadState(Enum):
