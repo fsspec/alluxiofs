@@ -535,7 +535,8 @@ class AlluxioClient:
             )
         except Exception as e:
             raise Exception(
-                f"Error when reading file {file_path}: error {e}"
+                f"Error when reading file {file_path}: error {e}: "
+                f"worker_host{worker_host}, worker_http_port:{worker_http_port}"
             ) from e
 
     def write_page(self, file_path, page_index, page_bytes):
