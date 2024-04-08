@@ -5,10 +5,10 @@ import time
 from enum import Enum
 
 from tests.benchmark import AbstractBench
-from tests.benchmark import AlluxioFSSpecBench
-from tests.benchmark import AlluxioRESTBench
-from tests.benchmark import RayBench
 from tests.benchmark.AbstractBench import Metrics
+from tests.benchmark.bench import AlluxioFSSpecBench
+from tests.benchmark.bench import AlluxioRESTBench
+from tests.benchmark.bench import RayBench
 
 
 class TestSuite(Enum):

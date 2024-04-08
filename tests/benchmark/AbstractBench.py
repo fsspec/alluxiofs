@@ -1,5 +1,6 @@
 from abc import ABC
 from abc import abstractmethod
+from typing import Tuple
 
 
 class Metrics(ABC):
@@ -36,6 +37,9 @@ class AbstractBench(ABC):
     def __init__(self, *args, **kwargs):
         # Initialize any fields needed
         pass
+
+    def next_file(self) -> Tuple[str, int]:
+        return "", 0
 
     @abstractmethod
     def execute(self) -> Metrics:

@@ -33,9 +33,6 @@ class AlluxioFSSpecArgumentParser(AbstractArgumentParser):
             default=256 * 1024,
             help="Buffer size for read operations.",
         )
-        self.parser.add_argument(
-            "--iteration", type=int, default=10, help="Iterations."
-        )
 
     def parse_args(self, args=None, namespace=None):
         args = self.parser.parse_args(args, namespace)
@@ -45,6 +42,9 @@ class AlluxioFSSpecArgumentParser(AbstractArgumentParser):
 
 class AlluxioFSSpecBench(AbstractBench):
     def __init__(self, args, **kwargs):
+        self.directories = []
+        self.files = {}
+        self.metrics = Metrics()
         self.args = args
 
     def init(self):
@@ -53,29 +53,25 @@ class AlluxioFSSpecBench(AbstractBench):
             etcd_hosts=self.args.etcd_hosts,
             worker_hosts=self.args.worker_hosts,
         )
-        self.directories = []
-        self.files = {}
         self.traverse(self.args.path, self.directories, self.files)
-        self.metrics = Metrics()
 
     def execute(self) -> Metrics:
-        for i in range(self.args.iteration):
-            if self.args.op == Op.ls.value:
-                result_metrics = self.bench_ls()
-            elif self.args.op == Op.info.value:
-                result_metrics = self.bench_info()
-            elif self.args.op == Op.cat_file.value:
-                result_metrics = self.bench_cat_file()
-            elif self.args.op == Op.open_seq_read.value:
-                result_metrics = self.bench_open_seq_read()
-            elif self.args.op == Op.open_random_read.value:
-                result_metrics = self.bench_open_random_read()
-            else:
-                raise Exception(
-                    f"Unknown Op:{self.args.op} for {self.__class__.__name__}"
-                )
-            for _, (k, v) in enumerate(result_metrics.items()):
-                self.metrics.update(k, v)
+        if self.args.op == Op.ls.value:
+            result_metrics = self.bench_ls()
+        elif self.args.op == Op.info.value:
+            result_metrics = self.bench_info()
+        elif self.args.op == Op.cat_file.value:
+            result_metrics = self.bench_cat_file()
+        elif self.args.op == Op.open_seq_read.value:
+            result_metrics = self.bench_open_seq_read()
+        elif self.args.op == Op.open_random_read.value:
+            result_metrics = self.bench_open_random_read()
+        else:
+            raise Exception(
+                f"Unknown Op:{self.args.op} for {self.__class__.__name__}"
+            )
+        for _, (k, v) in enumerate(result_metrics.items()):
+            self.metrics.update(k, v)
         return self.metrics
 
     def traverse(self, path, directories, files):
