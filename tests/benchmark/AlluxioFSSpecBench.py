@@ -1,5 +1,4 @@
 import random
-import time
 from enum import Enum
 
 from alluxiofs import AlluxioFileSystem
@@ -60,7 +59,6 @@ class AlluxioFSSpecBench(AbstractBench):
         self.metrics = Metrics()
 
     def execute(self) -> Metrics:
-        start_time = time.time()
         for i in range(self.args.iteration):
             if self.args.op == Op.ls.value:
                 result_metrics = self.bench_ls()
