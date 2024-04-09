@@ -6,8 +6,8 @@ except ModuleNotFoundError:
     print("[WARNING]pkg 'ray' not installed, relative tests unable to run.")
 
 from alluxiofs import AlluxioFileSystem
-from tests.benchmark.AbstractBench import AbstractArgumentParser, Metrics
-from tests.benchmark.AbstractBench import AbstractBench
+from benchmark.AbstractBench import AbstractArgumentParser, Metrics
+from benchmark.AbstractBench import AbstractBench
 
 
 class Op(Enum):
@@ -25,13 +25,6 @@ class RayArgumentParser(AbstractArgumentParser):
             required=True,
             help="Ray read api to bench against",
         )
-        # read_parquet args
-        self.parser.add_argument(
-            "--dataset",
-            type=str,
-            required=False,
-            help="dataset dir uri, e.g. s3://air-example-data-2/10G-xgboost-data.parquet/",
-        )
 
     def parse_args(self, args=None, namespace=None):
         args = self.parser.parse_args(args, namespace)
@@ -39,8 +32,8 @@ class RayArgumentParser(AbstractArgumentParser):
 
 
 class RayBench(AbstractBench):
-    def __init__(self, args, **kwargs):
-        self.args = args
+    def __init__(self, process_id, num_process, args, **kwargs):
+        super().__init__(process_id, num_process, args, **kwargs)
         self.alluxio_fs = AlluxioFileSystem(
             etcd_hosts=self.args.etcd_hosts,
             worker_hosts=self.args.worker_hosts,
@@ -48,9 +41,8 @@ class RayBench(AbstractBench):
 
     def init(self):
         self.validate_args()
-        self.metrics = Metrics()
 
-    def execute(self) -> Metrics:
+    def execute(self):
         if self.args.op == Op.read_parquet.name:
             print(f"Executing AlluxioRESTBench! Op:{self.args.op}")
             self.test_read_parquet()
@@ -60,7 +52,6 @@ class RayBench(AbstractBench):
             raise Exception(
                 f"Unknown Op:{self.args.op} for {self.__class__.__name__}"
             )
-        return self.metrics
 
     def validate_args(self):
         if self.args.op == Op.read_parquet.name:

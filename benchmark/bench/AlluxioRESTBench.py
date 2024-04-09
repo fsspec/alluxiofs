@@ -12,9 +12,9 @@ from alluxiofs.client.const import (
 from alluxiofs.client.const import FULL_PAGE_URL_FORMAT
 from alluxiofs.client.const import GET_FILE_STATUS_URL_FORMAT
 from alluxiofs.client.const import LIST_URL_FORMAT
-from tests.benchmark.AbstractBench import AbstractArgumentParser
-from tests.benchmark.AbstractBench import AbstractBench
-from tests.benchmark.AbstractBench import Metrics
+from benchmark.AbstractBench import AbstractArgumentParser
+from benchmark.AbstractBench import AbstractBench
+from benchmark.AbstractBench import Metrics
 
 
 class Op(Enum):
@@ -48,13 +48,6 @@ class AlluxioRESTArgumentParser(AbstractArgumentParser):
             required=False,
             help="page id start and end range, <str_pageid>-<end_pageid> (e.g. 0-39, end inclusive)",
         )
-        # ListFiles/GetFileInfo args
-        self.parser.add_argument(
-            "--path",
-            type=str,
-            required=False,
-            help="path to do ListFiles or GetFileInfo, e.g. s3://bucket1/dir1",
-        )
 
     def parse_args(self, args=None, namespace=None):
         args = self.parser.parse_args(args, namespace)
@@ -62,10 +55,11 @@ class AlluxioRESTArgumentParser(AbstractArgumentParser):
 
 
 class AlluxioRESTBench(AbstractBench):
-    def __init__(self, args, **kwargs):
-        self.args = args
+    def __init__(self, process_id, num_process, args, **kwargs):
+        super().__init__(process_id, num_process, args, **kwargs)
 
     def init(self):
+        super().init()
         self.validate_args()
         self.worker_host = self.args.worker_hosts.split(",")[0]
         self.page_id_range = None
@@ -80,9 +74,8 @@ class AlluxioRESTBench(AbstractBench):
         self.session = requests.Session()
         adapter = HTTPAdapter(pool_connections=1, pool_maxsize=1)
         self.session.mount("http://", adapter)
-        self.metrics = Metrics()
 
-    def execute(self) -> Metrics:
+    def execute(self):
         if self.args.op == Op.GetPage.name:
             self.testGetPage()
         elif self.args.op == Op.GetFileInfo.name:
@@ -95,7 +88,6 @@ class AlluxioRESTBench(AbstractBench):
             raise Exception(
                 f"Unknown Op:{self.args.op} for {self.__class__.__name__}"
             )
-        return self.metrics
 
     def validate_args(self):
         if self.args.worker_hosts is None:
