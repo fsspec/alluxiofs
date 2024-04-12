@@ -14,8 +14,10 @@ import aiohttp
 import humanfriendly
 import requests
 from requests.adapters import HTTPAdapter
+from alluxiocommon import _DataManager
 
 from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
+from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
 from .const import ALLUXIO_HASH_NODE_PER_WORKER_KEY1
 from .const import ALLUXIO_HASH_NODE_PER_WORKER_KEY2
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
@@ -177,6 +179,7 @@ class AlluxioClient:
         # parse options
         page_size = ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
         hash_node_per_worker = ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
+        self.data_manager = None
         if options:
             if ALLUXIO_PAGE_SIZE_KEY in options:
                 page_size = options[ALLUXIO_PAGE_SIZE_KEY]
@@ -195,6 +198,11 @@ class AlluxioClient:
                 self.logger.debug(
                     f"Hash node per worker is set to {hash_node_per_worker}"
                 )
+            if ALLUXIO_COMMON_EXTENSION_ENABLE in options:
+                self.logger.debug(
+                    "alluxiocommon extension enabled."
+                )
+                self.data_manager = _DataManager(concurrency)
         if (
             not isinstance(hash_node_per_worker, int)
             or hash_node_per_worker <= 0
@@ -528,11 +536,16 @@ class AlluxioClient:
         path_id = self._get_path_hash(file_path)
 
         try:
-            return b"".join(
-                self._range_page_generator(
+            if self.data_manager:
+                return self._multithread_range_page_generator(
                     worker_host, worker_http_port, path_id, offset, length
                 )
-            )
+            else:
+                return b"".join(
+                    self._range_page_generator(
+                        worker_host, worker_http_port, path_id, offset, length
+                    )
+                )
         except Exception as e:
             raise Exception(
                 f"Error when reading file {file_path}: error {e}: "
@@ -595,6 +608,37 @@ class AlluxioClient:
             if len(page_content) < self.page_size:  # last page
                 break
             page_index += 1
+
+    def _multithread_range_page_generator(
+            self, worker_host, worker_http_port, path_id, offset, length
+    ):
+        read_urls = []
+        start = offset
+        while start < offset + length:
+            page_index = start // self.page_size
+            inpage_off = start % self.page_size
+            inpage_read_len = min(self.page_size - inpage_off, length - start)
+            page_url = None
+            if inpage_off == 0 and inpage_read_len == self.page_size:
+                page_url = FULL_PAGE_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    page_index=page_index,
+                )
+            else:
+                page_url = PAGE_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    page_index=page_index,
+                    page_offset=inpage_off,
+                    page_length=inpage_read_len,
+                )
+            read_urls.append(page_url)
+            start += inpage_read_len
+        data = self.data_manager.make_multi_http_req(read_urls)
+        return data
 
     def _range_page_generator(
         self, worker_host, worker_http_port, path_id, offset, length
