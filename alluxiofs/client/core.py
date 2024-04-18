@@ -199,6 +199,7 @@ class AlluxioClient:
                     f"Hash node per worker is set to {hash_node_per_worker}"
                 )
             if ALLUXIO_COMMON_EXTENSION_ENABLE in options:
+                print(f"Using alluxiocommon extension, concurrency:{concurrency}")
                 self.logger.debug(
                     "alluxiocommon extension enabled."
                 )
@@ -512,6 +513,7 @@ class AlluxioClient:
         Returns:
             file content (str): The file content with length from offset
         """
+        self.logger.debug(f"read_range,off:{offset}:length:{length}")
         self._validate_path(file_path)
         if not isinstance(offset, int) or offset < 0:
             raise ValueError("Offset must be a non-negative integer")
@@ -617,7 +619,7 @@ class AlluxioClient:
         while start < offset + length:
             page_index = start // self.page_size
             inpage_off = start % self.page_size
-            inpage_read_len = min(self.page_size - inpage_off, length - start)
+            inpage_read_len = min(self.page_size - inpage_off, offset + length - start)
             page_url = None
             if inpage_off == 0 and inpage_read_len == self.page_size:
                 page_url = FULL_PAGE_URL_FORMAT.format(
