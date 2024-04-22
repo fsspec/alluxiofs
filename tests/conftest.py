@@ -18,6 +18,7 @@ TEST_ROOT = os.getenv("TEST_ROOT", "file:///opt/alluxio/ufs/")
 TEST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 LOCAL_FILE_PATH = os.path.join(TEST_DIR, "test.csv")
 ALLUXIO_FILE_PATH = "file://{}".format("/opt/alluxio/ufs/test.csv")
+ALLUXIO_S3_FILE_PATH = "s3://siyuan-overmind/test.csv"
 MASTER_CONTAINER = "alluxio-master"
 WORKER_CONTAINER = "alluxio-worker"
 ETCD_CONTAINER = "etcd"
@@ -49,7 +50,10 @@ def yield_url():
             time.sleep(10)
 
 
-def launch_alluxio_dockers(with_etcd=False):
+def launch_alluxio_dockers(
+    with_etcd=False,
+    is_s3=False
+):
     network_cmd = "docker network create alluxio_network"
 
     run_cmd_master = (
@@ -61,7 +65,14 @@ def launch_alluxio_dockers(with_etcd=False):
         "-Dalluxio.security.authorization.plugins.enabled=false "
         "-Dalluxio.master.journal.type=NOOP "
         "-Dalluxio.master.scheduler.initial.wait.time=1s "
-        "-Dalluxio.dora.client.ufs.root=file:/// "
+        + (
+            "-Dalluxio.dora.client.ufs.root=s3://siyuan-overmind "
+            "-Dalluxio.master.mount.table.root.ufs=s3://siyuan-overmind/ "
+            "-Ds3a.accessKeyId=AKIAXYKJTH4GUZJVVWPD "
+            "-Ds3a.secretKey=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 "
+            if is_s3
+            else "-Dalluxio.dora.client.ufs.root=file:/// "
+        )
         + (
             "-Dalluxio.worker.membership.manager.type=ETCD "
             "-Dalluxio.etcd.endpoints=http://etcd:2379 "
@@ -78,7 +89,14 @@ def launch_alluxio_dockers(with_etcd=False):
         "-Dalluxio.security.authentication.type=NOSASL "
         "-Dalluxio.security.authorization.permission.enabled=false "
         "-Dalluxio.security.authorization.plugins.enabled=false "
-        "-Dalluxio.dora.client.ufs.root=file:/// "
+        + (
+            "-Dalluxio.dora.client.ufs.root=s3://siyuan-overmind/ "
+            "-Dalluxio.master.mount.table.root.ufs=s3://siyuan-overmind/ "
+            "-Ds3a.accessKeyId=AKIAXYKJTH4GUZJVVWPD "
+            "-Ds3a.secretKey=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 "
+            if is_s3
+            else "-Dalluxio.dora.client.ufs.root=file:/// "
+        )
         + (
             "-Dalluxio.worker.hostname=localhost "
             "-Dalluxio.worker.container.hostname=alluxio-worker "
@@ -131,6 +149,16 @@ def docker_alluxio():
     yield yield_url()
     stop_alluxio_dockers()
 
+@pytest.fixture(scope="session")
+def docker_s3_alluxio():
+    if "ALLUXIO_URL" in os.environ:
+        # assume we already have a server already set up
+        yield os.getenv("ALLUXIO_URL")
+        return
+    launch_alluxio_dockers(with_etcd=False, is_s3=True)
+    yield yield_url()
+    stop_alluxio_dockers()
+
 
 @pytest.fixture(scope="session")
 def docker_alluxio_with_etcd():
@@ -138,10 +166,19 @@ def docker_alluxio_with_etcd():
         # assume we already have a server already set up
         yield os.getenv("ALLUXIO_URL")
         return
-    launch_alluxio_dockers(True)
+    launch_alluxio_dockers(with_etcd=True)
     yield yield_url()
     stop_alluxio_dockers(True)
 
+@pytest.fixture(scope="session")
+def docker_s3_alluxio_with_etcd():
+    if "ALLUXIO_URL" in os.environ:
+        # assume we already have a server already set up
+        yield os.getenv("ALLUXIO_URL")
+        return
+    launch_alluxio_dockers(with_etcd=True, is_s3=True)
+    yield yield_url()
+    stop_alluxio_dockers(True)
 
 @pytest.fixture
 def alluxio_client(docker_alluxio):
@@ -178,6 +215,20 @@ def alluxio_file_system(docker_alluxio):
     )
     yield alluxio_file_system
 
+@pytest.fixture
+def s3_alluxio_file_system(docker_s3_alluxio):
+    LOGGER.debug(f"get AlluxioFileSystem connect to {docker_s3_alluxio}")
+    parsed_url = urlparse(docker_s3_alluxio)
+    host = parsed_url.hostname
+    fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+    s3_alluxio_file_system = fsspec.filesystem(
+        "alluxio",
+        worker_hosts=host,
+        target_protocol="s3",
+        preload_path=ALLUXIO_S3_FILE_PATH,
+    )
+    yield s3_alluxio_file_system
+
 
 @pytest.fixture
 def etcd_alluxio_file_system(docker_alluxio_with_etcd):
@@ -194,3 +245,19 @@ def etcd_alluxio_file_system(docker_alluxio_with_etcd):
         preload_path=ALLUXIO_FILE_PATH,
     )
     yield etcd_alluxio_file_system
+
+@pytest.fixture
+def etcd_s3_alluxio_file_system(docker_s3_alluxio_with_etcd):
+    LOGGER.debug(
+        f"get etcd AlluxioFileSystem connect to {docker_s3_alluxio_with_etcd}"
+    )
+    parsed_url = urlparse(docker_s3_alluxio_with_etcd)
+    host = parsed_url.hostname
+    fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+    etcd_s3_alluxio_file_system = fsspec.filesystem(
+        "alluxio",
+        etcd_hosts=host,
+        target_protocol="s3",
+        preload_path=ALLUXIO_S3_FILE_PATH,
+    )
+    yield etcd_s3_alluxio_file_system

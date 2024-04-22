@@ -3,6 +3,7 @@ import random
 
 from alluxiofs import AlluxioFileSystem
 from tests.conftest import ALLUXIO_FILE_PATH
+from tests.conftest import ALLUXIO_S3_FILE_PATH
 from tests.conftest import LOCAL_FILE_PATH
 
 NUM_TESTS = 10
@@ -46,6 +47,7 @@ def alluxio_fsspec_cat_file(alluxio_file_system, alluxio_path, local_path):
     file_size = os.path.getsize(local_path)
 
     alluxio_file_system.ls(alluxio_path)
+    alluxio_file_system.info(alluxio_path)
 
     # Validate normal case
     max_length = 13 * 1024
@@ -89,8 +91,20 @@ def test_alluxio_fsspec_cat_file(alluxio_file_system: AlluxioFileSystem):
         alluxio_file_system, "alluxio::" + ALLUXIO_FILE_PATH, LOCAL_FILE_PATH
     )
 
+def test_s3_alluxio_fsspec_cat_file(s3_alluxio_file_system: AlluxioFileSystem):
+    alluxio_fsspec_cat_file(
+        s3_alluxio_file_system, ALLUXIO_S3_FILE_PATH, LOCAL_FILE_PATH
+    )
+    alluxio_fsspec_cat_file(
+        s3_alluxio_file_system, "alluxio::" + ALLUXIO_S3_FILE_PATH, LOCAL_FILE_PATH
+    )
 
 def test_etcd_alluxio_fsspec_cat_file(
     etcd_alluxio_file_system: AlluxioFileSystem,
 ):
     test_alluxio_fsspec_cat_file(etcd_alluxio_file_system)
+
+def test_etcd_s3_alluxio_fsspec_cat_file(
+    etcd_s3_alluxio_file_system: AlluxioFileSystem,
+):
+    test_s3_alluxio_fsspec_cat_file(etcd_s3_alluxio_file_system)
