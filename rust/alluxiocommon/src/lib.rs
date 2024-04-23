@@ -1,25 +1,15 @@
 use pyo3::prelude::*;
-use pyo3::types::PyList;
-use std::{cmp, thread, time};
-use std::error::Error;
+use std::{cmp};
 use std::sync::Arc;
-use bytes::Bytes;
-use tokio::runtime::{Builder, Runtime};
-use reqwest::blocking;
 use reqwest::blocking::Client;
-use rayon::{ThreadPool, ThreadPoolBuilder, ThreadPoolBuildError};
+use rayon::{ThreadPool, ThreadPoolBuildError};
 use env_logger::Env;
+use log::debug;
 
 use pyo3::{
-    exceptions::PyIOError,
-    exceptions::PyIndexError,
     exceptions::PyValueError,
-    exceptions::PyTypeError,
     exceptions::PyException,
-    prelude::{pymodule, PyModule, PyResult, Python},
     types::PyBytes,
-    buffer::PyBuffer,
-    PyErr,
 };
 
 const DEFAULT_THREADPOOL_NAME: &str = "ALLUXIOCOMMON";
@@ -40,9 +30,10 @@ impl DataManager {
         max_concurrency: usize,
         ondemand_pool: Option<bool>
     ) -> PyResult<Self> {
+        debug!("instantiating _DataManager");
         match ondemand_pool {
             Some(is_ondemand_pool) => {
-                if (!is_ondemand_pool) {
+                if !is_ondemand_pool {
                     // Create reqwest client (The Client holds a connection pool internally, create to reuse this Client obj).
                     let client = Client::new();
                     // Create threadpool
@@ -79,7 +70,6 @@ impl DataManager {
                 });
             }
         }
-        println!("instantiate _DataManager");
     }
 
     fn make_multi_http_req(self_: PyRef<'_, Self>, urls: Vec<String>) -> PyResult<PyObject> {
@@ -203,8 +193,8 @@ fn create_pool(num_threads: usize, thread_name_prefix: String) -> Result<ThreadP
 #[cfg(test)] // Indicates that the following functions are only compiled when running tests
 mod tests {
     use super::*;
-    use super::PyBuffer;
-    use crate::Python;
+    
+    
     use log::info;
 
     fn init() {
@@ -224,7 +214,7 @@ mod tests {
         let client = Client::new();
         let res = perform_http_get("http://127.0.0.1:1000", &client);
         match res {
-            Ok(success) => {
+            Ok(_success) => {
                 print!("SUCCESS!");
             },
             Err(e) => {
