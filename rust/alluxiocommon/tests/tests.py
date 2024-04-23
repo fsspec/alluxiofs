@@ -17,12 +17,12 @@ class TestSuite:
         self.page_size = 32 * MB
         self.worker_host = "172.31.45.56"
         self.worker_http_port = 28080
-        self.dm = _DataManager(4)
+        self.dm = _DataManager(4, ondemand_pool=False)
 
     def multi_http_requests(self):
         offset, length = 0,40 * MB
         read_urls = []
-        path_id = "addb83ae5f2025ec8f88b832c40177327ccd6aa2486712f34e68c3efbb2045e7"
+        path_id = "33b86e86ae983c17d23ac116a983c15ac9ed4254d56d288df891df4e1101adae"
         start = offset
         while start < offset + length:
             page_index = start // self.page_size

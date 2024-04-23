@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyList;
-use std::{thread,time};
+use std::{cmp, thread, time};
 use std::error::Error;
 use std::sync::Arc;
 use bytes::Bytes;
@@ -8,6 +8,7 @@ use tokio::runtime::{Builder, Runtime};
 use reqwest::blocking;
 use reqwest::blocking::Client;
 use rayon::{ThreadPool, ThreadPoolBuilder, ThreadPoolBuildError};
+use env_logger::Env;
 
 use pyo3::{
     exceptions::PyIOError,
@@ -21,38 +22,68 @@ use pyo3::{
     PyErr,
 };
 
+const DEFAULT_THREADPOOL_NAME: &str = "ALLUXIOCOMMON";
+
 
 #[pyclass(name = "_DataManager", module = "_lib")]
 pub struct DataManager {
-    // #[pyo3(get)]
-    thread_num: usize,
-    thread_pool: Arc<ThreadPool>,
-    request_client: Arc<Client>,
+    max_threads: usize,
+    ondemand_pool: bool,
+    thread_pool: Option<Arc<ThreadPool>>,
+    request_client: Option<Arc<Client>>,
 }
 
 #[pymethods]
 impl DataManager {
     #[new]
     fn new(
-        num_threads: usize
+        max_concurrency: usize,
+        ondemand_pool: Option<bool>
     ) -> PyResult<Self> {
-        // Create reqwest client (The Client holds a connection pool internally, create to reuse this Client obj).
-        let client = Client::new();
-        // Create threadpool
-        let pool_result = create_pool(num_threads);
-        match pool_result {
-            Ok(pool) => {
-                Ok(Self {
-                    thread_num: num_threads,
-                    thread_pool: Arc::new(pool),
-                    request_client: Arc::new(client),
-                })
+        match ondemand_pool {
+            Some(is_ondemand_pool) => {
+                if (!is_ondemand_pool) {
+                    // Create reqwest client (The Client holds a connection pool internally, create to reuse this Client obj).
+                    let client = Client::new();
+                    // Create threadpool
+                    let pool_result =
+                        create_pool(max_concurrency, String::from(DEFAULT_THREADPOOL_NAME));
+                    match pool_result {
+                        Ok(pool) => {
+                            return Ok(Self {
+                                max_threads: max_concurrency,
+                                ondemand_pool: is_ondemand_pool,
+                                thread_pool: Option::Some(Arc::new(pool)),
+                                request_client: Option::Some(Arc::new(client)),
+                            });
+                        },
+                        Err(err) => {
+                            return Err(PyValueError::new_err(err.to_string()));
+                        },
+                    }
+                } else {
+                    return Ok(Self {
+                        max_threads: max_concurrency,
+                        ondemand_pool: true,
+                        thread_pool: None,
+                        request_client: None,
+                    });
+                }
             },
-            Err(err) => Err(PyValueError::new_err(err.to_string())),
+            None => {
+                return Ok(Self {
+                    max_threads: max_concurrency,
+                    ondemand_pool: true,
+                    thread_pool: None,
+                    request_client: None,
+                });
+            }
         }
+        println!("instantiate _DataManager");
     }
 
     fn make_multi_http_req(self_: PyRef<'_, Self>, urls: Vec<String>) -> PyResult<PyObject> {
+        println!("on demand pool and client!");
         let num_reqs = urls.len();
         let mut content_results = Vec::with_capacity(num_reqs);
         let mut senders = Vec::with_capacity(num_reqs);
@@ -60,18 +91,49 @@ impl DataManager {
             senders.push(None);
         }
 
+        // let Some(kmeans) = self.trained_kmeans.as_ref() else {
+        //     return Err(PyRuntimeError::new_err("KMeans must fit (train) first"));
+        // };
+
+        let thread_pool /*: Arc<ThreadPool>*/ = match self_.ondemand_pool {
+            true => {
+                match create_pool(cmp::min(self_.max_threads, num_reqs),
+                                  String::from(DEFAULT_THREADPOOL_NAME))
+                {
+                    Ok(pool) => Arc::new(pool),
+                    Err(err) => {
+                        PyException::new_err(err.to_string())
+                            .restore(self_.py());
+                        return Err(PyErr::fetch(self_.py()));
+                    },
+                }
+            },
+            false => {
+                Arc::clone(&(self_.thread_pool.as_ref().unwrap())) // it can't be None here once instantiated
+            }
+        };
+
+        let request_client = match self_.ondemand_pool {
+            true => {
+                Arc::new(Client::new())
+            },
+            false => {
+                Arc::clone(&(self_.request_client.as_ref().unwrap()))
+            }
+        };
         for i in 0..num_reqs {
             let url_owned = urls[i].to_owned();
-            let client_clone = Arc::clone(&(self_.request_client));
+            // let client_clone = Arc::clone(&(self_.request_client));
+            let client_clone = Arc::clone(&(request_client));
             let (send, recv) = tokio::sync::oneshot::channel();
-            let install_res = self_.thread_pool.install(move || -> Result<(), reqwest::Error> {
+            let install_res = thread_pool.install(move || -> Result<(), reqwest::Error> {
                 // println!("request idx:{}", i);
                 let body = perform_http_get(url_owned.as_str(), client_clone.as_ref());
                 send.send(body).unwrap();
                 Ok(())
             });
             match install_res {
-                Ok(success) => {
+                Ok(_success) => {
                     //DO NOTHING
                 },
                 Err(err) => {
@@ -126,9 +188,11 @@ fn perform_http_get(url: &str, client: &Client) -> Result<Vec<u8>, reqwest::Erro
     Ok(bytes_vec)
 }
 
-fn create_pool(num_threads: usize) -> Result<ThreadPool, Box<ThreadPoolBuildError>> {
+fn create_pool(num_threads: usize, thread_name_prefix: String) -> Result<ThreadPool, Box<ThreadPoolBuildError>> {
+    let name_prefix = thread_name_prefix.clone();
     match rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads)
+        .thread_name(move |i| format!("{}-{}", &name_prefix, i))
         .build()
     {
         Err(e) => Err(Box::new(e.into())),
@@ -141,17 +205,30 @@ mod tests {
     use super::*;
     use super::PyBuffer;
     use crate::Python;
+    use log::info;
+
+    fn init() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
+    #[test]
+    fn test_logger() {
+        init();
+        info!("This record will be captured by `cargo test`");
+        assert_eq!(2, 1 + 1);
+    }
 
     #[test]
     fn test_example() {
+        init();
         let client = Client::new();
         let res = perform_http_get("http://127.0.0.1:1000", &client);
         match res {
             Ok(success) => {
-                println!("SUCCESS!");
+                print!("SUCCESS!");
             },
             Err(e) => {
-                println!("error!:{}", e);
+                print!("error!:{}", e);
             }
         }
         print!("test_example");
@@ -161,10 +238,9 @@ mod tests {
 
 #[pymodule]
 fn alluxiocommon(_py: Python, m: &PyModule) -> PyResult<()> {
-    // let env = Env::new()
-    //     .filter_or("ALLUXIOCOMMON_LOG", "warn")
-    //     .write_style("ALLUXIOCOMMON_LOG_STYLE");
-    // env_logger::init_from_env(env);
+    let env = Env::new()
+        .filter_or("ALLUXIOCOMMON_LOG", "warn");
+    env_logger::init_from_env(env);
 
     m.add_class::<DataManager>()?;
     Ok(())
