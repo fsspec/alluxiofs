@@ -130,6 +130,7 @@ impl DataManager {
             }
             senders[i] = Some(recv);
         }
+
         for sender in senders {
             let result = sender.unwrap().blocking_recv();
             match result {
@@ -144,12 +145,18 @@ impl DataManager {
             }
         }
         let mut concatenated_data: Vec<u8> = Vec::new();
+        let mut somedata_read: bool = false;
         for content_result in &content_results {
             match content_result {
                 Ok(content) => {
                     concatenated_data.extend(content);
+                    somedata_read = true;
                 },
                 Err(err) => {
+                    if (somedata_read) {
+                        println!("[LUCYDEBUG] some data read, not erroring out!");
+                        break;
+                    }
                     let err_str = err.to_string();
                     PyException::new_err(format!("Error in getting result, {}", err_str))
                         .restore(self_.py());
