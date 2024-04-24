@@ -6,7 +6,7 @@ from alluxiofs import AlluxioFileSystem
 
 
 class LocalFallbackAlluxioPrefixFixtures(AbstractFixtures):
-    protocol = "alluxio::file://"
+    protocol = "alluxio://"
 
     @pytest.fixture(scope="class")
     def fs(self):
