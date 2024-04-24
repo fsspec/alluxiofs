@@ -130,7 +130,6 @@ class AlluxioFileSystem(AbstractFileSystem):
             if preload_path is not None:
                 self.alluxio.load(preload_path)
 
-        # Remove "alluxio::" from the given single path or list of path
         def _replace_alluxio_protocol(path):
             def _strip_individual_path(p):
                 if p.startswith(self.protocol):
