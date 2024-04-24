@@ -1,4 +1,4 @@
-from typing import re
+import re
 
 
 def replace_protocol_with_alluxio(file_path):
