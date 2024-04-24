@@ -81,10 +81,6 @@ impl DataManager {
             senders.push(None);
         }
 
-        // let Some(kmeans) = self.trained_kmeans.as_ref() else {
-        //     return Err(PyRuntimeError::new_err("KMeans must fit (train) first"));
-        // };
-
         let thread_pool /*: Arc<ThreadPool>*/ = match self_.ondemand_pool {
             true => {
                 match create_pool(cmp::min(self_.max_threads, num_reqs),
@@ -146,8 +142,6 @@ impl DataManager {
                     return Err(PyErr::fetch(self_.py()));
                 }
             }
-            // let result = sender.unwrap().blocking_recv().unwrap();
-            // content_results.push(result);
         }
         let mut concatenated_data: Vec<u8> = Vec::new();
         for content_result in &content_results {

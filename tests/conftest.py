@@ -129,7 +129,7 @@ def docker_alluxio():
         return
     launch_alluxio_dockers()
     yield yield_url()
-    stop_alluxio_dockers()
+    # stop_alluxio_dockers()
 
 
 @pytest.fixture(scope="session")
@@ -152,6 +152,17 @@ def alluxio_client(docker_alluxio):
     alluxio_client = AlluxioClient(worker_hosts=host, worker_http_port=port)
     yield alluxio_client
 
+@pytest.fixture
+def alluxio_client_alluxiocommon(docker_alluxio):
+    LOGGER.debug(f"get AlluxioClient with alluxiocommon connect to {docker_alluxio}")
+    parsed_url = urlparse(docker_alluxio)
+    host = parsed_url.hostname
+    port = parsed_url.port
+    alluxio_options = {
+        "alluxio.common.extension.enable": "True"}
+    alluxio_client = AlluxioClient(worker_hosts=host, worker_http_port=port,
+                                   options=alluxio_options)
+    yield alluxio_client
 
 @pytest.fixture
 def etcd_alluxio_client(docker_alluxio_with_etcd):

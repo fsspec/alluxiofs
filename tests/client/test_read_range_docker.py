@@ -114,3 +114,6 @@ def test_alluxio_client(alluxio_client: AlluxioClient):
 
 def test_etcd_alluxio_client(etcd_alluxio_client: AlluxioClient):
     test_alluxio_client(etcd_alluxio_client)
+
+def test_alluxio_client_alluxiocommon(alluxio_client_alluxiocommon: AlluxioClient):
+    test_alluxio_client(alluxio_client_alluxiocommon)

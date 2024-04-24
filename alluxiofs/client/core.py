@@ -199,7 +199,7 @@ class AlluxioClient:
                     f"Hash node per worker is set to {hash_node_per_worker}"
                 )
             if ALLUXIO_COMMON_EXTENSION_ENABLE in options:
-                print(f"Using alluxiocommon extension, concurrency:{concurrency}")
+                print(f"Using alluxiocommon extension..")
                 self.logger.debug(
                     "alluxiocommon extension enabled."
                 )
@@ -513,7 +513,8 @@ class AlluxioClient:
         Returns:
             file content (str): The file content with length from offset
         """
-        self.logger.debug(f"read_range,off:{offset}:length:{length}")
+        # self.logger.debug(f"read_range,off:{offset}:length:{length}")
+        print(f"read_range,off:{offset}:length:{length}")
         self._validate_path(file_path)
         if not isinstance(offset, int) or offset < 0:
             raise ValueError("Offset must be a non-negative integer")
@@ -550,8 +551,8 @@ class AlluxioClient:
                 )
         except Exception as e:
             raise Exception(
-                f"Error when reading file {file_path}: error {e}: "
-                f"worker_host{worker_host}, worker_http_port:{worker_http_port}"
+                f"Error when reading file:{file_path}: error:{e}: "
+                f"worker_host:{worker_host}, worker_http_port:{worker_http_port}"
             ) from e
 
     def write_page(self, file_path, page_index, page_bytes):
@@ -639,6 +640,7 @@ class AlluxioClient:
                 )
             read_urls.append(page_url)
             start += inpage_read_len
+        print(f"read_urls:{read_urls}")
         data = self.data_manager.make_multi_http_req(read_urls)
         return data
 
