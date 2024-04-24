@@ -3,7 +3,6 @@ import os
 
 from alluxiofs import AlluxioFileSystem
 from tests.conftest import LOCAL_FILE_PATH
-from tests.fs.test_docker_fsspec_cat import ALLUXIO_PREFIX
 from tests.fs.test_docker_fsspec_file_function import check_file_info
 
 LOGGER = logging.getLogger(__name__)
@@ -11,6 +10,7 @@ LOGGER = logging.getLogger(__name__)
 DIR_PATH = "/opt/alluxio/ufs"
 SUB_DIR_PATH = "/opt/alluxio/ufs/hash_res"
 FILE_PREFIX = "file://"
+ALLUXIO_PREFIX = "alluxio://"
 
 
 def check_dir_info(dir_info, dir_path):
@@ -41,9 +41,7 @@ def alluxio_fsspec_test_dir(alluxio_file_system, alluxio_dir_path):
 def test_alluxio_fsspec_dir_function(alluxio_file_system: AlluxioFileSystem):
     alluxio_fsspec_test_dir(alluxio_file_system, DIR_PATH)
     alluxio_fsspec_test_dir(alluxio_file_system, FILE_PREFIX + DIR_PATH)
-    alluxio_fsspec_test_dir(
-        alluxio_file_system, ALLUXIO_PREFIX + FILE_PREFIX + DIR_PATH
-    )
+    alluxio_fsspec_test_dir(alluxio_file_system, ALLUXIO_PREFIX + DIR_PATH)
 
 
 def test_etcd_alluxio_fsspec_dir_function(

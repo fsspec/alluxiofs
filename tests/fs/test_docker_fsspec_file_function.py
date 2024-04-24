@@ -4,8 +4,8 @@ import os
 from alluxiofs import AlluxioFileSystem
 from tests.conftest import ALLUXIO_FILE_PATH
 from tests.conftest import LOCAL_FILE_PATH
-from tests.fs.test_docker_fsspec_cat import ALLUXIO_PREFIX
 from tests.fs.test_docker_fsspec_cat import FILE_PATH
+from tests.fs.utils import replace_protocol_with_alluxio
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ def test_alluxio_fsspec_file_function(alluxio_file_system: AlluxioFileSystem):
     )
     alluxio_fsspec_test_file(
         alluxio_file_system,
-        ALLUXIO_PREFIX + ALLUXIO_FILE_PATH,
+        replace_protocol_with_alluxio(ALLUXIO_FILE_PATH),
         LOCAL_FILE_PATH,
     )
     alluxio_fsspec_test_file(alluxio_file_system, FILE_PATH, LOCAL_FILE_PATH)
