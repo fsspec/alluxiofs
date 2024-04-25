@@ -677,7 +677,7 @@ class AlluxioClient:
                 )
             read_urls.append(page_url)
             start += inpage_read_len
-        print(f"read_urls:{read_urls}")
+        self.logger.debug(f"read_urls:{read_urls}")
         data = self.data_manager.make_multi_http_req(read_urls)
         return data
 
