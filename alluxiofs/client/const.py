@@ -13,6 +13,7 @@ ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE = 28080
 ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE = 5
 ALLUXIO_SUCCESS_IDENTIFIER = "success"
 ALLUXIO_COMMON_EXTENSION_ENABLE = "alluxio.common.extension.enable"
+ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE = "alluxio.common.ondemandpool.disable"
 LIST_URL_FORMAT = "http://{worker_host}:{http_port}/v1/files"
 FULL_PAGE_URL_FORMAT = (
     "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}"

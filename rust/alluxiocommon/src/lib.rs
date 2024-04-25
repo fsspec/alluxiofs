@@ -28,12 +28,12 @@ impl DataManager {
     #[new]
     fn new(
         max_concurrency: usize,
-        ondemand_pool: Option<bool>
+        ondemand_pool_disabled: Option<bool>
     ) -> PyResult<Self> {
         debug!("instantiating _DataManager");
-        match ondemand_pool {
-            Some(is_ondemand_pool) => {
-                if !is_ondemand_pool {
+        match ondemand_pool_disabled {
+            Some(disabled) => {
+                if disabled {
                     // Create reqwest client (The Client holds a connection pool internally, create to reuse this Client obj).
                     let client = Client::new();
                     // Create threadpool
@@ -43,7 +43,7 @@ impl DataManager {
                         Ok(pool) => {
                             return Ok(Self {
                                 max_threads: max_concurrency,
-                                ondemand_pool: is_ondemand_pool,
+                                ondemand_pool: !disabled,
                                 thread_pool: Option::Some(Arc::new(pool)),
                                 request_client: Option::Some(Arc::new(client)),
                             });
@@ -73,7 +73,6 @@ impl DataManager {
     }
 
     fn make_multi_http_req(self_: PyRef<'_, Self>, urls: Vec<String>) -> PyResult<PyObject> {
-        println!("on demand pool and client!");
         let num_reqs = urls.len();
         let mut content_results = Vec::with_capacity(num_reqs);
         let mut senders = Vec::with_capacity(num_reqs);
@@ -109,19 +108,15 @@ impl DataManager {
         };
         for i in 0..num_reqs {
             let url_owned = urls[i].to_owned();
-            // let client_clone = Arc::clone(&(self_.request_client));
             let client_clone = Arc::clone(&(request_client));
             let (send, recv) = tokio::sync::oneshot::channel();
             let install_res = thread_pool.install(move || -> Result<(), reqwest::Error> {
-                // println!("request idx:{}", i);
                 let body = perform_http_get(url_owned.as_str(), client_clone.as_ref());
                 send.send(body).unwrap();
                 Ok(())
             });
             match install_res {
-                Ok(_success) => {
-                    //DO NOTHING
-                },
+                Ok(_success) => {},
                 Err(err) => {
                     PyException::new_err(err.to_string())
                         .restore(self_.py());
@@ -153,8 +148,7 @@ impl DataManager {
                     somedata_read = true;
                 },
                 Err(err) => {
-                    if (somedata_read) {
-                        println!("[LUCYDEBUG] some data read, not erroring out!");
+                    if somedata_read {
                         break;
                     }
                     let err_str = err.to_string();
@@ -166,10 +160,6 @@ impl DataManager {
         }
         Ok(PyBytes::new(self_.py(), &concatenated_data).to_object(self_.py()))
     }
-}
-
-fn type_name_of_val<T>(_: T) -> &'static str {
-    std::any::type_name::<T>()
 }
 
 fn perform_http_get(url: &str, client: &Client) -> Result<Vec<u8>, reqwest::Error> {
@@ -194,8 +184,6 @@ fn create_pool(num_threads: usize, thread_name_prefix: String) -> Result<ThreadP
 #[cfg(test)] // Indicates that the following functions are only compiled when running tests
 mod tests {
     use super::*;
-    
-    
     use log::info;
 
     fn init() {
@@ -205,12 +193,11 @@ mod tests {
     #[test]
     fn test_logger() {
         init();
-        info!("This record will be captured by `cargo test`");
-        assert_eq!(2, 1 + 1);
+        info!("Test this record will be captured by `cargo test`");
     }
 
     #[test]
-    fn test_example() {
+    fn test_perform_http_get() {
         init();
         let client = Client::new();
         let res = perform_http_get("http://127.0.0.1:1000", &client);
