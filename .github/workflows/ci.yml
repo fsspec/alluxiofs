@@ -8,23 +8,11 @@ defaults:
 
 jobs:
   alluxiocommon:
+    name: Build alluxiocommon
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fase: false
-#      matrix:
-#        platform:
-#          - runner: ubuntu-latest
-#            target: x86_64
-#          - runner: ubuntu-latest
-#            target: x86
-#          - runner: ubuntu-latest
-#            target: aarch64
-#          - runner: ubuntu-latest
-#            target: armv7
-#          - runner: ubuntu-latest
-#            target: s390x
-#          - runner: ubuntu-latest
-#            target: ppc64le
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -37,19 +25,17 @@ jobs:
           args: --release --out dist --find-interpreter --manifest-path rust/alluxiocommon/Cargo.toml
           sccache: 'true'
           manylinux: auto
-#      - name: Upload wheels
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: wheels-linux-${{ matrix.platform.target }}
-#          path: dist
-#      - name: pytest
-#        if: ${{ startsWith(matrix.platform.target, 'x86_64') }}
-#        shell: bash
-#        run: |
-#          set -e
-#          pip install alluxiocommon --find-links dist --force-reinstall
-#          pip install pytest
-#          cd /root/github/alluxiofs/rust/alluxiocommon && pytest
+      - name: pytest
+        if: ${{ startsWith(matrix.platform.target, 'x86_64') }}
+        shell: bash
+        run: |
+          set -e
+          pip install alluxiocommon --find-links dist --force-reinstall
+          pip install pytest
+          pytest -vv \
+            --log-format="%(asctime)s %(levelname)s %(message)s" \
+            --log-date-format="%H:%M:%S" \
+          rust/alluxiocommon/tests/
 #      - name: pytest
 #        if: ${{ !startsWith(matrix.platform.target, 'x86') && matrix.platform.target != 'ppc64' }}
 #        uses: uraimo/run-on-arch-action@v2.5.0
