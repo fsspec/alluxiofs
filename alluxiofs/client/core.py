@@ -14,7 +14,10 @@ import aiohttp
 import humanfriendly
 import requests
 from requests.adapters import HTTPAdapter
-from alluxiocommon import _DataManager
+try:
+    from alluxiocommon import _DataManager
+except ModuleNotFoundError:
+    print("[WARNING]pkg 'alluxiocommon' not installed, relative modules unable to invoke.")
 
 from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
 from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
