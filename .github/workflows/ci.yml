@@ -53,7 +53,6 @@ jobs:
 #            cd /root/github/alluxiofs/rust/alluxiocommon && pytest
 
   test:
-#    needs: alluxiocommon
     name: Test
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -80,9 +79,29 @@ jobs:
           conda list
           conda --version
 
+      # alluxiocommon related
+      - name: Build alluxiocommon wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: x86_64
+          args: --release --out dist --find-interpreter --manifest-path rust/alluxiocommon/Cargo.toml
+          sccache: 'true'
+          manylinux: auto
+
       - name: Install dependencies
         run: |
           pip install .[tests]
+
+#      - name: Run AlluxioCommon tests
+#        shell: bash
+#        run: |
+#          set -e
+#          pip install alluxiocommon --find-links dist --force-reinstall
+#          pip install pytest
+#          pytest -vv \
+#            --log-format="%(asctime)s %(levelname)s %(message)s" \
+#            --log-date-format="%H:%M:%S" \
+#          rust/alluxiocommon/tests/
 
       - name: Run Alluxio FileSystem tests
         run: |
