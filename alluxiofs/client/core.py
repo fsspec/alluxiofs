@@ -14,10 +14,13 @@ import aiohttp
 import humanfriendly
 import requests
 from requests.adapters import HTTPAdapter
+
 try:
     from alluxiocommon import _DataManager
 except ModuleNotFoundError:
-    print("[WARNING]pkg 'alluxiocommon' not installed, relative modules unable to invoke.")
+    print(
+        "[WARNING]pkg 'alluxiocommon' not installed, relative modules unable to invoke."
+    )
 
 from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
 from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
@@ -202,16 +205,20 @@ class AlluxioClient:
                 self.logger.debug(
                     f"Hash node per worker is set to {hash_node_per_worker}"
                 )
-            if ALLUXIO_COMMON_EXTENSION_ENABLE in options \
-                and options[ALLUXIO_COMMON_EXTENSION_ENABLE].lower() == "true":
-                print(f"Using alluxiocommon extension..")
-                self.logger.debug(
-                    "alluxiocommon extension enabled."
+            if (
+                ALLUXIO_COMMON_EXTENSION_ENABLE in options
+                and options[ALLUXIO_COMMON_EXTENSION_ENABLE].lower() == "true"
+            ):
+                print("Using alluxiocommon extension..")
+                self.logger.debug("alluxiocommon extension enabled.")
+                ondemand_pool_disabled = (
+                    ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE in options
+                    and options[ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE].lower()
+                    == "true"
                 )
-                ondemand_pool_disabled = ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE in options \
-                                and options[ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE].lower() == "true"
-                self.data_manager = _DataManager(concurrency,
-                                                 ondemand_pool_disabled=ondemand_pool_disabled)
+                self.data_manager = _DataManager(
+                    concurrency, ondemand_pool_disabled=ondemand_pool_disabled
+                )
         if (
             not isinstance(hash_node_per_worker, int)
             or hash_node_per_worker <= 0
@@ -604,7 +611,9 @@ class AlluxioClient:
                 f"Error writing to file {file_path} at page {page_index}: {e}"
             )
 
-    def _all_page_generator_alluxiocommon(self, worker_host, worker_http_port, path_id):
+    def _all_page_generator_alluxiocommon(
+        self, worker_host, worker_http_port, path_id
+    ):
         page_index = 0
         fetching_pages_num_each_round = 4
         while True:
@@ -619,9 +628,14 @@ class AlluxioClient:
                     )
                     read_urls.append(page_url)
                     page_index += 1
-                pages_content = self.data_manager.make_multi_http_req(read_urls)
+                pages_content = self.data_manager.make_multi_http_req(
+                    read_urls
+                )
                 yield pages_content
-                if len(pages_content) < fetching_pages_num_each_round * self.page_size:
+                if (
+                    len(pages_content)
+                    < fetching_pages_num_each_round * self.page_size
+                ):
                     break
             except Exception as e:
                 # data_manager won't throw exception if there are any first few content retrieved
@@ -653,14 +667,16 @@ class AlluxioClient:
             page_index += 1
 
     def _range_page_generator_alluxiocommon(
-            self, worker_host, worker_http_port, path_id, offset, length
+        self, worker_host, worker_http_port, path_id, offset, length
     ):
         read_urls = []
         start = offset
         while start < offset + length:
             page_index = start // self.page_size
             inpage_off = start % self.page_size
-            inpage_read_len = min(self.page_size - inpage_off, offset + length - start)
+            inpage_read_len = min(
+                self.page_size - inpage_off, offset + length - start
+            )
             page_url = None
             if inpage_off == 0 and inpage_read_len == self.page_size:
                 page_url = FULL_PAGE_URL_FORMAT.format(

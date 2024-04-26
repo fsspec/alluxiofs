@@ -6,6 +6,7 @@ from alluxiofs import AlluxioClient
 from alluxiofs.client.const import ALLUXIO_COMMON_EXTENSION_ENABLE
 from alluxiofs.client.const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
 
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Validate Alluxio read_range with local file."
@@ -40,14 +41,14 @@ def parse_args():
         "--enable-alluxiocommon",
         type=bool,
         default=False,
-        help="To enable alluxiocommon extension"
+        help="To enable alluxiocommon extension",
     )
     parser.add_argument(
         "--disable-alluxiocommon-ondemandpool",
         type=bool,
         default=False,
         help="To disable alluxiocommon ondemand pool, "
-             "effective when --enable-alluxiocommon is enabeld"
+        "effective when --enable-alluxiocommon is enabeld",
     )
     return parser.parse_args()
 
@@ -101,14 +102,13 @@ def manual_test_invalid_read_range(
 
 
 def main(args):
-    options={}
+    options = {}
     if args.enable_alluxiocommon:
         options[ALLUXIO_COMMON_EXTENSION_ENABLE] = "True"
     if args.disable_alluxiocommon_ondemandpool:
         options[ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE] = "True"
 
-    alluxio_client = AlluxioClient(etcd_hosts=args.etcd_hosts,
-                                   options=options)
+    alluxio_client = AlluxioClient(etcd_hosts=args.etcd_hosts, options=options)
     file_size = os.path.getsize(args.local_file_path)
 
     invalid_test_cases = [(-1, 100), (file_size - 1, -2)]

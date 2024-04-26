@@ -1,10 +1,10 @@
 import os
 import random
+from hashlib import md5
 
 from alluxiofs import AlluxioClient
 from tests.conftest import ALLUXIO_FILE_PATH
 from tests.conftest import LOCAL_FILE_PATH
-from hashlib import md5
 
 NUM_TESTS = 10
 
@@ -18,6 +18,7 @@ def _get_md5(payload):
     m.update(payload)
     m.update(payload)
     return m.hexdigest()
+
 
 def validate_read_range(
     alluxio_client: AlluxioClient,
@@ -69,6 +70,7 @@ def validate_invalid_read_range(
         raise AssertionError(
             "Expected an exception from local file read but none occurred."
         )
+
 
 def validate_full_read(
     alluxio_client: AlluxioClient,
@@ -144,13 +146,14 @@ def test_alluxio_client(alluxio_client: AlluxioClient):
 
     # test full data read
 
-    validate_full_read(alluxio_client,
-                       ALLUXIO_FILE_PATH,
-                       LOCAL_FILE_PATH)
+    validate_full_read(alluxio_client, ALLUXIO_FILE_PATH, LOCAL_FILE_PATH)
 
 
 def test_etcd_alluxio_client(etcd_alluxio_client: AlluxioClient):
     test_alluxio_client(etcd_alluxio_client)
 
-def test_alluxio_client_alluxiocommon(alluxio_client_alluxiocommon: AlluxioClient):
+
+def test_alluxio_client_alluxiocommon(
+    alluxio_client_alluxiocommon: AlluxioClient,
+):
     test_alluxio_client(alluxio_client_alluxiocommon)

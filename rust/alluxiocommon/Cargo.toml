@@ -23,4 +23,3 @@ log = "0.4.21"
 [dependencies.pyo3]
 version = "0.21.1"
 features = ["extension-module"]
-
