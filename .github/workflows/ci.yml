@@ -60,10 +60,14 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.8","3.9"]
+        target: [x86_64]
 
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+#      - name: Checkout source
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Setup Conda Environment
         uses: mamba-org/setup-micromamba@v1
@@ -83,9 +87,9 @@ jobs:
       - name: Build alluxiocommon wheels
         uses: PyO3/maturin-action@v1
         with:
-          target: x86_64
-          args: --release --out dist --find-interpreter --manifest-path rust/alluxiocommon/Cargo.toml
-          sccache: 'true'
+          target: ${{ matrix.target }}
+          args: --release --out dist -m rust/alluxiocommon/Cargo.toml
+#          sccache: 'true'
           manylinux: auto
 
       - name: Install dependencies
