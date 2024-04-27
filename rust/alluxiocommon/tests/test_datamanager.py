@@ -1,6 +1,7 @@
 def test_import_alluxiocommon():
     try:
         from alluxiocommon import _DataManager
+
         dm = _DataManager(4)
         print(f"alluxiocommon._DataManager:{dm} instantiated!")
     except Exception as e:
