@@ -84,7 +84,7 @@ jobs:
           conda --version
 
       - name: Install openssl for AlluxioCommon Build
-        run: sudo apt-get install pkg-config libssl-dev
+        run: sudo apt-get install libssl-dev
 
       # alluxiocommon related
       - name: Build alluxiocommon wheels
