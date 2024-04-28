@@ -83,32 +83,28 @@ jobs:
           conda list
           conda --version
 
-#      - name: Install openssl for AlluxioCommon Build
-#        run: sudo apt-get install pkg-config libssl-dev
-
       # alluxiocommon related
       - name: Build alluxiocommon wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
           args: --release --out dist -m rust/alluxiocommon/Cargo.toml
-#          sccache: 'true'
           manylinux: auto
 
       - name: Install dependencies
         run: |
           pip install .[tests]
+          pip install alluxiocommon --find-links dist --force-reinstall
 
-#      - name: Run AlluxioCommon tests
-#        shell: bash
-#        run: |
-#          set -e
-#          pip install alluxiocommon --find-links dist --force-reinstall
-#          pip install pytest
-#          pytest -vv \
-#            --log-format="%(asctime)s %(levelname)s %(message)s" \
-#            --log-date-format="%H:%M:%S" \
-#          rust/alluxiocommon/tests/
+      - name: Run AlluxioCommon tests
+        shell: bash
+        run: |
+          set -e
+          pip install pytest
+          pytest -vv \
+            --log-format="%(asctime)s %(levelname)s %(message)s" \
+            --log-date-format="%H:%M:%S" \
+          rust/alluxiocommon/tests/
 
       - name: Run Alluxio FileSystem tests
         run: |
