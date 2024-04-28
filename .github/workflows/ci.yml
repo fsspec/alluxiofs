@@ -95,6 +95,9 @@ jobs:
           args: --release -i python${{ matrix.python-version }} --out dist -m rust/alluxiocommon/Cargo.toml
           manylinux: auto
 
+      - name: List dist contents
+        run: ls -l dist/
+
       - name: Run AlluxioCommon tests
         shell: bash
         run: |
@@ -105,8 +108,6 @@ jobs:
             --log-format="%(asctime)s %(levelname)s %(message)s" \
             --log-date-format="%H:%M:%S" \
           rust/alluxiocommon/tests/
-#      - name: Run Alluxio FileSystem tests
-#        run: |
           pytest -vv \
             --log-format="%(asctime)s %(levelname)s %(message)s" \
             --log-date-format="%H:%M:%S" \
