@@ -99,7 +99,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          pip install alluxiocommon --find-links=dist/ --force-reinstall
+          pip install alluxiocommon --no-index --find-links=dist/ --force-reinstall
           pip install pytest
           pytest -vv \
             --log-format="%(asctime)s %(levelname)s %(message)s" \
