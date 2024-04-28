@@ -92,7 +92,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist -m rust/alluxiocommon/Cargo.toml
+          args: --release -i python${{ matrix.python-version }} --out dist -m rust/alluxiocommon/Cargo.toml
           manylinux: auto
 
 
