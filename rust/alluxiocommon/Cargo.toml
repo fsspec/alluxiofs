@@ -13,7 +13,8 @@ name = "alluxiocommon"
 crate-type = ["cdylib"]
 
 [dependencies]
-reqwest = { version = "0.11", features = ["blocking"] }
+#reqwest = { version = "0.12", features = ["blocking"] }
+reqwest = { version = "0.11.16", features = ["blocking", "json", "rustls-tls"], default-features = false }
 tokio = { version = "1", features = ["full"] }
 bytes = "1.5.0"
 rayon = "1.7.0"
@@ -23,3 +24,7 @@ log = "0.4.21"
 [dependencies.pyo3]
 version = "0.21.1"
 features = ["extension-module"]
+
+#[dependencies.openssl]
+#version = "0.10"
+#features = ["vendored"]
