@@ -91,7 +91,7 @@ jobs:
           args: --release -i python${{ matrix.python-version }} --out dist -m rust/alluxiocommon/Cargo.toml
           manylinux: auto
 
-      - name: Run AlluxioCommon tests
+      - name: Install all packages and Run AlluxioCommon tests
         shell: bash
         run: |
           set -e
