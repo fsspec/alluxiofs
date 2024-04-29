@@ -83,10 +83,6 @@ jobs:
           conda list
           conda --version
 
-      - name: Install dependencies
-        run: |
-          pip install .[tests]
-
       # alluxiocommon related
       - name: Build alluxiocommon wheels
         uses: PyO3/maturin-action@v1
@@ -95,13 +91,11 @@ jobs:
           args: --release -i python${{ matrix.python-version }} --out dist -m rust/alluxiocommon/Cargo.toml
           manylinux: auto
 
-      - name: List dist contents
-        run: ls -l dist/
-
       - name: Run AlluxioCommon tests
         shell: bash
         run: |
           set -e
+          pip install .[tests]
           pip install alluxiocommon --no-index --find-links=dist/ --force-reinstall
           pip install pytest
           pytest -vv \
