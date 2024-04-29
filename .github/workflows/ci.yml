@@ -15,10 +15,14 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.8","3.9"]
+        target: [x86_64]
 
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
+#      - name: Checkout source
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Setup Conda Environment
         uses: mamba-org/setup-micromamba@v1
@@ -34,15 +38,28 @@ jobs:
           conda list
           conda --version
 
-      - name: Install dependencies
-        run: |
-          pip install .[tests]
+      # alluxiocommon related
+      - name: Build alluxiocommon wheels
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: --release -i python${{ matrix.python-version }} --out dist -m rust/alluxiocommon/Cargo.toml
+          manylinux: auto
 
-      - name: Run Alluxio FileSystem tests
+      - name: Install all packages and Run AlluxioCommon tests
+        shell: bash
         run: |
+          set -e
+          pip install .[tests]
+          pip install alluxiocommon --no-index --find-links=dist/ --force-reinstall
+          pip install pytest
           pytest -vv \
-          --log-format="%(asctime)s %(levelname)s %(message)s" \
-          --log-date-format="%H:%M:%S" \
+            --log-format="%(asctime)s %(levelname)s %(message)s" \
+            --log-date-format="%H:%M:%S" \
+          rust/alluxiocommon/tests/
+          pytest -vv \
+            --log-format="%(asctime)s %(levelname)s %(message)s" \
+            --log-date-format="%H:%M:%S" \
           tests/
 
   lint:

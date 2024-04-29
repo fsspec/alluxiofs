@@ -15,7 +15,16 @@ import humanfriendly
 import requests
 from requests.adapters import HTTPAdapter
 
+try:
+    from alluxiocommon import _DataManager
+except ModuleNotFoundError:
+    print(
+        "[WARNING]pkg 'alluxiocommon' not installed, relative modules unable to invoke."
+    )
+
 from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
+from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
+from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
 from .const import ALLUXIO_HASH_NODE_PER_WORKER_KEY1
 from .const import ALLUXIO_HASH_NODE_PER_WORKER_KEY2
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
@@ -177,6 +186,7 @@ class AlluxioClient:
         # parse options
         page_size = ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
         hash_node_per_worker = ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
+        self.data_manager = None
         if options:
             if ALLUXIO_PAGE_SIZE_KEY in options:
                 page_size = options[ALLUXIO_PAGE_SIZE_KEY]
@@ -194,6 +204,20 @@ class AlluxioClient:
                 )
                 self.logger.debug(
                     f"Hash node per worker is set to {hash_node_per_worker}"
+                )
+            if (
+                ALLUXIO_COMMON_EXTENSION_ENABLE in options
+                and options[ALLUXIO_COMMON_EXTENSION_ENABLE].lower() == "true"
+            ):
+                print("Using alluxiocommon extension..")
+                self.logger.debug("alluxiocommon extension enabled.")
+                ondemand_pool_disabled = (
+                    ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE in options
+                    and options[ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE].lower()
+                    == "true"
+                )
+                self.data_manager = _DataManager(
+                    concurrency, ondemand_pool_disabled=ondemand_pool_disabled
                 )
         if (
             not isinstance(hash_node_per_worker, int)
@@ -482,11 +506,18 @@ class AlluxioClient:
         )
         path_id = self._get_path_hash(file_path)
         try:
-            return b"".join(
-                self._all_page_generator(
-                    worker_host, worker_http_port, path_id
+            if self.data_manager:
+                return b"".join(
+                    self._all_page_generator_alluxiocommon(
+                        worker_host, worker_http_port, path_id
+                    )
                 )
-            )
+            else:
+                return b"".join(
+                    self._all_page_generator(
+                        worker_host, worker_http_port, path_id
+                    )
+                )
         except Exception as e:
             raise Exception(
                 f"Error when reading file {file_path}: error {e}"
@@ -504,6 +535,7 @@ class AlluxioClient:
         Returns:
             file content (str): The file content with length from offset
         """
+        self.logger.debug(f"read_range,off:{offset}:length:{length}")
         self._validate_path(file_path)
         if not isinstance(offset, int) or offset < 0:
             raise ValueError("Offset must be a non-negative integer")
@@ -528,15 +560,20 @@ class AlluxioClient:
         path_id = self._get_path_hash(file_path)
 
         try:
-            return b"".join(
-                self._range_page_generator(
+            if self.data_manager:
+                return self._range_page_generator_alluxiocommon(
                     worker_host, worker_http_port, path_id, offset, length
                 )
-            )
+            else:
+                return b"".join(
+                    self._range_page_generator(
+                        worker_host, worker_http_port, path_id, offset, length
+                    )
+                )
         except Exception as e:
             raise Exception(
-                f"Error when reading file {file_path}: error {e}: "
-                f"worker_host{worker_host}, worker_http_port:{worker_http_port}"
+                f"Error when reading file:{file_path}: error:{e}: "
+                f"worker_host:{worker_host}, worker_http_port:{worker_http_port}"
             ) from e
 
     def write_page(self, file_path, page_index, page_bytes):
@@ -574,6 +611,39 @@ class AlluxioClient:
                 f"Error writing to file {file_path} at page {page_index}: {e}"
             )
 
+    def _all_page_generator_alluxiocommon(
+        self, worker_host, worker_http_port, path_id
+    ):
+        page_index = 0
+        fetching_pages_num_each_round = 4
+        while True:
+            read_urls = []
+            try:
+                for _ in range(fetching_pages_num_each_round):
+                    page_url = FULL_PAGE_URL_FORMAT.format(
+                        worker_host=worker_host,
+                        http_port=worker_http_port,
+                        path_id=path_id,
+                        page_index=page_index,
+                    )
+                    read_urls.append(page_url)
+                    page_index += 1
+                pages_content = self.data_manager.make_multi_http_req(
+                    read_urls
+                )
+                yield pages_content
+                if (
+                    len(pages_content)
+                    < fetching_pages_num_each_round * self.page_size
+                ):
+                    break
+            except Exception as e:
+                # data_manager won't throw exception if there are any first few content retrieved
+                # hence we always propagte exception from data_manager upwards
+                raise Exception(
+                    f"Error when reading all pages of {path_id}: error {e}"
+                ) from e
+
     def _all_page_generator(self, worker_host, worker_http_port, path_id):
         page_index = 0
         while True:
@@ -595,6 +665,40 @@ class AlluxioClient:
             if len(page_content) < self.page_size:  # last page
                 break
             page_index += 1
+
+    def _range_page_generator_alluxiocommon(
+        self, worker_host, worker_http_port, path_id, offset, length
+    ):
+        read_urls = []
+        start = offset
+        while start < offset + length:
+            page_index = start // self.page_size
+            inpage_off = start % self.page_size
+            inpage_read_len = min(
+                self.page_size - inpage_off, offset + length - start
+            )
+            page_url = None
+            if inpage_off == 0 and inpage_read_len == self.page_size:
+                page_url = FULL_PAGE_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    page_index=page_index,
+                )
+            else:
+                page_url = PAGE_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    page_index=page_index,
+                    page_offset=inpage_off,
+                    page_length=inpage_read_len,
+                )
+            read_urls.append(page_url)
+            start += inpage_read_len
+        self.logger.debug(f"read_urls:{read_urls}")
+        data = self.data_manager.make_multi_http_req(read_urls)
+        return data
 
     def _range_page_generator(
         self, worker_host, worker_http_port, path_id, offset, length

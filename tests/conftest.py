@@ -154,6 +154,21 @@ def alluxio_client(docker_alluxio):
 
 
 @pytest.fixture
+def alluxio_client_alluxiocommon(docker_alluxio):
+    LOGGER.debug(
+        f"get AlluxioClient with alluxiocommon connect to {docker_alluxio}"
+    )
+    parsed_url = urlparse(docker_alluxio)
+    host = parsed_url.hostname
+    port = parsed_url.port
+    alluxio_options = {"alluxio.common.extension.enable": "True"}
+    alluxio_client = AlluxioClient(
+        worker_hosts=host, worker_http_port=port, options=alluxio_options
+    )
+    yield alluxio_client
+
+
+@pytest.fixture
 def etcd_alluxio_client(docker_alluxio_with_etcd):
     LOGGER.debug(
         f"get etcd AlluxioClient connect to {docker_alluxio_with_etcd}"
@@ -174,6 +189,26 @@ def alluxio_file_system(docker_alluxio):
         "alluxio",
         worker_hosts=host,
         target_protocol="file",
+        preload_path=ALLUXIO_FILE_PATH,
+    )
+    yield alluxio_file_system
+
+
+@pytest.fixture
+def alluxio_file_system_alluxiocommon(docker_alluxio):
+    LOGGER.debug(
+        f"get AlluxioFileSystem connect to {docker_alluxio}"
+        f" with alluxiocommon enabled."
+    )
+    parsed_url = urlparse(docker_alluxio)
+    host = parsed_url.hostname
+    fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+    alluxio_options = {"alluxio.common.extension.enable": "True"}
+    alluxio_file_system = fsspec.filesystem(
+        "alluxio",
+        worker_hosts=host,
+        target_protocol="file",
+        options=alluxio_options,
         preload_path=ALLUXIO_FILE_PATH,
     )
     yield alluxio_file_system

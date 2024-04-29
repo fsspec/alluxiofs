@@ -164,6 +164,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             path = self._strip_alluxio_protocol(path)
             try:
                 if self.alluxio:
+                    self.logger.debug(f"calling {alluxio_impl.__name__}")
                     return alluxio_impl(self, path, *args, **kwargs)
             except Exception as e:
                 if not isinstance(e, NotImplementedError):
