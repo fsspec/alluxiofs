@@ -129,7 +129,7 @@ def docker_alluxio():
         return
     launch_alluxio_dockers()
     yield yield_url()
-    # stop_alluxio_dockers()
+    stop_alluxio_dockers()
 
 
 @pytest.fixture(scope="session")
