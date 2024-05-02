@@ -1,5 +1,6 @@
 #!/bin/python3
 import argparse
+import json
 import os
 import time
 from enum import Enum
@@ -59,6 +60,20 @@ def init_main_parser():
         required=False,
         help="The host address(es) for etcd",
     )
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        default=False,
+        required=False,
+        help="Whether to use cProfile to profile the benchmark",
+    )
+    parser.add_argument(
+        "--result_dir",
+        type=str,
+        default=os.path.join(os.path.dirname(__file__), "bench_result"),
+        required=False,
+        help="The location to store the benchmark result",
+    )
     return parser
 
 
@@ -94,9 +109,15 @@ def get_test_suite(main_parser, main_args, process_id, num_process):
     return testsuite
 
 
+def runtest(start_time, runtime, test_suite):
+    while time.time() - start_time < runtime:
+        test_suite.execute()
+
+
 def main():
     main_parser = init_main_parser()
     main_args, remaining_args = main_parser.parse_known_args()
+    os.makedirs(main_args.result_dir, exist_ok=True)
     i_am_child = False
     for i in range(main_args.numjobs):
         processid = os.fork()
@@ -108,28 +129,61 @@ def main():
             )
             test_suite.init()
             start_time = time.time()
-            while time.time() - start_time < main_args.runtime:
-                test_suite.execute()
-            duration = time.time() - start_time
-            if test_suite.metrics.get(Metrics.TOTAL_OPS):
+
+            runtest(start_time, main_args.runtime, test_suite)
+            if main_args.profile:
+                import cProfile
+
+                profile_result_location = os.path.join(
+                    main_args.result_dir, f"worker_{i}_profile_result"
+                )
+                cProfile.runctx(
+                    "runtest(start_time, main_args.runtime, test_suite)",
+                    globals(),
+                    locals(),
+                    filename=profile_result_location,
+                )
                 print(
-                    f"Benchmark against {test_suite.args.op}: "
-                    f"total ops: {test_suite.metrics.get(Metrics.TOTAL_OPS)}, "
-                    f"ops/second: {test_suite.metrics.get(Metrics.TOTAL_OPS) / duration}"
+                    f"Profile result of worker {i} saved to {profile_result_location}"
+                )
+            else:
+                runtest(start_time, main_args.runtime, test_suite)
+
+            duration = time.time() - start_time
+            print(
+                f"Benchmark against {test_suite.args.op}: "
+                f"total time: {duration} seconds"
+            )
+
+            result = {
+                "worker": i,
+                "op": test_suite.args.op,
+                "metrics": {
+                    "duration": duration,
+                },
+            }
+            if test_suite.metrics.get(Metrics.TOTAL_OPS):
+                total_ops = test_suite.metrics.get(Metrics.TOTAL_OPS)
+                ops_per_second = total_ops / duration
+                result["metrics"]["total_ops"] = total_ops
+                result["metrics"]["ops_per_second"] = ops_per_second
+                print(
+                    f"total ops: {total_ops}, " f"ops/second: {ops_per_second}"
                 )
             if test_suite.metrics.get(Metrics.TOTAL_BYTES):
+                total_bytes = test_suite.metrics.get(Metrics.TOTAL_BYTES)
+                bytes_per_second = total_bytes / duration
+                result["metrics"]["total_bytes"] = total_bytes
+                result["metrics"]["bytes_per_second"] = bytes_per_second
                 print(
-                    f"Benchmark against {test_suite.args.op}: "
-                    f"total bytes: {test_suite.metrics.get(Metrics.TOTAL_BYTES)}, "
-                    f"bytes/second: {test_suite.metrics.get(Metrics.TOTAL_BYTES) / duration}"
+                    f"total bytes: {total_bytes}, "
+                    f"bytes/second: {bytes_per_second}"
                 )
-
-            if not test_suite.metrics:
-                print(
-                    f"Benchmark against {test_suite.args.op}: total time: {duration} seconds"
-                )
-            print(f"Child Process:{i} exit")
-            break
+            json_result_location = os.path.join(
+                main_args.result_dir, f"worker_{i}_bench_result.json"
+            )
+            with open(json_result_location, "w") as f:
+                json.dump(result, f)
         else:
             print(f"Parent Process, {i}th Child process, id:{processid}")
     if not i_am_child:
