@@ -130,7 +130,6 @@ def main():
             test_suite.init()
             start_time = time.time()
 
-            runtest(start_time, main_args.runtime, test_suite)
             if main_args.profile:
                 import cProfile
 
