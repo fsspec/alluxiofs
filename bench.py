@@ -69,7 +69,7 @@ def init_main_parser():
         "--page-size",
         type=str,
         default=False,
-        help="Size in bytes, or in KB,MB",
+        help="Size in KB or MB",
     )
     return parser
 

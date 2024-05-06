@@ -8,7 +8,7 @@ It's a light-weight benchmark that requires minimum dependency and mimic actual 
 
 Try out:
 ```commandline
-python bench.py --etcd_hosts=localhost --numjobs=1 --runtime=10 --testsuite=FSSPEC --path=s3://ai-ref-arch/small-dataset --op=cat_file --bs=262144
+python bench.py --etcd_hosts=localhost --numjobs=1 --runtime=10 --testsuite=FSSPEC --path=s3://ai-ref-arch/small-dataset --op=cat_file --bs=256KB
 ```
 
 Actual bench:
@@ -20,7 +20,7 @@ python bench.py --etcd_hosts=localhost --numjobs=2 --runtime=20 --testsuite=FSSP
 Substitute `path` to `s3://ai-ref-arch/10G-xgboost-data/` for data `op` `cat_file` `open_seq_read` `open_random_read`.
 Tune your preferred buffer size.
 ```commandline
-python bench.py --etcd_hosts=localhost --numjobs=2 --runtime=20 --testsuite=FSSPEC --path=s3://ai-ref-arch/10G-xgboost-data/ --op=open_seq_read --bs=262144
+python bench.py --etcd_hosts=localhost --numjobs=2 --runtime=20 --testsuite=FSSPEC --path=s3://ai-ref-arch/10G-xgboost-data/ --op=open_seq_read --bs=256KB
 ```
 
 ## Alluxio FSSpec Traffic Pattern Benchmark

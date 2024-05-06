@@ -5,7 +5,6 @@ from typing import Tuple
 from urllib.parse import urlparse
 
 from alluxiofs import AlluxioFileSystem
-from benchmark.bench.benchtool_utils import parse_bytes_str
 
 
 class Metrics(ABC):
@@ -86,7 +85,8 @@ class AbstractAlluxioFSSpecTraverseBench(AbstractBench, ABC):
         if self.args.page_size:
             alluxio_options[
                 "alluxio.worker.page.store.page.size"
-            ] = parse_bytes_str(self.args.page_size)
+            ] = self.args.page_size
+        print(f"options for AlluxioFileSystem:{alluxio_options}")
         self.alluxio_fs = AlluxioFileSystem(
             etcd_hosts=self.args.etcd_hosts,
             worker_hosts=self.args.worker_hosts,
