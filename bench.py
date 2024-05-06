@@ -59,6 +59,18 @@ def init_main_parser():
         required=False,
         help="The host address(es) for etcd",
     )
+    parser.add_argument(
+        "--use-alluxiocommon",
+        action="store_true",
+        default=False,
+        help="Whether to use AlluxioCommon native extensions.",
+    )
+    parser.add_argument(
+        "--page-size",
+        type=str,
+        default=False,
+        help="Size in bytes, or in KB,MB",
+    )
     return parser
 
 
