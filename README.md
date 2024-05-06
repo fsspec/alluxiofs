@@ -155,3 +155,40 @@ ds2.count()
 
 # End of Python example
 ```
+
+### Running examples with Pyarrow
+
+```
+import fsspec
+from alluxiofs import AlluxioFileSystem
+
+# Register the Alluxio fsspec implementation
+fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+alluxio_fs = fsspec.filesystem(
+  "alluxio", etcd_hosts="localhost", target_protocol="s3"
+)
+
+# Example 1
+# Pass the initialized Alluxio filesystem to Pyarrow and read the data set from the example parquet file
+import pyarrow.dataset as ds
+dataset = ds.dataset("s3://example_bucket/datasets/example.parquet", filesystem=alluxio_fs)
+
+# Get a count of the number of records in the parquet file
+dataset.count_rows()
+
+# Display the schema derived from the parquet file header record
+dataset.schema
+
+# Display the first record
+dataset.take(0)
+
+# Example 2
+# Create a python-based PyArrow filesystem using FsspecHandler
+py_fs = PyFileSystem(FSSpecHandler(alluxio_file_system))
+
+# Read the data by using the Pyarrow filesystem interface
+with py_fs.open_input_file("s3://example_bucket/datasets/example.parquet") as f:
+    alluxio_file_data = f.read()
+
+# End of Python example
+```
