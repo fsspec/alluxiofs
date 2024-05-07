@@ -11,6 +11,7 @@ from typing import Callable
 from typing import Iterator
 from typing import TYPE_CHECKING
 
+import fsspec
 import numpy as np
 import pandas as pd
 import ray
@@ -23,6 +24,8 @@ from PIL import Image
 from ray.data._internal.delegating_block_builder import DelegatingBlockBuilder
 from streaming import LocalDataset
 from streaming import StreamingDataset
+
+from alluxiofs import AlluxioFileSystem
 
 # HF Dataset.
 # MosaicML StreamingDataset
@@ -418,6 +421,31 @@ def build_hf_dataloader(
     )
 
 
+def setup_alluxio(args):
+    fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+    alluxio_kwargs = {}
+    if args.alluxio_etcd_hosts and args.alluxio_worker_hosts:
+        raise ValueError(
+            "Either etcd_hosts or worker_hosts should be provided, not both."
+        )
+    if args.alluxio_etcd_hosts:
+        alluxio_kwargs["etcd_hosts"] = args.alluxio_etcd_hosts
+    if args.alluxio_worker_hosts:
+        alluxio_kwargs["worker_hosts"] = args.alluxio_worker_hosts
+    alluxio_kwargs["target_protocol"] = "s3"
+
+    alluxio_options = {}
+    if args.alluxio_page_size:
+        alluxio_options[
+            "alluxio.worker.page.store.page.size"
+        ] = args.alluxio_page_size
+    if args.alluxio_cluster_name:
+        alluxio_options["alluxio.cluster.name"] = args.alluxio_cluster_name
+    if alluxio_options:
+        alluxio_kwargs["options"] = alluxio_options
+    return fsspec.filesystem("alluxio", **alluxio_kwargs)
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -488,6 +516,33 @@ if __name__ == "__main__":
             "used, x4 for S3 datasets."
         ),
     )
+    # Alluxio related
+    parser.add_argument(
+        "--use-alluxio",
+        action="store_true",
+        default=False,
+        help="Whether to use Alluxio instead of original ufs filesystem for data loading.",
+    )
+    parser.add_argument(
+        "--alluxio-etcd-hosts",
+        default=None,
+        help="The ETCD host to connect to to get Alluxio workers connection info.",
+    )
+    parser.add_argument(
+        "--alluxio-worker-hosts",
+        default=None,
+        help="The worker hostnames in host1,host2,host3 format. Either etcd_host or worker_hosts should be provided, not both.",
+    )
+    parser.add_argument(
+        "--alluxio-page-size",
+        default=None,
+        help="The alluxio page size of Alluxio servers.",
+    )
+    parser.add_argument(
+        "--alluxio-cluster-name",
+        default=None,
+        help="The alluxio cluster name of the Alluxio servers.",
+    )
     args = parser.parse_args()
 
     metrics = {}
@@ -520,6 +575,7 @@ if __name__ == "__main__":
 
         # TORCH TEST
         # torch, load images.
+        """
         torch_resize_transform = torchvision.transforms.Compose(
             [
                 torchvision.transforms.Resize(
@@ -592,12 +648,14 @@ if __name__ == "__main__":
                 metrics,
                 args.output_file,
             )
+        """
 
-        # ray.data, load images.
+        alluxio = setup_alluxio(args)
         ray_dataset = ray.data.read_images(
             args.data_root,
             mode="RGB",
             size=(DEFAULT_IMAGE_SIZE, DEFAULT_IMAGE_SIZE),
+            filesystem=setup_alluxio(args) if args.use_alluxio else None,
         )
         for i in range(args.num_epochs):
             iterate(
@@ -609,9 +667,11 @@ if __name__ == "__main__":
             )
 
         # ray.data, with transform.
-        ray_dataset = ray.data.read_images(args.data_root, mode="RGB").map(
-            crop_and_flip_image
-        )
+        ray_dataset = ray.data.read_images(
+            args.data_root,
+            mode="RGB",
+            filesystem=setup_alluxio(args) if args.use_alluxio else None,
+        ).map(crop_and_flip_image)
         for i in range(args.num_epochs):
             iterate(
                 ray_dataset.iter_batches(batch_size=args.batch_size),
@@ -636,7 +696,10 @@ if __name__ == "__main__":
             )
 
         # TFRecords dataset with Ray Data.
-        ray_dataset = ray.data.read_tfrecords(args.tf_data_root)
+        ray_dataset = ray.data.read_tfrecords(
+            args.tf_data_root,
+            filesystem=setup_alluxio(args) if args.use_alluxio else None,
+        )
         ray_dataset = ray_dataset.map_batches(
             decode_crop_and_flip_tf_record_batch,
             batch_size=args.batch_size,
@@ -674,7 +737,10 @@ if __name__ == "__main__":
             )
 
         # Ray Data, reading from parquet.
-        ray_dataset = ray.data.read_parquet(args.parquet_data_root)
+        ray_dataset = ray.data.read_parquet(
+            args.parquet_data_root,
+            filesystem=setup_alluxio(args) if args.use_alluxio else None,
+        )
         ray_dataset = ray_dataset.map(decode_image_crop_and_flip)
         for i in range(args.num_epochs):
             iterate(
