@@ -439,6 +439,8 @@ def setup_alluxio(args):
         alluxio_options[
             "alluxio.worker.page.store.page.size"
         ] = args.alluxio_page_size
+    if args.use_alluxiocommon:
+        alluxio_options["alluxio.common.extension.enable"] = "True"
     if args.alluxio_cluster_name:
         alluxio_options["alluxio.cluster.name"] = args.alluxio_cluster_name
     if alluxio_options:
@@ -522,6 +524,12 @@ if __name__ == "__main__":
         action="store_true",
         default=False,
         help="Whether to use Alluxio instead of original ufs filesystem for data loading.",
+    )
+    parser.add_argument(
+        "--use-alluxiocommon",
+        action="store_true",
+        default=False,
+        help="Whether to use AlluxioCommon native extension lib.",
     )
     parser.add_argument(
         "--alluxio-etcd-hosts",
@@ -720,6 +728,7 @@ if __name__ == "__main__":
 
     if args.parquet_data_root is not None:
         # HuggingFace Dataset, reading from parquet.
+        """
         hf_dataset = build_hf_dataloader(
             args.parquet_data_root,
             args.batch_size,
@@ -735,6 +744,7 @@ if __name__ == "__main__":
                 metrics,
                 args.output_file,
             )
+        """
 
         # Ray Data, reading from parquet.
         ray_dataset = ray.data.read_parquet(
