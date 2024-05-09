@@ -19,7 +19,7 @@ def test_import_alluxiocommon():
         import requests
 
         md5_expected = get_md5(
-            requests.get(urls[0]).body, requests.get(urls[1]).body
+            requests.get(urls[0]).content, requests.get(urls[1]).content
         )
         assert (
             md5_outcome == md5_expected
