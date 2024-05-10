@@ -70,6 +70,18 @@ def init_main_parser():
         help="The host address(es) for etcd",
     )
     parser.add_argument(
+        "--use-alluxiocommon",
+        action="store_true",
+        default=False,
+        help="Whether to use AlluxioCommon native extensions.",
+    )
+    parser.add_argument(
+        "--page-size",
+        type=str,
+        default=False,
+        help="Size in KB or MB",
+    )
+    parser.add_argument(
         "--profile",
         action="store_true",
         default=False,
@@ -83,7 +95,6 @@ def init_main_parser():
         required=False,
         help="The location to store the benchmark result",
     )
-    return parser
 
 
 def get_test_suite(main_parser, main_args, process_id, num_process):

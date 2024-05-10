@@ -27,20 +27,21 @@ class RayArgumentParser(AbstractArgumentParser):
         )
 
     def parse_args(self, args=None, namespace=None):
-        args = self.parser.parse_args(args, namespace)
-        return args
+        parsed_args = self.parser.parse_args(args, namespace)
+        return parsed_args
 
 
 class RayBench(AbstractBench):
     def __init__(self, process_id, num_process, args, **kwargs):
         super().__init__(process_id, num_process, args, **kwargs)
+        self.args = args
+
+    def init(self):
+        self.validate_args()
         self.alluxio_fs = AlluxioFileSystem(
             etcd_hosts=self.args.etcd_hosts,
             worker_hosts=self.args.worker_hosts,
         )
-
-    def init(self):
-        self.validate_args()
 
     def execute(self):
         if self.args.op == Op.read_parquet.name:

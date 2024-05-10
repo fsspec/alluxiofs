@@ -74,7 +74,6 @@ impl DataManager {
 
     fn make_multi_http_req(self_: PyRef<'_, Self>, urls: Vec<String>) -> PyResult<PyObject> {
         let num_reqs = urls.len();
-        let mut content_results = Vec::with_capacity(num_reqs);
         let mut senders = Vec::with_capacity(num_reqs);
         for _ in 0..num_reqs {
             senders.push(None);
@@ -126,33 +125,30 @@ impl DataManager {
             senders[i] = Some(recv);
         }
 
+        let mut concatenated_data: Vec<u8> = Vec::new();
+        let mut somedata_read: bool = false;
         for sender in senders {
             let result = sender.unwrap().blocking_recv();
             match result {
                 Ok(content_result) => {
-                    content_results.push(content_result);
+                    match content_result {
+                        Ok(content) => {
+                            concatenated_data.extend_from_slice(&content);
+                            somedata_read = true;
+                        },
+                        Err(err) => {
+                            if somedata_read {
+                                break;
+                            }
+                            let err_str = err.to_string();
+                            PyException::new_err(format!("Error in getting result, {}", err_str))
+                                .restore(self_.py());
+                            return Err(PyErr::fetch(self_.py()));
+                        }
+                    }
                 },
                 Err(err) => {
                     PyException::new_err(err.to_string())
-                        .restore(self_.py());
-                    return Err(PyErr::fetch(self_.py()));
-                }
-            }
-        }
-        let mut concatenated_data: Vec<u8> = Vec::new();
-        let mut somedata_read: bool = false;
-        for content_result in &content_results {
-            match content_result {
-                Ok(content) => {
-                    concatenated_data.extend(content);
-                    somedata_read = true;
-                },
-                Err(err) => {
-                    if somedata_read {
-                        break;
-                    }
-                    let err_str = err.to_string();
-                    PyException::new_err(format!("Error in getting result, {}", err_str))
                         .restore(self_.py());
                     return Err(PyErr::fetch(self_.py()));
                 }
@@ -165,7 +161,7 @@ impl DataManager {
 fn perform_http_get(url: &str, client: &Client) -> Result<Vec<u8>, reqwest::Error> {
     let bytes = client.get(url).send()?
         .bytes()?;
-    let bytes_vec = bytes.to_vec(); // TODO! avoid copy here at least, one more additional copy in returning to py world
+    let bytes_vec = bytes.as_ref().to_owned();
     Ok(bytes_vec)
 }
 
