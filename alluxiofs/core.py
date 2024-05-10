@@ -1,4 +1,5 @@
 import logging
+from datetime import time
 from functools import wraps
 from typing import Callable
 
@@ -7,11 +8,6 @@ from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
 
 from alluxiofs.client import AlluxioClient
-
-logging.basicConfig(
-    level=logging.WARN,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
 
 
 class AlluxioErrorMetrics:
@@ -120,6 +116,17 @@ class AlluxioFileSystem(AbstractFileSystem):
             if preload_path is not None:
                 self.alluxio.load(preload_path)
 
+        if "log_level" in test_options:
+            log_level = test_options["log_level"].upper()
+            if log_level == "DEBUG":
+                logger.setLevel(logging.DEBUG)
+            elif log_level == "INFO":
+                logger.setLevel(logging.INFO)
+            elif log_level == "WARN" or log_level == "WARNING":
+                logger.setLevel(logging.WARN)
+            else:
+                logger.warning(f"Unsupported log level: {log_level}")
+
         # Remove "alluxio::" from the given single path or list of path
         def _strip_alluxio_protocol(path):
             def _strip_individual_path(p):
@@ -164,16 +171,26 @@ class AlluxioFileSystem(AbstractFileSystem):
             path = self._strip_alluxio_protocol(path)
             try:
                 if self.alluxio:
-                    self.logger.debug(f"calling {alluxio_impl.__name__}")
-                    return alluxio_impl(self, path, *args, **kwargs)
+                    start_time = time.time()
+                    res = alluxio_impl(self, path, *args, **kwargs)
+                    self.logger.debug(
+                        f"Successfully called {alluxio_impl.__name__} against alluxio server with args ({args}), kwargs ({kwargs}) for {time.time() - start_time} ms"
+                    )
+                    return res
             except Exception as e:
                 if not isinstance(e, NotImplementedError):
+                    self.logger.debug(
+                        f"Failed to call {alluxio_impl.__name__} against alluxio server with args ({args}), kwargs ({kwargs}): {e}"
+                    )
                     self.error_metrics.record_error(alluxio_impl.__name__, e)
                 if self.fs is None:
                     raise e
 
             fs_method = getattr(self.fs, alluxio_impl.__name__, None)
             if fs_method:
+                self.logger.debug(
+                    f"Fallback to call {alluxio_impl.__name__} against underlying fs with args ({args}), kwargs ({kwargs})"
+                )
                 return fs_method(path, *args, **kwargs)
             raise NotImplementedError(
                 f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem."
