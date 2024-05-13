@@ -1,4 +1,5 @@
 import logging
+import time
 from functools import wraps
 from typing import Callable
 
@@ -7,11 +8,9 @@ from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
 
 from alluxiofs.client import AlluxioClient
+from alluxiofs.client.utils import set_log_level
 
-logging.basicConfig(
-    level=logging.WARN,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+logger = logging.getLogger(__name__)
 
 
 class AlluxioErrorMetrics:
@@ -40,7 +39,6 @@ class AlluxioFileSystem(AbstractFileSystem):
         etcd_hosts=None,
         worker_hosts=None,
         options=None,
-        logger=None,
         concurrency=64,
         etcd_port=2379,
         worker_http_port=28080,
@@ -64,8 +62,6 @@ class AlluxioFileSystem(AbstractFileSystem):
                 Either `etcd_hosts` or `worker_hosts` must be specified, not both.
             options (dict, optional): A dictionary of Alluxio configuration options where keys are property names and values are property values.
                 These options configure the Alluxio client behavior.
-            logger (logging.Logger, optional): A logger instance for logging messages.
-                If not provided, a default logger with the name "AlluxioFileSystem" is used.
             concurrency (int, optional): The maximum number of concurrent operations (e.g., reads, writes) that the file system interface will allow. Defaults to 64.
             etcd_port (int, optional): The port number used by each etcd server.
                 Relevant only if `etcd_hosts` is specified.
@@ -85,14 +81,13 @@ class AlluxioFileSystem(AbstractFileSystem):
             **kwargs: other parameters for core session.
         """
         super().__init__(**kwargs)
-        self.logger = logger or logging.getLogger("Alluxiofs")
         if fs and target_protocol:
             raise ValueError(
                 "Please provide one of filesystem instance (fs) or"
                 " target_protocol, not both"
             )
         if fs is None and target_protocol is None:
-            self.logger.warning(
+            logger.warning(
                 "Neither filesystem instance(fs) nor target_protocol is "
                 "provided. Will not fall back to under file systems when "
                 "accessed files are not in Alluxiofs"
@@ -105,6 +100,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             self.fs = filesystem(target_protocol, **self.kwargs)
 
         test_options = test_options or {}
+        set_log_level(logger, test_options)
         if test_options.get("skip_alluxio") is True:
             self.alluxio = None
         else:
@@ -112,10 +108,10 @@ class AlluxioFileSystem(AbstractFileSystem):
                 etcd_hosts=etcd_hosts,
                 worker_hosts=worker_hosts,
                 options=options,
-                logger=logger,
                 concurrency=concurrency,
                 etcd_port=etcd_port,
                 worker_http_port=worker_http_port,
+                test_options=test_options,
             )
             if preload_path is not None:
                 self.alluxio.load(preload_path)
@@ -164,19 +160,30 @@ class AlluxioFileSystem(AbstractFileSystem):
             path = self._strip_alluxio_protocol(path)
             try:
                 if self.alluxio:
-                    self.logger.debug(f"calling {alluxio_impl.__name__}")
-                    return alluxio_impl(self, path, *args, **kwargs)
+                    start_time = time.time()
+                    res = alluxio_impl(self, path, *args, **kwargs)
+                    logger.debug(
+                        f"Exit(Ok): alluxio op({alluxio_impl.__name__}) path({path}) args({args}) time({(time.time() - start_time):.2f}s)"
+                    )
+                    return res
             except Exception as e:
                 if not isinstance(e, NotImplementedError):
+                    logger.debug(
+                        f"Exit(Error): alluxio op({alluxio_impl.__name__}) path({path}) args({args}) {e}"
+                    )
                     self.error_metrics.record_error(alluxio_impl.__name__, e)
                 if self.fs is None:
                     raise e
 
             fs_method = getattr(self.fs, alluxio_impl.__name__, None)
             if fs_method:
-                return fs_method(path, *args, **kwargs)
+                res = fs_method(path, *args, **kwargs)
+                logger.debug(
+                    f"Exit(Ok): ufs({self.fs.protocol}) op({alluxio_impl.__name__}) path({path}) args {args})"
+                )
+                return res
             raise NotImplementedError(
-                f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem."
+                f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.fs.protocol}"
             )
 
         return fallback_wrapper

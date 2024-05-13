@@ -19,6 +19,7 @@ from .const import ALLUXIO_ETCD_PASSWORD_KEY
 from .const import ALLUXIO_ETCD_USERNAME_KEY
 from .const import ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE
 from .const import ETCD_PREFIX_FORMAT
+from .utils import set_log_level
 
 DEFAULT_HOST = "localhost"
 DEFAULT_CONTAINER_HOST = ""
@@ -29,6 +30,8 @@ DEFAULT_NETTY_DATA_PORT = 29997
 DEFAULT_WEB_PORT = 30000
 DEFAULT_DOMAIN_SOCKET_PATH = ""
 DEFAULT_WORKER_IDENTIFIER_VERSION = 1
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -210,12 +213,11 @@ class ConsistentHashProvider:
         worker_hosts=None,
         worker_http_port=None,
         options=None,
-        logger=None,
         etcd_refresh_workers_interval=None,
         hash_node_per_worker=None,
         max_attempts=100,
+        test_options=None,
     ):
-        self._logger = logger or logging.getLogger("ConsistentHashProvider")
         self._etcd_hosts = etcd_hosts
         self._etcd_port = etcd_port
         self._options = options
@@ -237,6 +239,8 @@ class ConsistentHashProvider:
                 self._start_background_update_ring(
                     self._etcd_refresh_workers_interval
                 )
+        test_options = test_options or {}
+        set_log_level(logger, test_options)
 
     def get_multiple_workers(
         self, key: str, count: int
@@ -289,7 +293,7 @@ class ConsistentHashProvider:
                 try:
                     self._fetch_workers_and_update_ring()
                 except Exception as e:
-                    self._logger.error(f"Error updating worker hash ring: {e}")
+                    logger.error(f"Error updating worker hash ring: {e}")
                 time.sleep(interval)
 
         self._background_thread = threading.Thread(target=update_loop)
@@ -319,7 +323,7 @@ class ConsistentHashProvider:
                 continue
         if not worker_entities:
             if self._is_ring_initialized:
-                self._logger.info(
+                logger.info(
                     f"Failed to achieve worker info list from ETCD servers:{self._etcd_hosts}"
                 )
                 return
