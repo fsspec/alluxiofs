@@ -91,6 +91,7 @@ class AbstractAlluxioFSSpecTraverseBench(AbstractBench, ABC):
             etcd_hosts=self.args.etcd_hosts,
             worker_hosts=self.args.worker_hosts,
             options=alluxio_options,
+            # test_options={"log_level": "debug"}
             # target_protocol=protocol
         )
         self.traverse(self.args.path)

@@ -171,13 +171,13 @@ class AlluxioFileSystem(AbstractFileSystem):
                     start_time = time.time()
                     res = alluxio_impl(self, path, *args, **kwargs)
                     logger.debug(
-                        f"Successfully called {alluxio_impl.__name__} against alluxio server with args ({args}), kwargs ({kwargs}) for {(time.time() - start_time):.2f} s"
+                        f"Exit(Ok): alluxio op({alluxio_impl.__name__}) path({path}) args({args}) time({(time.time() - start_time):.2f}s)"
                     )
                     return res
             except Exception as e:
                 if not isinstance(e, NotImplementedError):
                     logger.debug(
-                        f"Failed to call {alluxio_impl.__name__} against alluxio server with args ({args}), kwargs ({kwargs}): {e}"
+                        f"Exit(Error): alluxio op({alluxio_impl.__name__}) path({path}) args({args}) {e}"
                     )
                     self.error_metrics.record_error(alluxio_impl.__name__, e)
                 if self.fs is None:
@@ -185,12 +185,13 @@ class AlluxioFileSystem(AbstractFileSystem):
 
             fs_method = getattr(self.fs, alluxio_impl.__name__, None)
             if fs_method:
+                res = fs_method(path, *args, **kwargs)
                 logger.debug(
-                    f"Fallback to call {alluxio_impl.__name__} against underlying fs with args ({args}), kwargs ({kwargs})"
+                    f"Exit(Ok): ufs({self.fs.protocol}) op({alluxio_impl.__name__}) path({path}) args {args})"
                 )
-                return fs_method(path, *args, **kwargs)
+                return res
             raise NotImplementedError(
-                f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem."
+                f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.fs.protocol}"
             )
 
         return fallback_wrapper

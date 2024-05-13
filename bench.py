@@ -149,7 +149,7 @@ def configure_logging(path):
     log_path = os.path.join(path, "bench.log")
     logging.basicConfig(
         filename=log_path,
-        level=logging.DEBUG,
+        level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
     )
     logger = logging.getLogger("bench")
