@@ -30,7 +30,7 @@ class AlluxioFSSpecTrafficArgumentParser(AbstractArgumentParser):
 
     def parse_args(self, args=None, namespace=None):
         args = self.parser.parse_args(args, namespace)
-        print("args:{}", args)
+        print("args:{}".format(args))
         return args
 
 

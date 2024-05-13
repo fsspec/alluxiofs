@@ -15,7 +15,18 @@ import humanfriendly
 import requests
 from requests.adapters import HTTPAdapter
 
+from .utils import set_log_level
+
+try:
+    from alluxiocommon import _DataManager
+except ModuleNotFoundError:
+    print(
+        "[WARNING]pkg 'alluxiocommon' not installed, relative modules unable to invoke."
+    )
+
 from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
+from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
+from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
 from .const import ALLUXIO_HASH_NODE_PER_WORKER_KEY1
 from .const import ALLUXIO_HASH_NODE_PER_WORKER_KEY2
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
@@ -32,10 +43,7 @@ from .const import PAGE_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
 from .worker_ring import ConsistentHashProvider
 
-logging.basicConfig(
-    level=logging.WARN,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -106,11 +114,11 @@ class AlluxioClient:
         etcd_hosts=None,
         worker_hosts=None,
         options=None,
-        logger=None,
         concurrency=64,
         etcd_port=2379,
         worker_http_port=ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
         etcd_refresh_workers_interval=120,
+        test_options=None,
     ):
         """
         Inits Alluxio file system.
@@ -124,8 +132,6 @@ class AlluxioClient:
             options (dict, optional):
                 A dictionary of Alluxio property key and values.
                 Note that Alluxio Python API only support a limited set of Alluxio properties.
-            logger (Logger, optional):
-                A logger instance for logging messages.
             concurrency (int, optional):
                 The maximum number of concurrent operations for HTTP requests. Default to 64.
             etcd_port (int, optional):
@@ -137,7 +143,6 @@ class AlluxioClient:
 
         """
         # TODO(lu/chunxu) change to ETCD endpoints in format of 'http://etcd_host:port, http://etcd_host:port' & worker hosts in 'host:port, host:port' format
-        self.logger = logger or logging.getLogger("AlluxioPython")
         if not (etcd_hosts or worker_hosts):
             raise ValueError(
                 "Must supply either 'etcd_hosts' or 'worker_hosts'"
@@ -147,7 +152,7 @@ class AlluxioClient:
                 "Supply either 'etcd_hosts' or 'worker_hosts', not both"
             )
         if not etcd_hosts:
-            self.logger.warning(
+            logger.warning(
                 "'etcd_hosts' not supplied. An etcd cluster is required for dynamic cluster changes."
             )
         if not isinstance(etcd_port, int) or not (1 <= etcd_port <= 65535):
@@ -163,7 +168,7 @@ class AlluxioClient:
         if not isinstance(concurrency, int) or concurrency <= 0:
             raise ValueError("'concurrency' should be a positive integer")
         if concurrency < 10 or concurrency > 128:
-            self.logger.warning(
+            logger.warning(
                 f"'concurrency' value of {concurrency} is outside the recommended range (10-128). "
                 "This may lead to suboptimal performance or resource utilization.",
             )
@@ -177,23 +182,38 @@ class AlluxioClient:
         # parse options
         page_size = ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
         hash_node_per_worker = ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
+        self.data_manager = None
         if options:
             if ALLUXIO_PAGE_SIZE_KEY in options:
                 page_size = options[ALLUXIO_PAGE_SIZE_KEY]
-                self.logger.debug(f"Page size is set to {page_size}")
+                logger.debug(f"Page size is set to {page_size}")
             if ALLUXIO_HASH_NODE_PER_WORKER_KEY1 in options:
                 hash_node_per_worker = int(
                     options[ALLUXIO_HASH_NODE_PER_WORKER_KEY1]
                 )
-                self.logger.debug(
+                logger.debug(
                     f"Hash node per worker is set to {hash_node_per_worker}"
                 )
             if ALLUXIO_HASH_NODE_PER_WORKER_KEY2 in options:
                 hash_node_per_worker = int(
                     options[ALLUXIO_HASH_NODE_PER_WORKER_KEY2]
                 )
-                self.logger.debug(
+                logger.debug(
                     f"Hash node per worker is set to {hash_node_per_worker}"
+                )
+            if (
+                ALLUXIO_COMMON_EXTENSION_ENABLE in options
+                and options[ALLUXIO_COMMON_EXTENSION_ENABLE].lower() == "true"
+            ):
+                print("Using alluxiocommon extension..")
+                logger.debug("alluxiocommon extension enabled.")
+                ondemand_pool_disabled = (
+                    ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE in options
+                    and options[ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE].lower()
+                    == "true"
+                )
+                self.data_manager = _DataManager(
+                    concurrency, ondemand_pool_disabled=ondemand_pool_disabled
                 )
         if (
             not isinstance(hash_node_per_worker, int)
@@ -204,6 +224,8 @@ class AlluxioClient:
             )
 
         self.page_size = humanfriendly.parse_size(page_size, binary=True)
+        test_options = test_options or {}
+        set_log_level(logger, test_options)
 
         self.hash_provider = ConsistentHashProvider(
             etcd_hosts=etcd_hosts,
@@ -212,7 +234,6 @@ class AlluxioClient:
             worker_http_port=worker_http_port,
             hash_node_per_worker=hash_node_per_worker,
             options=options,
-            logger=self.logger,
             etcd_refresh_workers_interval=etcd_refresh_workers_interval,
         )
 
@@ -482,11 +503,18 @@ class AlluxioClient:
         )
         path_id = self._get_path_hash(file_path)
         try:
-            return b"".join(
-                self._all_page_generator(
-                    worker_host, worker_http_port, path_id
+            if self.data_manager:
+                return b"".join(
+                    self._all_page_generator_alluxiocommon(
+                        worker_host, worker_http_port, path_id
+                    )
                 )
-            )
+            else:
+                return b"".join(
+                    self._all_page_generator(
+                        worker_host, worker_http_port, path_id
+                    )
+                )
         except Exception as e:
             raise Exception(
                 f"Error when reading file {file_path}: error {e}"
@@ -504,6 +532,7 @@ class AlluxioClient:
         Returns:
             file content (str): The file content with length from offset
         """
+        logger.debug(f"read_range,off:{offset}:length:{length}")
         self._validate_path(file_path)
         if not isinstance(offset, int) or offset < 0:
             raise ValueError("Offset must be a non-negative integer")
@@ -528,15 +557,20 @@ class AlluxioClient:
         path_id = self._get_path_hash(file_path)
 
         try:
-            return b"".join(
-                self._range_page_generator(
+            if self.data_manager:
+                return self._range_page_generator_alluxiocommon(
                     worker_host, worker_http_port, path_id, offset, length
                 )
-            )
+            else:
+                return b"".join(
+                    self._range_page_generator(
+                        worker_host, worker_http_port, path_id, offset, length
+                    )
+                )
         except Exception as e:
             raise Exception(
-                f"Error when reading file {file_path}: error {e}: "
-                f"worker_host{worker_host}, worker_http_port:{worker_http_port}"
+                f"Error when reading file:{file_path}: error:{e}: "
+                f"worker_host:{worker_host}, worker_http_port:{worker_http_port}"
             ) from e
 
     def write_page(self, file_path, page_index, page_bytes):
@@ -574,6 +608,39 @@ class AlluxioClient:
                 f"Error writing to file {file_path} at page {page_index}: {e}"
             )
 
+    def _all_page_generator_alluxiocommon(
+        self, worker_host, worker_http_port, path_id
+    ):
+        page_index = 0
+        fetching_pages_num_each_round = 4
+        while True:
+            read_urls = []
+            try:
+                for _ in range(fetching_pages_num_each_round):
+                    page_url = FULL_PAGE_URL_FORMAT.format(
+                        worker_host=worker_host,
+                        http_port=worker_http_port,
+                        path_id=path_id,
+                        page_index=page_index,
+                    )
+                    read_urls.append(page_url)
+                    page_index += 1
+                pages_content = self.data_manager.make_multi_http_req(
+                    read_urls
+                )
+                yield pages_content
+                if (
+                    len(pages_content)
+                    < fetching_pages_num_each_round * self.page_size
+                ):
+                    break
+            except Exception as e:
+                # data_manager won't throw exception if there are any first few content retrieved
+                # hence we always propagte exception from data_manager upwards
+                raise Exception(
+                    f"Error when reading all pages of {path_id}: error {e}"
+                ) from e
+
     def _all_page_generator(self, worker_host, worker_http_port, path_id):
         page_index = 0
         while True:
@@ -595,6 +662,39 @@ class AlluxioClient:
             if len(page_content) < self.page_size:  # last page
                 break
             page_index += 1
+
+    def _range_page_generator_alluxiocommon(
+        self, worker_host, worker_http_port, path_id, offset, length
+    ):
+        read_urls = []
+        start = offset
+        while start < offset + length:
+            page_index = start // self.page_size
+            inpage_off = start % self.page_size
+            inpage_read_len = min(
+                self.page_size - inpage_off, offset + length - start
+            )
+            page_url = None
+            if inpage_off == 0 and inpage_read_len == self.page_size:
+                page_url = FULL_PAGE_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    page_index=page_index,
+                )
+            else:
+                page_url = PAGE_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    page_index=page_index,
+                    page_offset=inpage_off,
+                    page_length=inpage_read_len,
+                )
+            read_urls.append(page_url)
+            start += inpage_read_len
+        data = self.data_manager.make_multi_http_req(read_urls)
+        return data
 
     def _range_page_generator(
         self, worker_host, worker_http_port, path_id, offset, length
@@ -685,25 +785,23 @@ class AlluxioClient:
                 if job_state == LoadState.SUCCEEDED:
                     return True
                 if job_state == LoadState.FAILED:
-                    self.logger.error(
+                    logger.error(
                         f"Failed to load path {path} with return message {content}"
                     )
                     return False
                 if job_state == LoadState.STOPPED:
-                    self.logger.warning(
+                    logger.warning(
                         f"Failed to load path {path} with return message {content}, load stopped"
                     )
                     return False
                 if timeout is None or stop_time - time.time() >= 10:
                     time.sleep(10)
                 else:
-                    self.logger.debug(
-                        f"Failed to load path {path} within timeout"
-                    )
+                    logger.debug(f"Failed to load path {path} within timeout")
                     return False
 
         except Exception as e:
-            self.logger.debug(
+            logger.debug(
                 f"Error when loading file {path} from {worker_host} with timeout {timeout}: error {e}"
             )
             return False
@@ -750,7 +848,7 @@ class AlluxioClient:
                     path_id=path_id,
                     page_index=page_index,
                 )
-                self.logger.debug(f"Reading full page request {page_url}")
+                logger.debug(f"Reading full page request {page_url}")
             else:
                 page_url = PAGE_URL_FORMAT.format(
                     worker_host=worker_host,
@@ -760,7 +858,7 @@ class AlluxioClient:
                     page_offset=offset,
                     page_length=length,
                 )
-                self.logger.debug(f"Reading page request {page_url}")
+                logger.debug(f"Reading page request {page_url}")
             response = self.session.get(page_url)
             response.raise_for_status()
             return response.content
@@ -833,7 +931,6 @@ class AlluxioAsyncFileSystem:
         etcd_hosts=None,
         worker_hosts=None,
         options=None,
-        logger=None,
         http_port="28080",
         etcd_port="2379",
         loop=None,
@@ -850,8 +947,6 @@ class AlluxioAsyncFileSystem:
             options (dict, optional):
                 A dictionary of Alluxio property key and values.
                 Note that Alluxio Python API only support a limited set of Alluxio properties.
-            logger (Logger, optional):
-                A logger instance for logging messages.
             etcd_port (str, optional):
                 The port of each etcd server.
             http_port (string, optional):
@@ -865,7 +960,6 @@ class AlluxioAsyncFileSystem:
             raise ValueError(
                 "Supply either 'etcd_hosts' or 'worker_hosts', not both"
             )
-        self.logger = logger or logging.getLogger("AlluxioClient")
         self._session = None
 
         # parse options
@@ -873,7 +967,7 @@ class AlluxioAsyncFileSystem:
         if options:
             if ALLUXIO_PAGE_SIZE_KEY in options:
                 page_size = options[ALLUXIO_PAGE_SIZE_KEY]
-                self.logger.debug(f"Page size is set to {page_size}")
+                logger.debug(f"Page size is set to {page_size}")
         self.page_size = humanfriendly.parse_size(page_size, binary=True)
         self.hash_provider = ConsistentHashProvider(
             etcd_hosts=etcd_hosts,
@@ -882,7 +976,6 @@ class AlluxioAsyncFileSystem:
             worker_http_port=int(http_port),
             hash_node_per_worker=ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE,
             options=options,
-            logger=self.logger,
             etcd_refresh_workers_interval=120,
         )
         self.http_port = http_port
@@ -1183,19 +1276,19 @@ class AlluxioAsyncFileSystem:
             if job_state == LoadState.SUCCEEDED:
                 return True
             if job_state == LoadState.FAILED:
-                self.logger.debug(
+                logger.debug(
                     f"Failed to load path {path} with return message {content}"
                 )
                 return False
             if job_state == LoadState.STOPPED:
-                self.logger.debug(
+                logger.debug(
                     f"Failed to load path {path} with return message {content}, load stopped"
                 )
                 return False
             if timeout is None or stop_time - time.time() >= 10:
                 asyncio.sleep(10)
             else:
-                self.logger.debug(f"Failed to load path {path} within timeout")
+                logger.debug(f"Failed to load path {path} within timeout")
                 return False
 
     async def _load_progress_internal(self, load_url: str):

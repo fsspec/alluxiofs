@@ -27,6 +27,7 @@ setup(
             "pytest",
             "pytest-aiohttp",
             "ray",
+            "pyarrow",
         ]
     },
     python_requires=">=3.8",
