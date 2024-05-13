@@ -174,7 +174,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                     start_time = time.time()
                     res = alluxio_impl(self, path, *args, **kwargs)
                     self.logger.debug(
-                        f"Successfully called {alluxio_impl.__name__} against alluxio server with args ({args}), kwargs ({kwargs}) for {time.time() - start_time} ms"
+                        f"Successfully called {alluxio_impl.__name__} against alluxio server with args ({args}), kwargs ({kwargs}) for {time.time() - start_time} s"
                     )
                     return res
             except Exception as e:
