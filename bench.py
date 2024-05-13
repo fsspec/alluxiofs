@@ -1,6 +1,7 @@
 #!/bin/python3
 import argparse
 import json
+import logging
 import os
 import shutil
 import time
@@ -95,6 +96,7 @@ def init_main_parser():
         required=False,
         help="The location to store the benchmark result",
     )
+    return parser
 
 
 def get_test_suite(main_parser, main_args, process_id, num_process):
@@ -143,10 +145,22 @@ def create_empty_dir(path):
     os.makedirs(path, exist_ok=True)
 
 
+def configure_logging(path):
+    log_path = os.path.join(path, "bench.log")
+    logging.basicConfig(
+        filename=log_path,
+        level=logging.DEBUG,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    )
+    logger = logging.getLogger("bench")
+    return logger
+
+
 def main():
     main_parser = init_main_parser()
     main_args, remaining_args = main_parser.parse_known_args()
     create_empty_dir(main_args.result_dir)
+    logger = configure_logging(main_args.result_dir)
     i_am_child = False
     for i in range(main_args.numjobs):
         processid = os.fork()
@@ -179,13 +193,13 @@ def main():
 
             duration = time.time() - start_time
             print(
-                f"Benchmark against {test_suite.args.op}: "
+                f"Benchmark against {main_args.testsuite}: "
                 f"total time: {duration} seconds"
             )
 
             result = {
                 "worker": i,
-                "op": test_suite.args.op,
+                "op": main_args.testsuite,
                 "metrics": {
                     DURATION_METRIC_KEY: duration,
                 },
@@ -215,6 +229,7 @@ def main():
             )
             with open(json_result_location, "w") as f:
                 json.dump(result, f)
+            print(f"Find more benchmark results in dir {main_args.result_dir}")
         else:
             print(f"Parent Process, {i}th Child process, id:{processid}")
     if not i_am_child:

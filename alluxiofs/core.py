@@ -1,5 +1,5 @@
 import logging
-from datetime import time
+import time
 from functools import wraps
 from typing import Callable
 
@@ -8,6 +8,8 @@ from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
 
 from alluxiofs.client import AlluxioClient
+
+logger = logging.getLogger("alluxiofs")
 
 
 class AlluxioErrorMetrics:
@@ -36,7 +38,6 @@ class AlluxioFileSystem(AbstractFileSystem):
         etcd_hosts=None,
         worker_hosts=None,
         options=None,
-        logger=None,
         concurrency=64,
         etcd_port=2379,
         worker_http_port=28080,
@@ -60,8 +61,6 @@ class AlluxioFileSystem(AbstractFileSystem):
                 Either `etcd_hosts` or `worker_hosts` must be specified, not both.
             options (dict, optional): A dictionary of Alluxio configuration options where keys are property names and values are property values.
                 These options configure the Alluxio client behavior.
-            logger (logging.Logger, optional): A logger instance for logging messages.
-                If not provided, a default logger with the name "AlluxioFileSystem" is used.
             concurrency (int, optional): The maximum number of concurrent operations (e.g., reads, writes) that the file system interface will allow. Defaults to 64.
             etcd_port (int, optional): The port number used by each etcd server.
                 Relevant only if `etcd_hosts` is specified.
@@ -81,14 +80,13 @@ class AlluxioFileSystem(AbstractFileSystem):
             **kwargs: other parameters for core session.
         """
         super().__init__(**kwargs)
-        self.logger = logger or logging.getLogger("Alluxiofs")
         if fs and target_protocol:
             raise ValueError(
                 "Please provide one of filesystem instance (fs) or"
                 " target_protocol, not both"
             )
         if fs is None and target_protocol is None:
-            self.logger.warning(
+            logger.warning(
                 "Neither filesystem instance(fs) nor target_protocol is "
                 "provided. Will not fall back to under file systems when "
                 "accessed files are not in Alluxiofs"
@@ -108,7 +106,6 @@ class AlluxioFileSystem(AbstractFileSystem):
                 etcd_hosts=etcd_hosts,
                 worker_hosts=worker_hosts,
                 options=options,
-                logger=logger,
                 concurrency=concurrency,
                 etcd_port=etcd_port,
                 worker_http_port=worker_http_port,
@@ -173,13 +170,13 @@ class AlluxioFileSystem(AbstractFileSystem):
                 if self.alluxio:
                     start_time = time.time()
                     res = alluxio_impl(self, path, *args, **kwargs)
-                    self.logger.debug(
-                        f"Successfully called {alluxio_impl.__name__} against alluxio server with args ({args}), kwargs ({kwargs}) for {time.time() - start_time} s"
+                    logger.debug(
+                        f"Successfully called {alluxio_impl.__name__} against alluxio server with args ({args}), kwargs ({kwargs}) for {(time.time() - start_time):.2f} s"
                     )
                     return res
             except Exception as e:
                 if not isinstance(e, NotImplementedError):
-                    self.logger.debug(
+                    logger.debug(
                         f"Failed to call {alluxio_impl.__name__} against alluxio server with args ({args}), kwargs ({kwargs}): {e}"
                     )
                     self.error_metrics.record_error(alluxio_impl.__name__, e)
@@ -188,7 +185,7 @@ class AlluxioFileSystem(AbstractFileSystem):
 
             fs_method = getattr(self.fs, alluxio_impl.__name__, None)
             if fs_method:
-                self.logger.debug(
+                logger.debug(
                     f"Fallback to call {alluxio_impl.__name__} against underlying fs with args ({args}), kwargs ({kwargs})"
                 )
                 return fs_method(path, *args, **kwargs)
