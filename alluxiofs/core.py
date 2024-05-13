@@ -8,8 +8,9 @@ from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
 
 from alluxiofs.client import AlluxioClient
+from alluxiofs.client.utils import set_log_level
 
-logger = logging.getLogger("alluxiofs")
+logger = logging.getLogger(__name__)
 
 
 class AlluxioErrorMetrics:
@@ -99,6 +100,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             self.fs = filesystem(target_protocol, **self.kwargs)
 
         test_options = test_options or {}
+        set_log_level(logger, test_options)
         if test_options.get("skip_alluxio") is True:
             self.alluxio = None
         else:
@@ -109,20 +111,10 @@ class AlluxioFileSystem(AbstractFileSystem):
                 concurrency=concurrency,
                 etcd_port=etcd_port,
                 worker_http_port=worker_http_port,
+                test_options=test_options,
             )
             if preload_path is not None:
                 self.alluxio.load(preload_path)
-
-        if "log_level" in test_options:
-            log_level = test_options["log_level"].upper()
-            if log_level == "DEBUG":
-                logger.setLevel(logging.DEBUG)
-            elif log_level == "INFO":
-                logger.setLevel(logging.INFO)
-            elif log_level == "WARN" or log_level == "WARNING":
-                logger.setLevel(logging.WARN)
-            else:
-                logger.warning(f"Unsupported log level: {log_level}")
 
         # Remove "alluxio::" from the given single path or list of path
         def _strip_alluxio_protocol(path):

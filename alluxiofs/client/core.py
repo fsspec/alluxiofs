@@ -15,6 +15,8 @@ import humanfriendly
 import requests
 from requests.adapters import HTTPAdapter
 
+from .utils import set_log_level
+
 try:
     from alluxiocommon import _DataManager
 except ModuleNotFoundError:
@@ -41,7 +43,7 @@ from .const import PAGE_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
 from .worker_ring import ConsistentHashProvider
 
-logger = logging.getLogger("alluxiopy")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -116,6 +118,7 @@ class AlluxioClient:
         etcd_port=2379,
         worker_http_port=ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
         etcd_refresh_workers_interval=120,
+        test_options=None,
     ):
         """
         Inits Alluxio file system.
@@ -221,6 +224,8 @@ class AlluxioClient:
             )
 
         self.page_size = humanfriendly.parse_size(page_size, binary=True)
+        test_options = test_options or {}
+        set_log_level(logger, test_options)
 
         self.hash_provider = ConsistentHashProvider(
             etcd_hosts=etcd_hosts,
@@ -229,7 +234,6 @@ class AlluxioClient:
             worker_http_port=worker_http_port,
             hash_node_per_worker=hash_node_per_worker,
             options=options,
-            logger=logger,
             etcd_refresh_workers_interval=etcd_refresh_workers_interval,
         )
 
@@ -689,7 +693,6 @@ class AlluxioClient:
                 )
             read_urls.append(page_url)
             start += inpage_read_len
-        logger.debug(f"read_urls:{read_urls}")
         data = self.data_manager.make_multi_http_req(read_urls)
         return data
 
@@ -928,7 +931,6 @@ class AlluxioAsyncFileSystem:
         etcd_hosts=None,
         worker_hosts=None,
         options=None,
-        logger=None,
         http_port="28080",
         etcd_port="2379",
         loop=None,
@@ -945,8 +947,6 @@ class AlluxioAsyncFileSystem:
             options (dict, optional):
                 A dictionary of Alluxio property key and values.
                 Note that Alluxio Python API only support a limited set of Alluxio properties.
-            logger (Logger, optional):
-                A logger instance for logging messages.
             etcd_port (str, optional):
                 The port of each etcd server.
             http_port (string, optional):
@@ -960,7 +960,6 @@ class AlluxioAsyncFileSystem:
             raise ValueError(
                 "Supply either 'etcd_hosts' or 'worker_hosts', not both"
             )
-        logger = logger or logging.getLogger("AlluxioClient")
         self._session = None
 
         # parse options
@@ -977,7 +976,6 @@ class AlluxioAsyncFileSystem:
             worker_http_port=int(http_port),
             hash_node_per_worker=ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE,
             options=options,
-            logger=logger,
             etcd_refresh_workers_interval=120,
         )
         self.http_port = http_port
