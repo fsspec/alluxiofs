@@ -33,7 +33,7 @@ class AlluxioErrorMetrics:
 
 
 class AlluxioFileSystem(AbstractFileSystem):
-    protocol = "alluxio"
+    protocol = "alluxiofs"
 
     def __init__(
         self,
@@ -127,12 +127,12 @@ class AlluxioFileSystem(AbstractFileSystem):
             if preload_path is not None:
                 self.alluxio.load(preload_path)
 
-        def _replace_alluxio_protocol(path):
+        def _replace_alluxiofs_protocol(path):
             def _replace_individual_path(p):
                 if p.startswith(self.protocol):
                     if self.target_protocol is None:
                         raise TypeError(
-                            "Filesystem instance(fs) or target_protocol should be provided to use alluxio:// schema"
+                            "Filesystem instance(fs) or target_protocol should be provided to use alluxiofs:// schema"
                         )
                     return self.target_protocol + p[len(self.protocol) :]
                 return p
@@ -144,10 +144,12 @@ class AlluxioFileSystem(AbstractFileSystem):
             else:
                 raise TypeError("Path must be a string or a list of strings")
 
-        self._replace_alluxio_protocol: Callable = _replace_alluxio_protocol
+        self._replace_alluxiofs_protocol: Callable = (
+            _replace_alluxiofs_protocol
+        )
 
         def _strip_protocol(path):
-            path = self._replace_alluxio_protocol(path)
+            path = self._replace_alluxiofs_protocol(path)
             if self.fs:
                 return self.fs._strip_protocol(
                     type(self)._strip_protocol(path)
@@ -160,7 +162,7 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def unstrip_protocol(self, path):
         if self.fs:
-            # avoid adding Alluxio protocol to the full ufs url
+            # avoid adding Alluxiofs protocol to the full ufs url
             return self.fs.unstrip_protocol(path)
         return path
 
@@ -192,7 +194,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                 if param in bound_args.arguments:
                     bound_args.arguments[
                         param
-                    ] = self._replace_alluxio_protocol(
+                    ] = self._replace_alluxiofs_protocol(
                         bound_args.arguments[param]
                     )
 

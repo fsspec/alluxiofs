@@ -1,6 +1,10 @@
 import re
 
+from alluxiofs import AlluxioFileSystem
 
-def replace_protocol_with_alluxio(file_path):
+
+def replace_protocol_with_alluxiofs(file_path):
     protocol_pattern = r"^\w+://"
-    return re.sub(protocol_pattern, "alluxio://", file_path)
+    return re.sub(
+        protocol_pattern, AlluxioFileSystem.protocol + "://", file_path
+    )

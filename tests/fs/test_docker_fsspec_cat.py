@@ -4,7 +4,7 @@ import random
 from alluxiofs import AlluxioFileSystem
 from tests.conftest import ALLUXIO_FILE_PATH
 from tests.conftest import LOCAL_FILE_PATH
-from tests.fs.utils import replace_protocol_with_alluxio
+from tests.fs.utils import replace_protocol_with_alluxiofs
 
 NUM_TESTS = 10
 
@@ -88,7 +88,7 @@ def test_alluxio_fsspec_cat_file(alluxio_file_system: AlluxioFileSystem):
     )
     alluxio_fsspec_cat_file(
         alluxio_file_system,
-        replace_protocol_with_alluxio(ALLUXIO_FILE_PATH),
+        replace_protocol_with_alluxiofs(ALLUXIO_FILE_PATH),
         LOCAL_FILE_PATH,
     )
     alluxio_fsspec_cat_file(alluxio_file_system, FILE_PATH, LOCAL_FILE_PATH)
