@@ -5,11 +5,19 @@ import re
 from alluxiofs import AlluxioFileSystem
 
 
-def replace_protocol_with_alluxiofs(file_path):
+def use_alluxiofs_protocol(file_path):
     protocol_pattern = r"^\w+://"
-    return re.sub(
-        protocol_pattern, AlluxioFileSystem.protocol + "://", file_path
-    )
+    if re.match(protocol_pattern, file_path):
+        file_path = re.sub(
+            protocol_pattern, AlluxioFileSystem.protocol + "://", file_path
+        )
+    else:
+        file_path = AlluxioFileSystem.protocol + "://" + file_path
+    return file_path
+
+
+def remove_alluxiofs_protocol(file_path):
+    return re.sub(r"^\w+://", "", file_path)
 
 
 def configure_logging(dir, name="alluxiofs", log_level=logging.INFO):
