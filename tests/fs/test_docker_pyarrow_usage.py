@@ -8,7 +8,7 @@ from alluxiofs import AlluxioFileSystem
 from tests.conftest import ALLUXIO_FILE_PATH
 from tests.conftest import LOCAL_FILE_PATH
 from tests.fs.test_docker_fsspec_cat import FILE_PATH
-from tests.fs.utils import replace_protocol_with_alluxiofs
+from tests.utils import replace_protocol_with_alluxiofs
 
 LOGGER = logging.getLogger(__name__)
 

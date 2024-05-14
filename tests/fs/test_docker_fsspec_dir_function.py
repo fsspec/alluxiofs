@@ -10,7 +10,7 @@ LOGGER = logging.getLogger(__name__)
 DIR_PATH = "/opt/alluxio/ufs"
 SUB_DIR_PATH = "/opt/alluxio/ufs/hash_res"
 FILE_PREFIX = "file://"
-ALLUXIO_PREFIX = "alluxio://"
+ALLUXIO_PREFIX = "alluxiofs://"
 
 
 def check_dir_info(dir_info, dir_path):
