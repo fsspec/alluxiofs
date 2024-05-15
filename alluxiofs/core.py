@@ -127,29 +127,27 @@ class AlluxioFileSystem(AbstractFileSystem):
             if preload_path is not None:
                 self.alluxio.load(preload_path)
 
-        def _replace_alluxiofs_protocol(path):
-            def _replace_individual_path(p):
-                if p.startswith(self.protocol):
+        def _strip_alluxiofs_protocol(path):
+            def _strip_individual_path(p):
+                if p.startswith(self.protocol + "://"):
                     if self.target_protocol is None:
                         raise TypeError(
                             "Filesystem instance(fs) or target_protocol should be provided to use alluxiofs:// schema"
                         )
-                    return self.target_protocol + p[len(self.protocol) :]
+                    return p[len(self.protocol) + 3 :]
                 return p
 
             if isinstance(path, str):
-                return _replace_individual_path(path)
+                return _strip_individual_path(path)
             elif isinstance(path, list):
-                return [_replace_individual_path(p) for p in path]
+                return [_strip_individual_path(p) for p in path]
             else:
                 raise TypeError("Path must be a string or a list of strings")
 
-        self._replace_alluxiofs_protocol: Callable = (
-            _replace_alluxiofs_protocol
-        )
+        self._strip_alluxiofs_protocol: Callable = _strip_alluxiofs_protocol
 
         def _strip_protocol(path):
-            path = self._replace_alluxiofs_protocol(path)
+            path = self._strip_alluxiofs_protocol(path)
             if self.fs:
                 return self.fs._strip_protocol(
                     type(self)._strip_protocol(path)
@@ -194,22 +192,25 @@ class AlluxioFileSystem(AbstractFileSystem):
                 if param in bound_args.arguments:
                     bound_args.arguments[
                         param
-                    ] = self._replace_alluxiofs_protocol(
+                    ] = self._strip_alluxiofs_protocol(
                         bound_args.arguments[param]
                     )
 
             try:
                 if self.alluxio:
                     start_time = time.time()
+                    logger.debug(
+                        f"Enter: alluxio op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs})"
+                    )
                     res = alluxio_impl(*bound_args.args, **bound_args.kwargs)
                     logger.debug(
-                        f"Exit(Ok): alluxio op({alluxio_impl.__name__}) args({bound_args.args}) time({(time.time() - start_time):.2f}s)"
+                        f"Exit(Ok): alluxio op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs}) time({(time.time() - start_time):.2f}s)"
                     )
                     return res
             except Exception as e:
                 if not isinstance(e, NotImplementedError):
                     logger.debug(
-                        f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({bound_args.args}) {e}"
+                        f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs}) {e}"
                     )
                     self.error_metrics.record_error(alluxio_impl.__name__, e)
                 if self.fs is None:
@@ -217,9 +218,12 @@ class AlluxioFileSystem(AbstractFileSystem):
 
             fs_method = getattr(self.fs, alluxio_impl.__name__, None)
             if fs_method:
+                logger.debug(
+                    f"Enter: ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs})"
+                )
                 res = fs_method(*bound_args.args[1:], **bound_args.kwargs)
                 logger.debug(
-                    f"Exit(Ok): ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({bound_args.args})"
+                    f"Exit(Ok): ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs})"
                 )
                 return res
             raise NotImplementedError(
