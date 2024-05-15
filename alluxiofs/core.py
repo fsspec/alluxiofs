@@ -34,6 +34,7 @@ class AlluxioErrorMetrics:
 
 class AlluxioFileSystem(AbstractFileSystem):
     protocol = "alluxiofs"
+    protocol_prefix = f"{protocol}://"
 
     def __init__(
         self,
@@ -129,12 +130,12 @@ class AlluxioFileSystem(AbstractFileSystem):
 
         def _strip_alluxiofs_protocol(path):
             def _strip_individual_path(p):
-                if p.startswith(self.protocol + "://"):
+                if p.startswith(self.protocol_prefix):
                     if self.target_protocol is None:
                         raise TypeError(
-                            "Filesystem instance(fs) or target_protocol should be provided to use alluxiofs:// schema"
+                            f"Filesystem instance(fs) or target_protocol should be provided to use {self.protocol_prefix} schema"
                         )
-                    return p[len(self.protocol) + 3 :]
+                    return p[len(self.protocol_prefix) :]
                 return p
 
             if isinstance(path, str):

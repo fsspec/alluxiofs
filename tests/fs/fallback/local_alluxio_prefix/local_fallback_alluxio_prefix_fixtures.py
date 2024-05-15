@@ -1,5 +1,3 @@
-import logging
-
 import pytest
 from fsspec.implementations.local import make_path_posix
 from fsspec.tests.abstract import AbstractFixtures
@@ -7,8 +5,6 @@ from fsspec.tests.abstract import AbstractFixtures
 from alluxiofs import AlluxioFileSystem
 from tests.utils import remove_alluxiofs_protocol
 from tests.utils import use_alluxiofs_protocol
-
-logger = logging.getLogger(__name__)
 
 
 def make_alluxiofs_path_posix(path):
@@ -19,12 +15,11 @@ def make_alluxiofs_path_posix(path):
 class LocalFallbackAlluxioPrefixFixtures(AbstractFixtures):
     @pytest.fixture(scope="class")
     def fs(self):
-        logger.info("Running test_example_function.")
         return AlluxioFileSystem(
             etcd_hosts="localhost",
             target_protocol="file",
             target_options={"auto_mkdir": True},
-            test_options={"skip_alluxio": True, "log_level": "debug"},
+            test_options={"skip_alluxio": True},
         )
 
     @pytest.fixture
