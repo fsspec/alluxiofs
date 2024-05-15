@@ -48,9 +48,11 @@ def process_path(alluxio, path, metrics):
 def main(args):
     start_time = time.time()
 
-    fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+    fsspec.register_implementation(
+        "alluxiofs", AlluxioFileSystem, clobber=True
+    )
     alluxio = fsspec.filesystem(
-        "alluxio", etcd_hosts=args.etcd_hosts, target_protocol="s3"
+        "alluxiofs", etcd_hosts=args.etcd_hosts, target_protocol="s3"
     )
 
     metrics = {

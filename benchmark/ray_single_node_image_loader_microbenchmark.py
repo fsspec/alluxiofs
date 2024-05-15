@@ -422,7 +422,9 @@ def build_hf_dataloader(
 
 
 def setup_alluxio(args):
-    fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+    fsspec.register_implementation(
+        "alluxiofs", AlluxioFileSystem, clobber=True
+    )
     alluxio_kwargs = {}
     if args.alluxio_etcd_hosts and args.alluxio_worker_hosts:
         raise ValueError(
