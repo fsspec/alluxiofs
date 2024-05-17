@@ -100,6 +100,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         if fs is not None:
             self.fs = fs
             if isinstance(self.fs.protocol, tuple):
+                # e.g. file or local both representing local filesystem
                 self.target_protocol = self.fs.protocol[0]
             elif isinstance(self.fs.protocol, str):
                 self.target_protocol = self.fs.protocol
@@ -187,8 +188,14 @@ class AlluxioFileSystem(AbstractFileSystem):
         @wraps(alluxio_impl)
         def fallback_wrapper(self, *args, **kwargs):
             signature = inspect.signature(alluxio_impl)
+
+            # process path related arguments to remove alluxiofs protocol
+            # since both alluxio and ufs cannot process alluxiofs protocol
+            # Require s3://bucket/path or /bucket/path
             bound_args = signature.bind(self, *args, **kwargs)
             bound_args.apply_defaults()
+            # fsspec path parameters has different names and sequences
+            # use this approach to try to process all path related parameters
             for param in ["path", "path1", "path2", "lpath", "rpath"]:
                 if param in bound_args.arguments:
                     bound_args.arguments[
@@ -200,9 +207,6 @@ class AlluxioFileSystem(AbstractFileSystem):
             try:
                 if self.alluxio:
                     start_time = time.time()
-                    logger.debug(
-                        f"Enter: alluxio op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs})"
-                    )
                     res = alluxio_impl(*bound_args.args, **bound_args.kwargs)
                     logger.debug(
                         f"Exit(Ok): alluxio op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs}) time({(time.time() - start_time):.2f}s)"
@@ -219,9 +223,6 @@ class AlluxioFileSystem(AbstractFileSystem):
 
             fs_method = getattr(self.fs, alluxio_impl.__name__, None)
             if fs_method:
-                logger.debug(
-                    f"Enter: ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs})"
-                )
                 res = fs_method(*bound_args.args[1:], **bound_args.kwargs)
                 logger.debug(
                     f"Exit(Ok): ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs})"
