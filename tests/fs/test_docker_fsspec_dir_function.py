@@ -3,8 +3,8 @@ import os
 
 from alluxiofs import AlluxioFileSystem
 from tests.conftest import LOCAL_FILE_PATH
-from tests.fs.test_docker_fsspec_cat import ALLUXIO_PREFIX
 from tests.fs.test_docker_fsspec_file_function import check_file_info
+from tests.utils import use_alluxiofs_protocol
 
 LOGGER = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def test_alluxio_fsspec_dir_function(alluxio_file_system: AlluxioFileSystem):
     alluxio_fsspec_test_dir(alluxio_file_system, DIR_PATH)
     alluxio_fsspec_test_dir(alluxio_file_system, FILE_PREFIX + DIR_PATH)
     alluxio_fsspec_test_dir(
-        alluxio_file_system, ALLUXIO_PREFIX + FILE_PREFIX + DIR_PATH
+        alluxio_file_system, use_alluxiofs_protocol(DIR_PATH)
     )
 
 

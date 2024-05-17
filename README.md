@@ -100,10 +100,10 @@ import fsspec
 from alluxiofs import AlluxioFileSystem
 
 # Register Alluxio to fsspec
-fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
 
 # Create Alluxio filesystem
-alluxio_fs = fsspec.filesystem("alluxio", etcd_hosts="localhost", etcd_port=2379, target_protocol="s3")
+alluxio_fs = fsspec.filesystem("alluxiofs", etcd_hosts="localhost", etcd_port=2379, target_protocol="s3")
 ```
 
 ### Run Alluxio FileSystem operations
@@ -127,9 +127,9 @@ import ray
 from alluxiofs import AlluxioFileSystem
 
 # Register the Alluxio fsspec implementation
-fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
 alluxio_fs = fsspec.filesystem(
-  "alluxio", etcd_hosts="localhost", target_protocol="s3"
+  "alluxiofs", etcd_hosts="localhost", target_protocol="s3"
 )
 
 # Pass the initialized Alluxio filesystem to Ray and read the NYC taxi ride data set
@@ -163,9 +163,9 @@ import fsspec
 from alluxiofs import AlluxioFileSystem
 
 # Register the Alluxio fsspec implementation
-fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
 alluxio_fs = fsspec.filesystem(
-  "alluxio", etcd_hosts="localhost", target_protocol="s3"
+  "alluxiofs", etcd_hosts="localhost", target_protocol="s3"
 )
 
 # Example 1

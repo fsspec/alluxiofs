@@ -1,3 +1,4 @@
+import inspect
 import logging
 import time
 from functools import wraps
@@ -32,7 +33,8 @@ class AlluxioErrorMetrics:
 
 
 class AlluxioFileSystem(AbstractFileSystem):
-    protocol = "alluxio"
+    protocol = "alluxiofs"
+    protocol_prefix = f"{protocol}://"
 
     def __init__(
         self,
@@ -94,11 +96,22 @@ class AlluxioFileSystem(AbstractFileSystem):
             )
         self.kwargs = target_options or {}
         self.fs = None
+        self.target_protocol = None
         if fs is not None:
             self.fs = fs
+            if isinstance(self.fs.protocol, tuple):
+                # e.g. file or local both representing local filesystem
+                self.target_protocol = self.fs.protocol[0]
+            elif isinstance(self.fs.protocol, str):
+                self.target_protocol = self.fs.protocol
+            else:
+                raise TypeError(
+                    "target filesystem protocol should be str or tuple but found "
+                    + self.fs.protocol
+                )
         elif target_protocol is not None:
             self.fs = filesystem(target_protocol, **self.kwargs)
-
+            self.target_protocol = target_protocol
         test_options = test_options or {}
         set_log_level(logger, test_options)
         if test_options.get("skip_alluxio") is True:
@@ -116,11 +129,14 @@ class AlluxioFileSystem(AbstractFileSystem):
             if preload_path is not None:
                 self.alluxio.load(preload_path)
 
-        # Remove "alluxio::" from the given single path or list of path
-        def _strip_alluxio_protocol(path):
+        def _strip_alluxiofs_protocol(path):
             def _strip_individual_path(p):
-                if p.startswith(self.protocol + "::"):
-                    return p[len(self.protocol) + 2 :]
+                if p.startswith(self.protocol_prefix):
+                    if self.target_protocol is None:
+                        raise TypeError(
+                            f"Filesystem instance(fs) or target_protocol should be provided to use {self.protocol_prefix} schema"
+                        )
+                    return p[len(self.protocol_prefix) :]
                 return p
 
             if isinstance(path, str):
@@ -130,10 +146,10 @@ class AlluxioFileSystem(AbstractFileSystem):
             else:
                 raise TypeError("Path must be a string or a list of strings")
 
-        self._strip_alluxio_protocol: Callable = _strip_alluxio_protocol
+        self._strip_alluxiofs_protocol: Callable = _strip_alluxiofs_protocol
 
         def _strip_protocol(path):
-            path = self._strip_alluxio_protocol(path)
+            path = self._strip_alluxiofs_protocol(path)
             if self.fs:
                 return self.fs._strip_protocol(
                     type(self)._strip_protocol(path)
@@ -145,31 +161,61 @@ class AlluxioFileSystem(AbstractFileSystem):
         self.error_metrics = AlluxioErrorMetrics()
 
     def unstrip_protocol(self, path):
-        path = self._strip_alluxio_protocol(path)
         if self.fs:
-            # avoid adding Alluxio protocol to the full ufs url
+            # avoid adding Alluxiofs protocol to the full ufs url
             return self.fs.unstrip_protocol(path)
         return path
 
     def get_error_metrics(self):
         return self.error_metrics.get_metrics()
 
+    def _translate_alluxio_info_to_fsspec_info(self, file_status, detail):
+        if detail:
+            return {
+                "name": self._strip_protocol(file_status.ufs_path),
+                "type": file_status.type,
+                "size": file_status.length
+                if file_status.type == "file"
+                else None,
+                "last_modification_time_ms": getattr(
+                    file_status, "last_modification_time_ms", None
+                ),
+            }
+        else:
+            return self._strip_protocol(file_status.ufs_path)
+
     def fallback_handler(alluxio_impl):
         @wraps(alluxio_impl)
-        def fallback_wrapper(self, path, *args, **kwargs):
-            path = self._strip_alluxio_protocol(path)
+        def fallback_wrapper(self, *args, **kwargs):
+            signature = inspect.signature(alluxio_impl)
+
+            # process path related arguments to remove alluxiofs protocol
+            # since both alluxio and ufs cannot process alluxiofs protocol
+            # Require s3://bucket/path or /bucket/path
+            bound_args = signature.bind(self, *args, **kwargs)
+            bound_args.apply_defaults()
+            # fsspec path parameters has different names and sequences
+            # use this approach to try to process all path related parameters
+            for param in ["path", "path1", "path2", "lpath", "rpath"]:
+                if param in bound_args.arguments:
+                    bound_args.arguments[
+                        param
+                    ] = self._strip_alluxiofs_protocol(
+                        bound_args.arguments[param]
+                    )
+
             try:
                 if self.alluxio:
                     start_time = time.time()
-                    res = alluxio_impl(self, path, *args, **kwargs)
+                    res = alluxio_impl(*bound_args.args, **bound_args.kwargs)
                     logger.debug(
-                        f"Exit(Ok): alluxio op({alluxio_impl.__name__}) path({path}) args({args}) time({(time.time() - start_time):.2f}s)"
+                        f"Exit(Ok): alluxio op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs}) time({(time.time() - start_time):.2f}s)"
                     )
                     return res
             except Exception as e:
                 if not isinstance(e, NotImplementedError):
                     logger.debug(
-                        f"Exit(Error): alluxio op({alluxio_impl.__name__}) path({path}) args({args}) {e}"
+                        f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs}) {e}"
                     )
                     self.error_metrics.record_error(alluxio_impl.__name__, e)
                 if self.fs is None:
@@ -177,13 +223,13 @@ class AlluxioFileSystem(AbstractFileSystem):
 
             fs_method = getattr(self.fs, alluxio_impl.__name__, None)
             if fs_method:
-                res = fs_method(path, *args, **kwargs)
+                res = fs_method(*bound_args.args[1:], **bound_args.kwargs)
                 logger.debug(
-                    f"Exit(Ok): ufs({self.fs.protocol}) op({alluxio_impl.__name__}) path({path}) args {args})"
+                    f"Exit(Ok): ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs})"
                 )
                 return res
             raise NotImplementedError(
-                f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.fs.protocol}"
+                f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.target_protocol}"
             )
 
         return fallback_wrapper
@@ -203,20 +249,9 @@ class AlluxioFileSystem(AbstractFileSystem):
         file_status = self.alluxio.get_file_status(path)
         return self._translate_alluxio_info_to_fsspec_info(file_status, True)
 
-    def _translate_alluxio_info_to_fsspec_info(self, file_status, detail):
-        if detail:
-            return {
-                "name": self._strip_protocol(file_status.ufs_path),
-                "type": file_status.type,
-                "size": file_status.length
-                if file_status.type == "file"
-                else None,
-                "last_modification_time_ms": getattr(
-                    file_status, "last_modification_time_ms", None
-                ),
-            }
-        else:
-            return self._strip_protocol(file_status.ufs_path)
+    @fallback_handler
+    def isdir(self, path, **kwargs):
+        return self.info(path)["type"] == "directory"
 
     @fallback_handler
     def _open(
@@ -292,47 +327,69 @@ class AlluxioFileSystem(AbstractFileSystem):
     def modified(self, path, *args, **kwargs):
         raise NotImplementedError
 
+    @fallback_handler
+    def head(self, path, *args, **kwargs):
+        raise NotImplementedError
+
+    @fallback_handler
+    def tail(self, path, *args, **kwargs):
+        raise NotImplementedError
+
+    @fallback_handler
+    def expand_path(self, path, *args, **kwargs):
+        raise NotImplementedError
+
+    @fallback_handler
+    def find(self, path, *args, **kwargs):
+        raise NotImplementedError
+
+    @fallback_handler
     def mv(self, path1, path2, *args, **kwargs):
-        if self.fs:
-            return self.fs.mv(
-                self._strip_alluxio_protocol(path1),
-                self._strip_alluxio_protocol(path2),
-                *args,
-                **kwargs,
-            )
-        else:
-            raise NotImplementedError
+        raise NotImplementedError
 
+    @fallback_handler
     def copy(self, path1, path2, *args, **kwargs):
-        if self.fs:
-            return self.fs.copy(
-                self._strip_alluxio_protocol(path1),
-                self._strip_alluxio_protocol(path2),
-                *args,
-                **kwargs,
-            )
-        else:
-            raise NotImplementedError
+        raise NotImplementedError
 
+    @fallback_handler
     def cp_file(self, path1, path2, *args, **kwargs):
-        if self.fs:
-            return self.fs.cp_file(
-                self._strip_alluxio_protocol(path1),
-                self._strip_alluxio_protocol(path2),
-                *args,
-                **kwargs,
-            )
-        else:
-            raise NotImplementedError
+        raise NotImplementedError
 
+    @fallback_handler
+    def rename(self, path1, path2, **kwargs):
+        raise NotImplementedError
+
+    @fallback_handler
+    def move(self, path1, path2, **kwargs):
+        raise NotImplementedError
+
+    @fallback_handler
     def put_file(self, lpath, rpath, *args, **kwargs):
+        raise NotImplementedError
+
+    @fallback_handler
+    def put(self, lpath, rpath, *args, **kwargs):
+        raise NotImplementedError
+
+    @fallback_handler
+    def upload(self, lpath, rpath, *args, **kwargs):
+        raise NotImplementedError
+
+    @fallback_handler
+    def download(self, lpath, rpath, *args, **kwargs):
+        raise NotImplementedError
+
+    @fallback_handler
+    def get(self, rpath, lpath, *args, **kwargs):
+        raise NotImplementedError
+
+    @fallback_handler
+    def get_file(self, rpath, lpath, *args, **kwargs):
+        raise NotImplementedError
+
+    def read_block(self, *args, **kwargs):
         if self.fs:
-            return self.fs.put_file(
-                self._strip_alluxio_protocol(lpath),
-                self._strip_alluxio_protocol(rpath),
-                *args,
-                **kwargs,
-            )
+            return self.fs.read_block(*args, **kwargs)
         else:
             raise NotImplementedError
 

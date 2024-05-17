@@ -184,9 +184,11 @@ def alluxio_file_system(docker_alluxio):
     LOGGER.debug(f"get AlluxioFileSystem connect to {docker_alluxio}")
     parsed_url = urlparse(docker_alluxio)
     host = parsed_url.hostname
-    fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+    fsspec.register_implementation(
+        "alluxiofs", AlluxioFileSystem, clobber=True
+    )
     alluxio_file_system = fsspec.filesystem(
-        "alluxio",
+        "alluxiofs",
         worker_hosts=host,
         target_protocol="file",
         preload_path=ALLUXIO_FILE_PATH,
@@ -202,10 +204,12 @@ def alluxio_file_system_alluxiocommon(docker_alluxio):
     )
     parsed_url = urlparse(docker_alluxio)
     host = parsed_url.hostname
-    fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+    fsspec.register_implementation(
+        "alluxiofs", AlluxioFileSystem, clobber=True
+    )
     alluxio_options = {"alluxio.common.extension.enable": "True"}
     alluxio_file_system = fsspec.filesystem(
-        "alluxio",
+        "alluxiofs",
         worker_hosts=host,
         target_protocol="file",
         options=alluxio_options,
@@ -221,9 +225,11 @@ def etcd_alluxio_file_system(docker_alluxio_with_etcd):
     )
     parsed_url = urlparse(docker_alluxio_with_etcd)
     host = parsed_url.hostname
-    fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+    fsspec.register_implementation(
+        "alluxiofs", AlluxioFileSystem, clobber=True
+    )
     etcd_alluxio_file_system = fsspec.filesystem(
-        "alluxio",
+        "alluxiofs",
         etcd_hosts=host,
         target_protocol="file",
         preload_path=ALLUXIO_FILE_PATH,
