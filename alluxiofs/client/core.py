@@ -369,6 +369,7 @@ class AlluxioClient:
         self,
         path,
         timeout=None,
+        verbose=False,
     ):
         """
         Loads a file.
@@ -376,6 +377,7 @@ class AlluxioClient:
         Args:
             path (str): The full path with storage protocol to load data from
             timeout (integer): The number of seconds for timeout, optional
+            verbose (boolean): Whether enabling verbose load logging, default `False`
 
         Returns:
             result (boolean): Whether the file has been loaded successfully
@@ -384,17 +386,21 @@ class AlluxioClient:
         worker_host, worker_http_port = self._get_preferred_worker_address(
             path
         )
-        return self._load_file(worker_host, worker_http_port, path, timeout)
+        return self._load_file(
+            worker_host, worker_http_port, path, timeout, verbose
+        )
 
     def submit_load(
         self,
         path,
+        verbose=False,
     ):
         """
         Submits a load job for a file.
 
         Args:
             path (str): The full ufs file path to load data from
+            verbose (boolean): Whether enabling verbose load logging, default `False`
 
         Returns:
             result (boolean): Whether the job has been submitted successfully
@@ -404,7 +410,11 @@ class AlluxioClient:
             path
         )
         try:
-            params = {"path": path, "opType": OpType.SUBMIT.value}
+            params = {
+                "path": path,
+                "opType": OpType.SUBMIT.value,
+                "verbose": json.dumps(verbose),
+            }
             response = self.session.get(
                 LOAD_URL_FORMAT.format(
                     worker_host=worker_host,
@@ -457,12 +467,14 @@ class AlluxioClient:
     def load_progress(
         self,
         path,
+        verbose=False,
     ):
         """
         Gets the progress of the load job for a path.
 
         Args:
             path (str): The full UFS file path to load data from UFS to Alluxio.
+            verbose (boolean): Whether enabling verbose load logging, default `False`
 
         Returns:
             LoadState: The current state of the load job as a LoadState enum. Possible values are:
@@ -480,7 +492,11 @@ class AlluxioClient:
         worker_host, worker_http_port = self._get_preferred_worker_address(
             path
         )
-        params = {"path": path, "opType": OpType.PROGRESS.value}
+        params = {
+            "path": path,
+            "opType": OpType.PROGRESS.value,
+            "verbose": json.dumps(verbose),
+        }
         load_progress_url = LOAD_URL_FORMAT.format(
             worker_host=worker_host,
             http_port=worker_http_port,
@@ -755,9 +771,15 @@ class AlluxioClient:
         session.mount("http://", adapter)
         return session
 
-    def _load_file(self, worker_host, worker_http_port, path, timeout):
+    def _load_file(
+        self, worker_host, worker_http_port, path, timeout, verbose
+    ):
         try:
-            params = {"path": path, "opType": OpType.SUBMIT.value}
+            params = {
+                "path": path,
+                "opType": OpType.SUBMIT.value,
+                "verbose": json.dumps(verbose),
+            }
             response = self.session.get(
                 LOAD_URL_FORMAT.format(
                     worker_host=worker_host,
@@ -770,7 +792,11 @@ class AlluxioClient:
             if not content[ALLUXIO_SUCCESS_IDENTIFIER]:
                 return False
 
-            params = {"path": path, "opType": OpType.PROGRESS.value}
+            params = {
+                "path": path,
+                "opType": OpType.PROGRESS.value,
+                "verbose": json.dumps(verbose),
+            }
             load_progress_url = LOAD_URL_FORMAT.format(
                 worker_host=worker_host,
                 http_port=worker_http_port,
