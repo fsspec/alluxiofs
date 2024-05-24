@@ -369,7 +369,7 @@ class AlluxioClient:
         self,
         path,
         timeout=None,
-        verbose=False,
+        verbose=True,
     ):
         """
         Loads a file.
@@ -377,7 +377,7 @@ class AlluxioClient:
         Args:
             path (str): The full path with storage protocol to load data from
             timeout (integer): The number of seconds for timeout, optional
-            verbose (boolean): Whether enabling verbose load logging, default `False`
+            verbose (boolean): Whether enabling verbose load logging, default `True`
 
         Returns:
             result (boolean): Whether the file has been loaded successfully
@@ -393,14 +393,14 @@ class AlluxioClient:
     def submit_load(
         self,
         path,
-        verbose=False,
+        verbose=True,
     ):
         """
         Submits a load job for a file.
 
         Args:
             path (str): The full ufs file path to load data from
-            verbose (boolean): Whether enabling verbose load logging, default `False`
+            verbose (boolean): Whether enabling verbose load logging, default `True`
 
         Returns:
             result (boolean): Whether the job has been submitted successfully
@@ -467,14 +467,14 @@ class AlluxioClient:
     def load_progress(
         self,
         path,
-        verbose=False,
+        verbose=True,
     ):
         """
         Gets the progress of the load job for a path.
 
         Args:
             path (str): The full UFS file path to load data from UFS to Alluxio.
-            verbose (boolean): Whether enabling verbose load logging, default `False`
+            verbose (boolean): Whether enabling verbose load logging, default `True`
 
         Returns:
             LoadState: The current state of the load job as a LoadState enum. Possible values are:
