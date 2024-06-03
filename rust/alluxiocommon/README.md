@@ -11,18 +11,20 @@ https://www.maturin.rs/installation
 
 1) create virtualenv, (a tool used to create isolated Python environments):
 
-
-    python3 -m venv .env
-    source .env/bin/activate
-    maturin develop
+```
+python3 -m venv .env
+source .env/bin/activate
+maturin develop
+```
 
 2) then can start using:
 
-
-    python3
-    >>> from alluxiocommon import _DataManager
-    >>> dm = _DataManager(4)
-    >>> # do something with dm...
+```
+python3
+from alluxiocommon import _DataManager
+dm = _DataManager(4)
+# do something with dm...
+```
 
 ### To build wheel package and install with pip:
 
