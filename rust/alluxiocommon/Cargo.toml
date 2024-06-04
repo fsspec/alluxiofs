@@ -1,6 +1,6 @@
 [package]
 name = "alluxiocommon"
-version = "1.0.3"
+version = "1.0.4"
 edition = "2018"
 description = "Alluxio Fsspec native enhancement module with PyO3 in rust"
 authors = ["Shufan Ge <lucy.ge@alluxio.com>"]
