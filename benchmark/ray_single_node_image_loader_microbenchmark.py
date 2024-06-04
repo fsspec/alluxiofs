@@ -447,7 +447,8 @@ def setup_alluxio(args):
         alluxio_options["alluxio.cluster.name"] = args.alluxio_cluster_name
     if alluxio_options:
         alluxio_kwargs["options"] = alluxio_options
-    return fsspec.filesystem("alluxio", **alluxio_kwargs)
+    # alluxio_kwargs["test_options"] = {"log_level" : "DEBUG"}
+    return fsspec.filesystem("alluxiofs", **alluxio_kwargs)
 
 
 if __name__ == "__main__":
