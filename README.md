@@ -156,6 +156,24 @@ ds2.count()
 # End of Python example
 ```
 
+#### Enable alluxiocommon enhancement module
+
+alluxiocommon package is a native enhancement module for alluxiofs based on PyO3 rust bindings.
+Currently it enhances big reads (multi-page reads from alluxio) by issuing multi-threaded requests to alluxio.
+
+to enable it, first install alluxiocommon package:
+```
+pip install alluxiocommon
+```
+and when start the Alluxio fsspec instance, add an additional option flag:
+```
+alluxio_options = {"alluxio.common.extension.enable" : "True"}
+alluxio_fs = fsspec.filesystem(
+  "alluxiofs", etcd_hosts="localhost", target_protocol="s3",
+  options=alluxio_options
+)
+```
+
 ### Running examples with Pyarrow
 
 ```
