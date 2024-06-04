@@ -6,7 +6,6 @@
 # either express or implied, as more fully set forth in the License.
 #
 # See the NOTICE file distributed with this work for information regarding copyright ownership.
-
 ALLUXIO_CLUSTER_NAME_KEY = "alluxio.cluster.name"
 ALLUXIO_CLUSTER_NAME_DEFAULT_VALUE = "DefaultAlluxioCluster"
 ALLUXIO_ETCD_USERNAME_KEY = "alluxio.etcd.username"
