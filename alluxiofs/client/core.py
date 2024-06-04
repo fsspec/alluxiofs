@@ -205,8 +205,8 @@ class AlluxioClient:
                 ALLUXIO_COMMON_EXTENSION_ENABLE in options
                 and options[ALLUXIO_COMMON_EXTENSION_ENABLE].lower() == "true"
             ):
-                print("Using alluxiocommon extension..")
-                logger.debug("alluxiocommon extension enabled.")
+                print("alluxiocommon extension enabled.")
+                logger.info("alluxiocommon extension enabled.")
                 ondemand_pool_disabled = (
                     ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE in options
                     and options[ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE].lower()

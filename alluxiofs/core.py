@@ -339,9 +339,10 @@ class AlluxioFileSystem(AbstractFileSystem):
     def expand_path(self, path, *args, **kwargs):
         raise NotImplementedError
 
-    @fallback_handler
-    def find(self, path, *args, **kwargs):
-        raise NotImplementedError
+    # Comment it out as s3fs will return folder as well.
+    # @fallback_handler
+    # def find(self, path, *args, **kwargs):
+    #     raise NotImplementedError
 
     @fallback_handler
     def mv(self, path1, path2, *args, **kwargs):
