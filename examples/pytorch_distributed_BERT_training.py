@@ -124,7 +124,7 @@ def finetune(epochs, dataloader, model, loss_fn, optimizer, rank, cpu_id):
     # with open(output_filename, 'w') as file:
     #     file.write(f"Output content for rank {cpu_id}\n")
 
-    # model.train()
+    model.train()
 
     for epoch in range(epochs):
         if isinstance(dataloader.sampler, DistributedSampler):
@@ -136,7 +136,7 @@ def finetune(epochs, dataloader, model, loss_fn, optimizer, rank, cpu_id):
             print(f"rank {cpu_id} epoch {epoch} batch {batch}")
             # append_to_output(output_filename, f"rank {cpu_id} epoch {epoch} batch {batch}")
 
-            # below part can be commented out when testing
+            # below part can be commented out when testing data loading only
             # start:
             ids = dl['ids'].to(rank)
             token_type_ids = dl['token_type_ids'].to(rank)
@@ -245,7 +245,7 @@ def main(rank, world_size, total_epochs, batch_size, directory_path):
     dataloader = DataLoader(dataset=dataset, batch_size=batch_size, sampler=sampler)
 
     model = BERT().to(device)
-    model = DDP(model, device_ids=[rank] if torch.cuda.is_available() else None)
+    model = DDP(model, device_ids=[rank] if torch.cuda.is_available() else None, find_unused_parameters=True)
 
     loss_fn = nn.BCEWithLogitsLoss().to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
