@@ -7,6 +7,15 @@
 # This helps solve the problems:
 # 1) The total size of all CSV files needed for training is too large to fit into the memory
 # 2) Any single CSV file is too large to fit into the memory
+#
+# How to use:
+# 1) start an alluxio cluster https://github.com/Alluxio/alluxio
+# 2) install dependencies specified below
+# 3) run the following command in terminal:
+#    python3 DistributedBERT.py --total-epochs <epoch_number> --batch-size <batch_size> --directory-path <'your_s3_directory_path'>
+#
+# Dependencies: fsspec, alluxiofs, s3fs, torch, transformers, numpy, pandas, tqdm, bisect, os, time
+
 import bisect
 import os
 import time
@@ -153,8 +162,7 @@ def finetune(epochs, dataloader, model, loss_fn, optimizer, rank, cpu_id):
             print(f"rank {cpu_id} epoch {epoch} batch {batch}")
             # append_to_output(output_filename, f"rank {cpu_id} epoch {epoch} batch {batch}")
 
-            # below part can be commented out when testing data loading only
-            # start:
+            # Bert training
             ids = dl["ids"].to(rank)
             token_type_ids = dl["token_type_ids"].to(rank)
             mask = dl["mask"].to(rank)
@@ -184,11 +192,11 @@ def finetune(epochs, dataloader, model, loss_fn, optimizer, rank, cpu_id):
 
             loop.set_description(f"Epoch={epoch + 1}/{epochs}")
             loop.set_postfix(loss=loss.item(), acc=accuracy)
-            # end
+
     return model
 
 
-def preprocess(directory_path, chunk_size):
+def preprocess(directory_path, chunk_size, alluxio_fs):
     """
     Preprocess each file in the directory for Dataset class.
     :param directory_path: directory path contain the files to be processed
@@ -196,10 +204,6 @@ def preprocess(directory_path, chunk_size):
     :return: processed_file_info is a dictionary that contain start_line number for each file;
             total length of all files in the directory
     """
-    fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
-    alluxio_fs = fsspec.filesystem(
-        "alluxiofs", etcd_hosts="localhost", etcd_port=2379, target_protocol="s3"
-    )
 
     processed_file_info = {}  # a dictionary of {start_line_number: file_name}
     next_start_line_num = 0
@@ -231,13 +235,16 @@ def append_to_output(filename, content):
         file.write(content + "\n")
 
 
-def main(rank, world_size, total_epochs, batch_size, directory_path):
-
-    # set up alluxio filesystem and load files in directory into Alluxio cache
-    fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
-    alluxio_fs = fsspec.filesystem(
-        "alluxiofs", etcd_hosts="localhost", etcd_port=2379, target_protocol="s3"
-    )
+def main(
+    rank,
+    world_size,
+    total_epochs,
+    batch_size,
+    directory_path,
+    preprocessed_file_info,
+    total_length,
+    alluxio_fs,
+):
 
     # distributed training settings
     print(f"Initializing process group for rank {rank}")
@@ -249,9 +256,6 @@ def main(rank, world_size, total_epochs, batch_size, directory_path):
     # train on gpu if gpu is available; otherwise, train on cpu
     device = torch.device(f"cuda:{rank}" if torch.cuda.is_available() else "cpu")
     torch.cuda.set_device(device) if torch.cuda.is_available() else None
-
-    # preprocess file in the directory
-    preprocessed_file_info, total_length = preprocess(directory_path, 1000)
 
     # train BERT
     tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
@@ -294,18 +298,20 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Simple distributed training job")
     parser.add_argument(
-        "total_epochs", type=int, help="Total epochs to train the model"
+        "--total-epochs", type=int, help="Total epochs to train the model"
     )
     parser.add_argument(
-        "--batch_size",
+        "--batch-size",
         default=32,
         type=int,
         help="Input batch size on each device (default: 32)",
     )
-    parser.add_argument("directory_path", type=str, help="Path to the input data file")
+    parser.add_argument(
+        "--directory-path", type=str, help="Path to the input data file"
+    )
     args = parser.parse_args()
 
-    # initialize AlluxioClient to pull all file from S3 to alluxio
+    # initialize AlluxioClient and pull all file from S3 to alluxio
     alluxio_client = AlluxioClient(etcd_hosts="localhost")
     load_success = alluxio_client.submit_load(args.directory_path)
     print("Alluxio Load job submitted successful:", load_success)
@@ -318,12 +324,33 @@ if __name__ == "__main__":
         load_progress = progress[1]["jobState"]
         print("Load progress:", load_progress)
 
+    # set up alluxio filesystem
+    # it will be used in preprocess() function and BertDataset class to access files in alluxio
+    fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
+    alluxio_fs = fsspec.filesystem(
+        "alluxiofs", etcd_hosts="localhost", etcd_port=2379, target_protocol="s3"
+    )
+
+    # preprocess files in the directory
+    preprocessed_file_info, total_length = preprocess(
+        args.directory_path, 5000, alluxio_fs
+    )
+
     world_size = (
-        torch.cuda.device_count() if torch.cuda.is_available() else os.cpu_count()
+        torch.cuda.
+        device_count() if torch.cuda.is_available() else os.cpu_count()
     )
     mp.spawn(
         main,
-        args=(world_size, args.total_epochs, args.batch_size, args.directory_path),
+        args=(
+            world_size,
+            args.total_epochs,
+            args.batch_size,
+            args.directory_path,
+            preprocessed_file_info,
+            total_length,
+            alluxio_fs,
+        ),
         nprocs=world_size,
         join=True,
     )
