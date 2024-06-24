@@ -12,10 +12,9 @@
 # 1) start an alluxio cluster https://github.com/Alluxio/alluxio
 # 2) install dependencies specified below
 # 3) run the following command in terminal:
-#    python3 DistributedBERT.py --total-epochs <epoch_number> --batch-size <batch_size> --directory-path <'your_s3_directory_path'>
+#    python3 pytorch_distributed_BERT_training.py --total-epochs <epoch_number> --batch-size <batch_size> --directory-path <'your_s3_directory_path'>
 #
 # Dependencies: fsspec, alluxiofs, s3fs, torch, transformers, numpy, pandas, tqdm, bisect, os, time
-
 import bisect
 import os
 import time
@@ -29,15 +28,14 @@ import torch.multiprocessing as mp
 import torch.nn as nn
 import torch.optim as optim
 import transformers
-from alluxiofs import AlluxioClient
-from alluxiofs import AlluxioFileSystem
-from torch.distributed import destroy_process_group
-from torch.distributed import init_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torch.utils.data import DistributedSampler
 from tqdm import tqdm
+
+from alluxiofs import AlluxioClient
+from alluxiofs import AlluxioFileSystem
 
 
 class BertDataset(Dataset):
@@ -60,7 +58,9 @@ class BertDataset(Dataset):
         self.max_length = max_length
 
         self.preprocessed_file_info = preprocessed_file_info
-        self.start_line_num_list = sorted(list(self.preprocessed_file_info.keys()))
+        self.start_line_num_list = sorted(
+            list(self.preprocessed_file_info.keys())
+        )
         self.total_length = total_length
         self.read_chunk_size = read_chunk_size
 
@@ -79,9 +79,15 @@ class BertDataset(Dataset):
         """
 
         # find the target file and the target line where the index located
-        target_file_index = bisect.bisect_right(self.start_line_num_list, index) - 1
-        target_file_start_line_num = self.start_line_num_list[target_file_index]
-        target_file_name = self.preprocessed_file_info[target_file_start_line_num]
+        target_file_index = (
+            bisect.bisect_right(self.start_line_num_list, index) - 1
+        )
+        target_file_start_line_num = self.start_line_num_list[
+            target_file_index
+        ]
+        target_file_name = self.preprocessed_file_info[
+            target_file_start_line_num
+        ]
         target_line_index = index - target_file_start_line_num
 
         # load target file in memory by chunk to avoid memory overloading and then read the target line
@@ -97,6 +103,7 @@ class BertDataset(Dataset):
             # memory occupied by chunk will be freed once outside the loop
             if i == chunk_number:
                 target_line = chunk.iloc[line_within_chunk]
+                break
 
         # process target line text for BERT use
         inputs = self.tokenizer.encode_plus(
@@ -112,13 +119,6 @@ class BertDataset(Dataset):
         token_type_ids = inputs["token_type_ids"]
         mask = inputs["attention_mask"]
 
-        ## record behavior to a output file
-        # self.total_access += 1
-        # with open(self.output_filename, 'a') as file:
-        #     file.write(
-        #         f'access to global index {index}, which is line {target_line_index} in file {target_file_name}: {target_line.iloc[0]}\n')
-        #     file.write(f'__getitem__ total access: {self.total_access}\n')
-
         return {
             "ids": torch.tensor(ids, dtype=torch.long),
             "mask": torch.tensor(mask, dtype=torch.long),
@@ -130,12 +130,17 @@ class BertDataset(Dataset):
 class BERT(nn.Module):
     def __init__(self):
         super(BERT, self).__init__()
-        self.bert_model = transformers.BertModel.from_pretrained("bert-base-uncased")
+        self.bert_model = transformers.BertModel.from_pretrained(
+            "bert-base-uncased"
+        )
         self.out = nn.Linear(768, 1)
 
     def forward(self, ids, mask, token_type_ids):
         _, o2 = self.bert_model(
-            ids, attention_mask=mask, token_type_ids=token_type_ids, return_dict=False
+            ids,
+            attention_mask=mask,
+            token_type_ids=token_type_ids,
+            return_dict=False,
         )
 
         out = self.out(o2)
@@ -144,11 +149,6 @@ class BERT(nn.Module):
 
 
 def finetune(epochs, dataloader, model, loss_fn, optimizer, rank, cpu_id):
-
-    ## initialize an output file to log behavior for a specific cpu
-    # output_filename = f"output_rank_{cpu_id}.txt"
-    # with open(output_filename, 'w') as file:
-    #     file.write(f"Output content for rank {cpu_id}\n")
 
     model.train()
 
@@ -160,7 +160,6 @@ def finetune(epochs, dataloader, model, loss_fn, optimizer, rank, cpu_id):
         for batch, dl in loop:
 
             print(f"rank {cpu_id} epoch {epoch} batch {batch}")
-            # append_to_output(output_filename, f"rank {cpu_id} epoch {epoch} batch {batch}")
 
             # Bert training
             ids = dl["ids"].to(rank)
@@ -254,7 +253,9 @@ def main(
     dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
     # train on gpu if gpu is available; otherwise, train on cpu
-    device = torch.device(f"cuda:{rank}" if torch.cuda.is_available() else "cpu")
+    device = torch.device(
+        f"cuda:{rank}" if torch.cuda.is_available() else "cpu"
+    )
     torch.cuda.set_device(device) if torch.cuda.is_available() else None
 
     # train BERT
@@ -273,7 +274,9 @@ def main(
     )
 
     sampler = DistributedSampler(dataset)
-    dataloader = DataLoader(dataset=dataset, batch_size=batch_size, sampler=sampler)
+    dataloader = DataLoader(
+        dataset=dataset, batch_size=batch_size, sampler=sampler
+    )
 
     model = BERT().to(device)
     model = DDP(
@@ -288,7 +291,9 @@ def main(
     for param in model.module.bert_model.parameters():
         param.requires_grad = False
 
-    model = finetune(total_epochs, dataloader, model, loss_fn, optimizer, device, rank)
+    model = finetune(
+        total_epochs, dataloader, model, loss_fn, optimizer, device, rank
+    )
     dist.destroy_process_group()
     print(f"Process group destroyed for rank {rank}")
 
@@ -296,7 +301,9 @@ def main(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Simple distributed training job")
+    parser = argparse.ArgumentParser(
+        description="Simple distributed training job"
+    )
     parser.add_argument(
         "--total-epochs", type=int, help="Total epochs to train the model"
     )
@@ -326,9 +333,14 @@ if __name__ == "__main__":
 
     # set up alluxio filesystem
     # it will be used in preprocess() function and BertDataset class to access files in alluxio
-    fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
+    fsspec.register_implementation(
+        "alluxiofs", AlluxioFileSystem, clobber=True
+    )
     alluxio_fs = fsspec.filesystem(
-        "alluxiofs", etcd_hosts="localhost", etcd_port=2379, target_protocol="s3"
+        "alluxiofs",
+        etcd_hosts="localhost",
+        etcd_port=2379,
+        target_protocol="s3",
     )
 
     # preprocess files in the directory
@@ -337,8 +349,9 @@ if __name__ == "__main__":
     )
 
     world_size = (
-        torch.cuda.
-        device_count() if torch.cuda.is_available() else os.cpu_count()
+        torch.cuda.device_count()
+        if torch.cuda.is_available()
+        else os.cpu_count()
     )
     mp.spawn(
         main,
