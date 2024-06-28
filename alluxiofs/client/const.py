@@ -8,8 +8,6 @@
 # See the NOTICE file distributed with this work for information regarding copyright ownership.
 ALLUXIO_CLUSTER_NAME_KEY = "alluxio.cluster.name"
 ALLUXIO_CLUSTER_NAME_DEFAULT_VALUE = "DefaultAlluxioCluster"
-ALLUXIO_ETCD_USERNAME_KEY = "alluxio.etcd.username"
-ALLUXIO_ETCD_PASSWORD_KEY = "alluxio.etcd.password"
 ALLUXIO_PAGE_SIZE_KEY = "alluxio.worker.page.store.page.size"
 ALLUXIO_PAGE_SIZE_DEFAULT_VALUE = "1MB"
 ALLUXIO_HASH_NODE_PER_WORKER_KEY1 = (

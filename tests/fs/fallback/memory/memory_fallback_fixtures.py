@@ -16,7 +16,7 @@ class MemoryFallbackFixtures(AbstractFixtures):
             yield AlluxioFileSystem(
                 etcd_hosts="localhost",
                 fs=m,
-                test_options={"skip_alluxio": True},
+                skip_alluxio=True,
             )
         finally:
             m.store.clear()
