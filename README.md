@@ -100,10 +100,10 @@ import fsspec
 from alluxiofs import AlluxioFileSystem
 
 # Register Alluxio to fsspec
-fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
 
 # Create Alluxio filesystem
-alluxio_fs = fsspec.filesystem("alluxio", etcd_hosts="localhost", etcd_port=2379, target_protocol="s3")
+alluxio_fs = fsspec.filesystem("alluxiofs", etcd_hosts="localhost", etcd_port=2379, target_protocol="s3")
 ```
 
 ### Run Alluxio FileSystem operations
@@ -127,9 +127,9 @@ import ray
 from alluxiofs import AlluxioFileSystem
 
 # Register the Alluxio fsspec implementation
-fsspec.register_implementation("alluxio", AlluxioFileSystem, clobber=True)
+fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
 alluxio_fs = fsspec.filesystem(
-  "alluxio", etcd_hosts="localhost", target_protocol="s3"
+  "alluxiofs", etcd_hosts="localhost", target_protocol="s3"
 )
 
 # Pass the initialized Alluxio filesystem to Ray and read the NYC taxi ride data set
@@ -152,6 +152,61 @@ ds2 = ray.data.read_csv("s3://apc999/datasets/csv_dir/", filesystem=alluxio_fs)
 
 # Get a count of the number of records in the twelve CSV files
 ds2.count()
+
+# End of Python example
+```
+
+#### Enable alluxiocommon enhancement module
+
+alluxiocommon package is a native enhancement module for alluxiofs based on PyO3 rust bindings.
+Currently it enhances big reads (multi-page reads from alluxio) by issuing multi-threaded requests to alluxio.
+
+to enable it, first install alluxiocommon package:
+```
+pip install alluxiocommon
+```
+and when start the Alluxio fsspec instance, add an additional option flag:
+```
+alluxio_options = {"alluxio.common.extension.enable" : "True"}
+alluxio_fs = fsspec.filesystem(
+  "alluxiofs", etcd_hosts="localhost", target_protocol="s3",
+  options=alluxio_options
+)
+```
+
+### Running examples with Pyarrow
+
+```
+import fsspec
+from alluxiofs import AlluxioFileSystem
+
+# Register the Alluxio fsspec implementation
+fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
+alluxio_fs = fsspec.filesystem(
+  "alluxiofs", etcd_hosts="localhost", target_protocol="s3"
+)
+
+# Example 1
+# Pass the initialized Alluxio filesystem to Pyarrow and read the data set from the example parquet file
+import pyarrow.dataset as ds
+dataset = ds.dataset("s3://example_bucket/datasets/example.parquet", filesystem=alluxio_fs)
+
+# Get a count of the number of records in the parquet file
+dataset.count_rows()
+
+# Display the schema derived from the parquet file header record
+dataset.schema
+
+# Display the first record
+dataset.take(0)
+
+# Example 2
+# Create a python-based PyArrow filesystem using FsspecHandler
+py_fs = PyFileSystem(FSSpecHandler(alluxio_file_system))
+
+# Read the data by using the Pyarrow filesystem interface
+with py_fs.open_input_file("s3://example_bucket/datasets/example.parquet") as f:
+    alluxio_file_data = f.read()
 
 # End of Python example
 ```

@@ -1,0 +1,27 @@
+[package]
+name = "alluxiocommon"
+version = "1.0.3"
+edition = "2018"
+description = "Alluxio Fsspec native enhancement module with PyO3 in rust"
+authors = ["Shufan Ge <lucy.ge@alluxio.com>"]
+
+[lib]
+name = "alluxiocommon"
+# "cdylib" is necessary to produce a shared library for Python to import from.
+#
+# Downstream Rust code (including code in `bin/`, `examples/`, and `tests/`) will not be able
+# to `use string_sum;` unless the "rlib" or "lib" crate type is also included, e.g.:
+# crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
+
+[dependencies]
+reqwest = { version = "0.11.16", features = ["blocking", "json", "rustls-tls"], default-features = false }
+tokio = { version = "1", features = ["full"] }
+bytes = "1.5.0"
+rayon = "1.7.0"
+env_logger = "0.11.3"
+log = "0.4.21"
+
+[dependencies.pyo3]
+version = "0.21.1"
+features = ["extension-module"]

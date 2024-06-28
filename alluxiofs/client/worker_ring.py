@@ -1,3 +1,11 @@
+# The Alluxio Open Foundation licenses this work under the Apache License, version 2.0
+# (the "License"). You may not use this work except in compliance with the License, which is
+# available at www.apache.org/licenses/LICENSE-2.0
+#
+# This software is distributed on an "AS IS" basis, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied, as more fully set forth in the License.
+#
+# See the NOTICE file distributed with this work for information regarding copyright ownership.
 import json
 import logging
 import random
@@ -7,7 +15,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Dict
 from typing import List
-from typing import Optional
 from typing import Set
 
 import etcd3
@@ -17,6 +24,7 @@ from sortedcontainers import SortedDict
 from .config import AlluxioClientConfig
 from .const import ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE
 from .const import ETCD_PREFIX_FORMAT
+from .utils import set_log_level
 
 DEFAULT_HOST = "localhost"
 DEFAULT_CONTAINER_HOST = ""
@@ -27,6 +35,8 @@ DEFAULT_NETTY_DATA_PORT = 29997
 DEFAULT_WEB_PORT = 30000
 DEFAULT_DOMAIN_SOCKET_PATH = ""
 DEFAULT_WORKER_IDENTIFIER_VERSION = 1
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -194,7 +204,7 @@ class ConsistentHashProvider:
     def __init__(
         self,
         config: AlluxioClientConfig,
-        logger: Optional[logging.Logger] = None,
+        test_options=None,
     ):
         self._logger = logger or logging.getLogger("ConsistentHashProvider")
         self._config = config
@@ -215,6 +225,8 @@ class ConsistentHashProvider:
                 self._start_background_update_ring(
                     self._config.etcd_refresh_workers_interval
                 )
+        test_options = test_options or {}
+        set_log_level(logger, test_options)
 
     def get_multiple_workers(
         self, key: str, count: int
@@ -267,7 +279,7 @@ class ConsistentHashProvider:
                 try:
                     self._fetch_workers_and_update_ring()
                 except Exception as e:
-                    self._logger.error(f"Error updating worker hash ring: {e}")
+                    logger.error(f"Error updating worker hash ring: {e}")
                 time.sleep(interval)
 
         self._background_thread = threading.Thread(target=update_loop)
@@ -302,8 +314,8 @@ class ConsistentHashProvider:
                 continue
         if not worker_entities:
             if self._is_ring_initialized:
-                self._logger.info(
-                    f"Failed to achieve worker info list from ETCD servers:{self._config.etcd_hosts}"
+                logger.info(
+                    f"Failed to achieve worker info list from ETCD servers:{self._etcd_hosts}"
                 )
                 return
             else:

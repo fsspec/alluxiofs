@@ -3,8 +3,10 @@ from setuptools import setup
 
 setup(
     name="alluxiofs",
-    version="1.0.1.dev1",
+    version="1.0.3",
     description="Alluxio Fsspec provides Alluxio filesystem spec implementation.",
+    long_description=open("README.md").read(),
+    long_description_content_type="text/markdown",
     url="https://github.com/fsspec/alluxiofs",
     packages=find_packages(exclude=["tests", "tests.*"]),
     include_package_data=True,
@@ -27,6 +29,7 @@ setup(
             "pytest",
             "pytest-aiohttp",
             "ray",
+            "pyarrow",
         ]
     },
     python_requires=">=3.8",
