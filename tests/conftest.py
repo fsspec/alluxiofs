@@ -93,7 +93,7 @@ def launch_alluxio_dockers(with_etcd=False):
     run_cmd_etcd = (
         "docker run --platform linux/amd64 -d --rm --net=alluxio_network -p 4001:4001 -p 2380:2380 -p 2379:2379 "
         f"-v {TEST_DIR}:/etc/ssl/certs "
-        "--name etcd quay.io/coreos/etcd:latest "
+        "--name etcd quay.io/coreos/etcd:v3.5.13 "
         "/usr/local/bin/etcd "
         "--data-dir=/etcd-data "
         "--name etcd1 "
