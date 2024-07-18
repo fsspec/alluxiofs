@@ -231,7 +231,12 @@ class AlluxioFileSystem(AbstractFileSystem):
 
             fs_method = getattr(self.fs, alluxio_impl.__name__, None)
             if fs_method:
-                res = fs_method(*bound_args.args[1:], **bound_args.kwargs)
+                if self.target_protocol == 's3':
+                    res = fs_method(bound_args.args[1], start=bound_args.args[2], end=bound_args.args[3],
+                                    **bound_args.kwargs)
+                else:
+                    res = fs_method(*bound_args.args[1:], **bound_args.kwargs)
+
                 logger.debug(
                     f"Exit(Ok): ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs})"
                 )
