@@ -273,15 +273,12 @@ class AlluxioFileSystem(AbstractFileSystem):
             try:
                 if self.alluxio:
                     start_time = time.time()
-                    res = alluxio_impl(*positional_params, **kwargs)
+                    res = alluxio_impl(self, *positional_params, **kwargs)
                     logger.debug(
                         f"Exit(Ok): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}) time({(time.time() - start_time):.2f}s)"
                     )
                     return res
             except Exception as e:
-                print(
-                    f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}) {e}"
-                )
                 if not isinstance(e, NotImplementedError):
                     logger.debug(
                         f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}) {e}"
@@ -293,7 +290,6 @@ class AlluxioFileSystem(AbstractFileSystem):
             fs_method = getattr(self.fs, alluxio_impl.__name__, None)
 
             if fs_method:
-                print("inside if fs_method", positional_params, kwargs)
                 res = fs_method(*positional_params, **kwargs)
 
                 logger.debug(
