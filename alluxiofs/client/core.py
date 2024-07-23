@@ -117,7 +117,7 @@ class AlluxioClient:
 
     def __init__(
         self,
-        test_options=None,  # TODO: put in kwargs?
+        test_options=None,
         **kwargs,
     ):
         """
