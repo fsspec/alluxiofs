@@ -146,6 +146,7 @@ class AlluxioClient:
         self.config = AlluxioClientConfig(**kwargs)
         self.session = self._create_session(self.config.concurrency)
         self.hash_provider = ConsistentHashProvider(self.config)
+        self.data_manager = None
         if kwargs.get(ALLUXIO_COMMON_EXTENSION_ENABLE, False):
             logger.info("alluxiocommon extension enabled.")
             self.data_manager = _DataManager(
