@@ -167,7 +167,9 @@ class EtcdClient:
                 "Both ETCD username and password must be set or both should be unset."
             )
 
-        self._prefix = ETCD_PREFIX_FORMAT.format(config.cluster_name)
+        self._prefix = ETCD_PREFIX_FORMAT.format(
+            cluster_name=config.cluster_name
+        )
 
     def get_worker_entities(self) -> Set[WorkerEntity]:
         """
@@ -313,12 +315,6 @@ class ConsistentHashProvider:
         worker_entities: Set[WorkerEntity] = set()
         for host in etcd_hosts_list:
             try:
-                print(
-                    "_fetch_workers_and_update_ring",
-                    host,
-                    self._config.etcd_port,
-                    self._config,
-                )
                 worker_entities = EtcdClient(
                     host=host,
                     port=self._config.etcd_port,
