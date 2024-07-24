@@ -46,17 +46,10 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def __init__(
         self,
-        etcd_hosts=None,
-        worker_hosts=None,
-        options=None,
-        concurrency=64,
-        etcd_port=2379,
-        worker_http_port=28080,
         preload_path=None,
         target_protocol=None,
         target_options=None,
         fs=None,
-        test_options=None,
         **kwargs,
     ):
         """
@@ -102,7 +95,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                 "provided. Will not fall back to under file systems when "
                 "accessed files are not in Alluxiofs"
             )
-        self.kwargs = target_options or {}
+        self.target_options = target_options or {}
         self.fs = None
         self.target_protocol = None
         if fs is not None:
@@ -118,21 +111,15 @@ class AlluxioFileSystem(AbstractFileSystem):
                     + self.fs.protocol
                 )
         elif target_protocol is not None:
-            self.fs = filesystem(target_protocol, **self.kwargs)
+            self.fs = filesystem(target_protocol, **self.target_options)
             self.target_protocol = target_protocol
-        test_options = test_options or {}
+        test_options = kwargs.get("test_options", {})
         set_log_level(logger, test_options)
         if test_options.get("skip_alluxio") is True:
             self.alluxio = None
         else:
             self.alluxio = AlluxioClient(
-                etcd_hosts=etcd_hosts,
-                worker_hosts=worker_hosts,
-                options=options,
-                concurrency=concurrency,
-                etcd_port=etcd_port,
-                worker_http_port=worker_http_port,
-                test_options=test_options,
+                **kwargs,
             )
             if preload_path is not None:
                 self.alluxio.load(preload_path)
