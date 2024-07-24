@@ -50,7 +50,6 @@ class AlluxioFileSystem(AbstractFileSystem):
         target_protocol=None,
         target_options=None,
         fs=None,
-        test_options=None,
         **kwargs,
     ):
         """
@@ -114,13 +113,12 @@ class AlluxioFileSystem(AbstractFileSystem):
         elif target_protocol is not None:
             self.fs = filesystem(target_protocol, **self.target_options)
             self.target_protocol = target_protocol
-        test_options = test_options or {}
+        test_options = kwargs.get("test_options", {})
         set_log_level(logger, test_options)
         if test_options.get("skip_alluxio") is True:
             self.alluxio = None
         else:
             self.alluxio = AlluxioClient(
-                test_options=test_options,
                 **kwargs,
             )
             if preload_path is not None:
@@ -220,16 +218,7 @@ class AlluxioFileSystem(AbstractFileSystem):
 
             fs_method = getattr(self.fs, alluxio_impl.__name__, None)
             if fs_method:
-                if self.target_protocol == "s3":
-                    res = fs_method(
-                        bound_args.args[1],
-                        start=bound_args.args[2],
-                        end=bound_args.args[3],
-                        **bound_args.kwargs,
-                    )
-                else:
-                    res = fs_method(*bound_args.args[1:], **bound_args.kwargs)
-
+                res = fs_method(*bound_args.args[1:], **bound_args.kwargs)
                 logger.debug(
                     f"Exit(Ok): ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs})"
                 )

@@ -117,7 +117,6 @@ class AlluxioClient:
 
     def __init__(
         self,
-        test_options=None,
         **kwargs,
     ):
         """
@@ -156,7 +155,7 @@ class AlluxioClient:
                 ),
             )
 
-        test_options = test_options or {}
+        test_options = kwargs.get("test_options", {})
         set_log_level(logger, test_options)
 
     def listdir(self, path):

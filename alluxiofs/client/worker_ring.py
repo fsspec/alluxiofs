@@ -148,9 +148,7 @@ class WorkerEntity:
 
 
 class EtcdClient:
-    def __init__(
-        self, config: AlluxioClientConfig, host="localhost", port=2379
-    ):
+    def __init__(self, config: AlluxioClientConfig, host, port):
         self._host = host
         self._port = port
         self._etcd_username = None
@@ -158,6 +156,16 @@ class EtcdClient:
         self._prefix = ETCD_PREFIX_FORMAT.format(
             cluster_name=ALLUXIO_CLUSTER_NAME_DEFAULT_VALUE
         )
+
+        if self._host is None:
+            raise ValueError(
+                "ETCD host is None. ETCD host must be provided to use ETCD."
+            )
+
+        if self._port is None:
+            raise ValueError(
+                "ETCD port is None. ETCD port must be provided to use ETCD."
+            )
 
         self._etcd_username = config.etcd_username
         self._etcd_password = config.etcd_password
