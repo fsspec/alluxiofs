@@ -24,11 +24,12 @@ ALLUXIO_COMMON_EXTENSION_ENABLE = "alluxio.common.extension.enable"
 ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE = "alluxio.common.ondemandpool.disable"
 LIST_URL_FORMAT = "http://{worker_host}:{http_port}/v1/files"
 FULL_PAGE_URL_FORMAT = (
-    "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}"
+    "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}?ufsFullPath={file_path}"
 )
-PAGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}?offset={page_offset}&length={page_length}"
+PAGE_URL_FORMAT = ("http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}"
+                   "?offset={page_offset}&length={page_length}&ufsFullPath={file_path}")
 WRITE_PAGE_URL_FORMAT = (
-    "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}"
+    "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}/?ufsFullPath={file_path}"
 )
 GET_FILE_STATUS_URL_FORMAT = "http://{worker_host}:{http_port}/v1/info"
 LOAD_URL_FORMAT = "http://{worker_host}:{http_port}/v1/load"

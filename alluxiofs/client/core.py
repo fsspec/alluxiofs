@@ -530,13 +530,13 @@ class AlluxioClient:
             if self.data_manager:
                 return b"".join(
                     self._all_page_generator_alluxiocommon(
-                        worker_host, worker_http_port, path_id
+                        worker_host, worker_http_port, path_id, file_path
                     )
                 )
             else:
                 return b"".join(
                     self._all_page_generator(
-                        worker_host, worker_http_port, path_id
+                        worker_host, worker_http_port, path_id, file_path
                     )
                 )
         except Exception as e:
@@ -583,12 +583,12 @@ class AlluxioClient:
         try:
             if self.data_manager:
                 return self._range_page_generator_alluxiocommon(
-                    worker_host, worker_http_port, path_id, offset, length
+                    worker_host, worker_http_port, path_id, file_path, offset, length
                 )
             else:
                 return b"".join(
                     self._range_page_generator(
-                        worker_host, worker_http_port, path_id, offset, length
+                        worker_host, worker_http_port, path_id, file_path, offset, length
                     )
                 )
         except Exception as e:
@@ -620,6 +620,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
+                    file_path=file_path,
                     page_index=page_index,
                 ),
                 headers={"Content-Type": "application/octet-stream"},
@@ -633,7 +634,7 @@ class AlluxioClient:
             )
 
     def _all_page_generator_alluxiocommon(
-        self, worker_host, worker_http_port, path_id
+        self, worker_host, worker_http_port, path_id, file_path
     ):
         page_index = 0
         fetching_pages_num_each_round = 4
@@ -645,6 +646,7 @@ class AlluxioClient:
                         worker_host=worker_host,
                         http_port=worker_http_port,
                         path_id=path_id,
+                        file_path=file_path,
                         page_index=page_index,
                     )
                     read_urls.append(page_url)
@@ -665,12 +667,12 @@ class AlluxioClient:
                     f"Error when reading all pages of {path_id}: error {e}"
                 ) from e
 
-    def _all_page_generator(self, worker_host, worker_http_port, path_id):
+    def _all_page_generator(self, worker_host, worker_http_port, path_id, file_path):
         page_index = 0
         while True:
             try:
                 page_content = self._read_page(
-                    worker_host, worker_http_port, path_id, page_index
+                    worker_host, worker_http_port, path_id, file_path, page_index
                 )
             except Exception as e:
                 if page_index == 0:
@@ -688,7 +690,7 @@ class AlluxioClient:
             page_index += 1
 
     def _range_page_generator_alluxiocommon(
-        self, worker_host, worker_http_port, path_id, offset, length
+        self, worker_host, worker_http_port, path_id, file_path, offset, length
     ):
         read_urls = []
         start = offset
@@ -704,6 +706,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
+                    file_path=file_path,
                     page_index=page_index,
                 )
             else:
@@ -711,6 +714,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
+                    file_path=file_path,
                     page_index=page_index,
                     page_offset=inpage_off,
                     page_length=inpage_read_len,
@@ -721,7 +725,7 @@ class AlluxioClient:
         return data
 
     def _range_page_generator(
-        self, worker_host, worker_http_port, path_id, offset, length
+        self, worker_host, worker_http_port, path_id, file_path, offset, length
     ):
         start_page_index = offset // self.page_size
         start_page_offset = offset % self.page_size
@@ -747,6 +751,7 @@ class AlluxioClient:
                     worker_host,
                     worker_http_port,
                     path_id,
+                    file_path,
                     page_index,
                     read_offset,
                     read_length,
@@ -865,6 +870,7 @@ class AlluxioClient:
         worker_host,
         worker_http_port,
         path_id,
+        file_path,
         page_index,
         offset=None,
         length=None,
@@ -880,6 +886,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
+                    file_path=file_path,
                     page_index=page_index,
                 )
                 logger.debug(f"Reading full page request {page_url}")
@@ -888,6 +895,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
+                    file_path=file_path,
                     page_index=page_index,
                     page_offset=offset,
                     page_length=length,
@@ -1198,7 +1206,7 @@ class AlluxioAsyncFileSystem:
         worker_host = self._get_preferred_worker_host(file_path)
         path_id = self._get_path_hash(file_path)
         page_contents = await self._range_page_generator(
-            worker_host, path_id, offset, length
+            worker_host, path_id, file_path, offset, length
         )
         return b"".join(await page_contents)
 
@@ -1226,6 +1234,7 @@ class AlluxioAsyncFileSystem:
                 worker_host=worker_host,
                 http_port=self.http_port,
                 path_id=path_id,
+                file_path=file_path,
                 page_index=page_index,
             ),
             headers={"Content-Type": "application/octet-stream"},
@@ -1234,7 +1243,7 @@ class AlluxioAsyncFileSystem:
         return 200 <= status < 300
 
     async def _range_page_generator(
-        self, worker_host: str, path_id: str, offset: float, length: float
+        self, worker_host: str, path_id: str, file_path: str, offset: float, length: float
     ):
         start_page_index = offset // self.page_size
         start_page_offset = offset % self.page_size
@@ -1257,6 +1266,7 @@ class AlluxioAsyncFileSystem:
                 page_content = self._read_page(
                     worker_host,
                     path_id,
+                    file_path,
                     page_index,
                     start_page_offset,
                     read_length,
@@ -1264,12 +1274,12 @@ class AlluxioAsyncFileSystem:
                 page_contents.append(page_content)
             elif page_index == end_page_index:
                 page_content = self._read_page(
-                    worker_host, path_id, page_index, 0, end_page_read_to
+                    worker_host, path_id, file_path, page_index, 0, end_page_read_to
                 )
                 page_contents.append(page_content)
             else:
                 page_content = self._read_page(
-                    worker_host, path_id, page_index
+                    worker_host, path_id, file_path, page_index
                 )
                 page_contents.append(page_content)
 
@@ -1338,6 +1348,7 @@ class AlluxioAsyncFileSystem:
         self,
         worker_host,
         path_id: str,
+        file_path: str,
         page_index: int,
         offset=None,
         length=None,
@@ -1352,6 +1363,7 @@ class AlluxioAsyncFileSystem:
                 worker_host=worker_host,
                 http_port=self.http_port,
                 path_id=path_id,
+                file_path=file_path,
                 page_index=page_index,
             )
         else:
@@ -1359,6 +1371,7 @@ class AlluxioAsyncFileSystem:
                 worker_host=worker_host,
                 http_port=self.http_port,
                 path_id=path_id,
+                file_path=file_path,
                 page_index=page_index,
                 page_offset=offset,
                 page_length=length,
