@@ -31,6 +31,9 @@ PAGE_URL_FORMAT = ("http://{worker_host}:{http_port}/v1/file/{path_id}/page/{pag
 WRITE_PAGE_URL_FORMAT = (
     "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}/?ufsFullPath={file_path}"
 )
+PAGE_PATH_URL_FORMAT = (
+    "/v1/file/{path_id}/page/{page_index}?ufsFullPath={file_path}"
+)
 GET_FILE_STATUS_URL_FORMAT = "http://{worker_host}:{http_port}/v1/info"
 LOAD_URL_FORMAT = "http://{worker_host}:{http_port}/v1/load"
 # TODO (chunxu): Remove the concrete types of LOAD formats. Keep them for asyncio.
