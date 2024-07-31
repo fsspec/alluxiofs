@@ -42,12 +42,8 @@ def server(event_loop):
 
     app = web.Application()
     app.on_startup.append(startup)
-    app.router.add_get(
-        PAGE_PATH_URL_FORMAT, get_file_handler
-    )
-    app.router.add_post(
-        PAGE_PATH_URL_FORMAT, put_file_handler
-    )
+    app.router.add_get(PAGE_PATH_URL_FORMAT, get_file_handler)
+    app.router.add_post(PAGE_PATH_URL_FORMAT, put_file_handler)
     server = TestServer(app)
     event_loop.run_until_complete(server.start_server())
     return server

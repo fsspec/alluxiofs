@@ -583,12 +583,22 @@ class AlluxioClient:
         try:
             if self.data_manager:
                 return self._range_page_generator_alluxiocommon(
-                    worker_host, worker_http_port, path_id, file_path, offset, length
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    offset,
+                    length
                 )
             else:
                 return b"".join(
                     self._range_page_generator(
-                        worker_host, worker_http_port, path_id, file_path, offset, length
+                        worker_host,
+                        worker_http_port,
+                        path_id,
+                        file_path,
+                        offset,
+                        length,
                     )
                 )
         except Exception as e:
@@ -667,12 +677,18 @@ class AlluxioClient:
                     f"Error when reading all pages of {path_id}: error {e}"
                 ) from e
 
-    def _all_page_generator(self, worker_host, worker_http_port, path_id, file_path):
+    def _all_page_generator(
+            self, worker_host, worker_http_port, path_id, file_path
+    ):
         page_index = 0
         while True:
             try:
                 page_content = self._read_page(
-                    worker_host, worker_http_port, path_id, file_path, page_index
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    page_index
                 )
             except Exception as e:
                 if page_index == 0:
@@ -1243,7 +1259,12 @@ class AlluxioAsyncFileSystem:
         return 200 <= status < 300
 
     async def _range_page_generator(
-        self, worker_host: str, path_id: str, file_path: str, offset: float, length: float
+        self,
+        worker_host: str,
+        path_id: str,
+        file_path: str,
+        offset: float,
+        length: float,
     ):
         start_page_index = offset // self.page_size
         start_page_offset = offset % self.page_size
