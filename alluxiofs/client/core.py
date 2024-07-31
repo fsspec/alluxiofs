@@ -588,7 +588,7 @@ class AlluxioClient:
                     path_id,
                     file_path,
                     offset,
-                    length
+                    length,
                 )
             else:
                 return b"".join(
@@ -678,7 +678,7 @@ class AlluxioClient:
                 ) from e
 
     def _all_page_generator(
-            self, worker_host, worker_http_port, path_id, file_path
+        self, worker_host, worker_http_port, path_id, file_path
     ):
         page_index = 0
         while True:
@@ -688,7 +688,7 @@ class AlluxioClient:
                     worker_http_port,
                     path_id,
                     file_path,
-                    page_index
+                    page_index,
                 )
             except Exception as e:
                 if page_index == 0:
@@ -1295,7 +1295,12 @@ class AlluxioAsyncFileSystem:
                 page_contents.append(page_content)
             elif page_index == end_page_index:
                 page_content = self._read_page(
-                    worker_host, path_id, file_path, page_index, 0, end_page_read_to
+                    worker_host,
+                    path_id,
+                    file_path,
+                    page_index,
+                    0,
+                    end_page_read_to,
                 )
                 page_contents.append(page_content)
             else:
