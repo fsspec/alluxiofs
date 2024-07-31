@@ -14,7 +14,7 @@ pytestmark = pytest.mark.asyncio
 def server(event_loop):
     async def get_file_handler(request: web.Request) -> web.Response:
         alluxio: dict = request.app["alluxio"]
-        bytes = alluxio[request.match_info["file_path"]][
+        bytes = alluxio[request.match_info["path_id"]][
             request.match_info["page_index"]
         ]
 
@@ -28,12 +28,12 @@ def server(event_loop):
     async def put_file_handler(request: web.Request) -> web.Response:
         data = await request.read()
         alluxio: dict = request.app["alluxio"]
-        alluxio[request.match_info["file_path"]] = {
+        alluxio[request.match_info["path_id"]] = {
             request.match_info["page_index"]: data
         }
         return web.json_response(
             {
-                "file_path": request.match_info["file_path"],
+                "path_id": request.match_info["path_id"],
             }
         )
 
