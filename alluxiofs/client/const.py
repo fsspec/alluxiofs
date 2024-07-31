@@ -23,13 +23,13 @@ ALLUXIO_SUCCESS_IDENTIFIER = "success"
 ALLUXIO_COMMON_EXTENSION_ENABLE = "alluxio.common.extension.enable"
 ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE = "alluxio.common.ondemandpool.disable"
 LIST_URL_FORMAT = "http://{worker_host}:{http_port}/v1/files"
-FULL_PAGE_URL_FORMAT = (
-    "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}"
+FULL_PAGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}?ufsFullPath={file_path}"
+PAGE_URL_FORMAT = (
+    "http://{worker_host}:{http_port}/v1/file/{path_id}"
+    "/page/{page_index}?offset={page_offset}&length={page_length}&ufsFullPath={file_path}"
 )
-PAGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}?offset={page_offset}&length={page_length}"
-WRITE_PAGE_URL_FORMAT = (
-    "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}"
-)
+WRITE_PAGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}?ufsFullPath={file_path}"
+PAGE_PATH_URL_FORMAT = "/v1/file/{path_id}/page/{page_index}"
 GET_FILE_STATUS_URL_FORMAT = "http://{worker_host}:{http_port}/v1/info"
 LOAD_URL_FORMAT = "http://{worker_host}:{http_port}/v1/load"
 # TODO (chunxu): Remove the concrete types of LOAD formats. Keep them for asyncio.

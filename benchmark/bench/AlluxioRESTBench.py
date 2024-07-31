@@ -139,6 +139,7 @@ class AlluxioRESTBench(AbstractBench):
                     worker_host=self.worker_host,
                     http_port=ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
                     path_id=self.args.fileid,
+                    file_path=self.args.path,
                     page_index=page_idx,
                 )
             )
