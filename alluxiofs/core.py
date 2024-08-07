@@ -204,69 +204,39 @@ class AlluxioFileSystem(AbstractFileSystem):
             # process accordingly and keep paths as positional argument if passed as positional,
             # and keep as kwarg arguments if passed as kwarg.
 
-            # fsspec path parameters has different names and sequences
-            # process all path related parameters
-            possible_path_arg_names = [("path1", "path2"), ("lpath", "rpath")]
-            positional_params = list(args)
+            positional_params = list(
+                args
+            )  # args is an immutable tuple so make a copy of it to change its elements
 
             # get a list of arguments defined in the function
+            # argument_list is used to check which path parameter that needs processing appears
             argument_list = []
             for param in signature.parameters.values():
                 argument_list.append(param.name)
 
-            if "path" in argument_list:
-                if "path" in kwargs:
-                    kwargs["path"] = self._strip_alluxiofs_protocol(
-                        kwargs["path"]
-                    )
-                else:
-                    positional_params[0] = self._strip_alluxiofs_protocol(
-                        positional_params[0]
-                    )
-
-            else:
-                for path1, path2 in possible_path_arg_names:
-                    if (path1 in argument_list) and (path2 in argument_list):
-                        if (path1 in kwargs) and (path2 in kwargs):
-                            kwargs[path1] = self._strip_alluxiofs_protocol(
-                                kwargs[path1]
-                            )
-                            kwargs[path2] = self._strip_alluxiofs_protocol(
-                                kwargs[path2]
-                            )
-                        elif (path1 in kwargs) and (path2 not in kwargs):
-                            kwargs[path1] = self._strip_alluxiofs_protocol(
-                                kwargs[path1]
-                            )
-                            path2_index = argument_list.index(path2) - 1
-                            positional_params[
-                                path2_index
-                            ] = self._strip_alluxiofs_protocol(
-                                positional_params[path2_index]
-                            )
-                        elif (path1 not in kwargs) and (path2 in kwargs):
-                            kwargs[path2] = self._strip_alluxiofs_protocol(
-                                kwargs[path2]
-                            )
-                            path1_index = argument_list.index(path1) - 1
-                            positional_params[
-                                path1_index
-                            ] = self._strip_alluxiofs_protocol(
-                                positional_params[path1_index]
-                            )
-                        else:
-                            path1_index = argument_list.index(path1) - 1
-                            positional_params[
-                                path1_index
-                            ] = self._strip_alluxiofs_protocol(
-                                positional_params[path1_index]
-                            )
-                            path2_index = argument_list.index(path2) - 1
-                            positional_params[
-                                path2_index
-                            ] = self._strip_alluxiofs_protocol(
-                                positional_params[path2_index]
-                            )
+            # fsspec path parameters has different names and sequences
+            # check if the path parameters are passed as kwargs or positional args
+            # process the path and put them back into kwargs or positional args
+            possible_path_arg_names = [
+                "path",
+                "path1",
+                "path2",
+                "lpath",
+                "rpath",
+            ]
+            for path in possible_path_arg_names:
+                if path in argument_list:
+                    if path in kwargs:
+                        kwargs[path] = self._strip_alluxiofs_protocol(
+                            kwargs[path]
+                        )
+                    else:
+                        path_index = argument_list.index(path) - 1
+                        positional_params[
+                            path_index
+                        ] = self._strip_alluxiofs_protocol(
+                            positional_params[path_index]
+                        )
 
             positional_params = tuple(positional_params)
 
