@@ -187,40 +187,70 @@ class AlluxioFileSystem(AbstractFileSystem):
             # process path related arguments to remove alluxiofs protocol
             # since both alluxio and ufs cannot process alluxiofs protocol
             # Require s3://bucket/path or /bucket/path
-            bound_args = signature.bind(self, *args, **kwargs)
-            bound_args.apply_defaults()
+            # paths may be passed as positional argument or kwarg arguments
+            # process accordingly and keep paths as positional argument if passed as positional,
+            # and keep as kwarg arguments if passed as kwarg.
+
+            positional_params = list(
+                args
+            )  # args is an immutable tuple so make a copy of it to change its elements
+
+            # get a list of arguments defined in the function
+            # argument_list is used to check which path parameter that needs processing appears
+            argument_list = []
+            for param in signature.parameters.values():
+                argument_list.append(param.name)
+
             # fsspec path parameters has different names and sequences
-            # use this approach to try to process all path related parameters
-            for param in ["path", "path1", "path2", "lpath", "rpath"]:
-                if param in bound_args.arguments:
-                    bound_args.arguments[
-                        param
-                    ] = self._strip_alluxiofs_protocol(
-                        bound_args.arguments[param]
-                    )
+            # check if the path parameters are passed as kwargs or positional args
+            # process the path and put them back into kwargs or positional args
+            possible_path_arg_names = [
+                "path",
+                "path1",
+                "path2",
+                "lpath",
+                "rpath",
+            ]
+            for path in possible_path_arg_names:
+                if path in argument_list:
+                    if path in kwargs:
+                        kwargs[path] = self._strip_alluxiofs_protocol(
+                            kwargs[path]
+                        )
+                    else:
+                        path_index = argument_list.index(path) - 1
+                        positional_params[
+                            path_index
+                        ] = self._strip_alluxiofs_protocol(
+                            positional_params[path_index]
+                        )
+
+            positional_params = tuple(positional_params)
 
             try:
                 if self.alluxio:
                     start_time = time.time()
-                    res = alluxio_impl(*bound_args.args, **bound_args.kwargs)
+                    res = alluxio_impl(self, *positional_params, **kwargs)
                     logger.debug(
-                        f"Exit(Ok): alluxio op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs}) time({(time.time() - start_time):.2f}s)"
+                        f"Exit(Ok): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}) time({(time.time() - start_time):.2f}s)"
                     )
                     return res
             except Exception as e:
                 if not isinstance(e, NotImplementedError):
                     logger.debug(
-                        f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs}) {e}"
+                        f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}) {e}"
                     )
                     self.error_metrics.record_error(alluxio_impl.__name__, e)
                 if self.fs is None:
                     raise e
 
             fs_method = getattr(self.fs, alluxio_impl.__name__, None)
+
             if fs_method:
-                res = fs_method(*bound_args.args[1:], **bound_args.kwargs)
+                res = fs_method(*positional_params, **kwargs)
+
                 logger.debug(
-                    f"Exit(Ok): ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({bound_args.args}) kwargs({bound_args.kwargs})"
+                    f"Exit(Ok): ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs})"
                 )
                 return res
             raise NotImplementedError(
