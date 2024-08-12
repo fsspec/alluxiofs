@@ -69,7 +69,6 @@ def get_alluxio_fs(file):
     return None
 
 
-# Wrapper functions
 def alluxio_open(
     file,
     mode="r",
