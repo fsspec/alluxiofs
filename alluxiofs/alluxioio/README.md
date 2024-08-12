@@ -1,7 +1,7 @@
 # Alluxioio package
 
 The Alluxioio package replaces Python's POSIX-related standard methods with custom methods that use Alluxiofs. By importing the package, users don't need to modify their existing code to use AlluxioFS. Python's POSIX-related methods will be automatically replaced by Alluxiofs methods. This replacement is only effective in the file that imports the Alluxioio package, as well as in external libraries that are imported after Alluxioio.
-
+Alluxio customized methods will be used only when the file or directory paths starts with supported protocols such as "s3://" and "hdfs://". Paths that don't start with supported protocols will still use Python's original methods.
 ### Customized Python Methods
 
 - builtins.open
@@ -35,14 +35,14 @@ target_options:
 
 ```
 
-Import alluxioio as the first line of import in your code: 
+Import alluxioio as the first line of import in your code:
 ```
 from alluxiofs import alluxioio
 import os
 
 with open('s3://file_name.csv', 'r') as f:
     print(f.read())
-    
+
 for d in os.listdir('s3://folder_name'):
     print(d)
 ```

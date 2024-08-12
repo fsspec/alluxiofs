@@ -7,7 +7,8 @@ import yaml
 
 from alluxiofs import AlluxioFileSystem
 
-# Save the original open function before replacing it
+# Save the original python methods before replacing them
+# Original python methods will be used when the file path doesn't start with supported protocols such as s3 and hdfs
 original_open = builtins.open
 original_ls = os.listdir
 original_mkdir = os.mkdir
@@ -22,7 +23,6 @@ original_isfile = os.path.isfile
 original_exists = os.path.exists
 original_walk = os.walk
 
-# Define a global variable for alluxio_fs
 file_systems = {}
 supported_file_paths = {"s3", "hdfs"}
 user_config_file_path = ""
