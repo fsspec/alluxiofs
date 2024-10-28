@@ -33,7 +33,8 @@ except ModuleNotFoundError:
     )
 
 from .config import AlluxioClientConfig
-from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
+from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE, MKDIR_URL_FORMAT, TOUCH_URL_FORMAT, TAIL_URL_FORMAT, \
+    HEAD_URL_FORMAT, MV_URL_FORMAT, RM_URL_FORMAT
 from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
 from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
@@ -555,6 +556,199 @@ class AlluxioClient:
             raise Exception(
                 f"Error writing to file {file_path} at page {page_index}: {e}"
             )
+
+    def mkdir(self, file_path):
+        """
+        make a directory which path is 'file_path'.
+
+        Args:
+            file_path: The path of the directory to make.
+
+        Returns:
+            True if the mkdir was successful, False otherwise.
+        """
+        self._validate_path(file_path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            file_path
+        )
+        path_id = self._get_path_hash(file_path)
+        try:
+            response = requests.post(
+                MKDIR_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=file_path,
+                )
+            )
+            response.raise_for_status()
+            return 200 <= response.status_code < 300
+        except requests.RequestException as e:
+            raise Exception(
+                f"Error making a directory of {file_path}: {e}"
+            )
+
+    def touch(self, file_path):
+        """
+        create a file which path is 'file_path'.
+
+        Args:
+            file_path: The path of the file to touch.
+
+        Returns:
+            True if the touch was successful, False otherwise.
+        """
+        self._validate_path(file_path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            file_path
+        )
+        path_id = self._get_path_hash(file_path)
+        try:
+            response = requests.post(
+                TOUCH_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=file_path,
+                )
+            )
+            response.raise_for_status()
+            return 200 <= response.status_code < 300
+        except requests.RequestException as e:
+            raise Exception(
+                f"Error create a file of {file_path}: {e}"
+            )
+
+    # TODO(littelEast7): complete it
+    def mv(self, path1, path2):
+        """
+        mv a file from path1 to path2.
+
+        Args:
+            path1: The path of the file original.
+            path2: The path of the file destination.
+
+        Returns:
+            True if the mv was successful, False otherwise.
+        """
+        self._validate_path(path1)
+        self._validate_path(path2)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            path1
+        )
+        path_id = self._get_path_hash(path1)
+        try:
+            response = requests.post(
+                MV_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    srcPath=path1,
+                    dstPath=path2,
+                )
+            )
+            response.raise_for_status()
+            return 200 <= response.status_code < 300
+        except requests.RequestException as e:
+            raise Exception(
+                f"Error move a file from {path1} to {path2}: {e}"
+            )
+
+    def rm(self, path, option):
+        """
+        remove a file which path is 'path'.
+
+        Args:
+            path: The path of the file.
+            option: The option to remove.
+
+        Returns:
+            True if the rm was successful, False otherwise.
+        """
+        self._validate_path(path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            path
+        )
+        path_id = self._get_path_hash(path)
+        parameters = option.__dict__
+        try:
+            response = requests.post(
+                RM_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=path
+                ), params=parameters
+            )
+            response.raise_for_status()
+            return 200 <= response.status_code < 300
+        except requests.RequestException as e:
+            raise Exception(
+                f"Error remove a file {path}: {e}"
+            )
+
+    def tail(self, file_path, numOfBytes=None):
+        """
+        show the tail a file which path is 'file_path'.
+
+        Args:
+            path1: The ufs path of the file.
+            path2: The length of the file to show (like 1kb).
+
+        Returns:
+            The content of tail of the file.
+        """
+        self._validate_path(file_path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            file_path
+        )
+        path_id = self._get_path_hash(file_path)
+        try:
+            response = requests.get(
+                TAIL_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=file_path,
+                ), params={'numBytes': numOfBytes}
+            )
+            return b''.join(response.iter_content())
+        except requests.RequestException as e:
+            raise Exception(
+                f"Error show the tail of {file_path}: {e}"
+            )
+
+    def head(self, file_path, numOfBytes=None):
+        """
+        show the head a file which path is 'file_path'.
+
+        Args:
+            path1: The ufs path of the file.
+            path2: The length of the file to show (like 1kb).
+
+        Returns:
+            The content of head of the file.
+        """
+        self._validate_path(file_path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            file_path
+        )
+        path_id = self._get_path_hash(file_path)
+        try:
+            response = requests.get(
+                HEAD_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=file_path,
+                ), params={'numBytes': numOfBytes}
+            )
+            return b''.join(response.iter_content())
+        except requests.RequestException as e:
+            raise Exception(
+                f"Error show the head of {file_path}: {e}"
+            )
+
 
     def _all_page_generator_alluxiocommon(
         self, worker_host, worker_http_port, path_id, file_path

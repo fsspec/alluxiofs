@@ -21,6 +21,20 @@ from alluxiofs.client.utils import set_log_level
 
 logger = logging.getLogger(__name__)
 
+class Option:
+    def __init__(self, *args):
+        # delete files and subdirectories recursively
+        self.recursive = args[0]
+        # copy files in subdirectories recursively
+        self.recursiveAlias = args[1]
+        # remove data and metadata from Alluxio space only
+        self.removeAlluxioOnly = args[2]
+        # remove mount points in the directory
+        self.deleteMountPoint = args[3]
+        # Marks a directory to either trigger a metadata sync or skip the metadata sync on next access.
+        self.syncParentNextTime = args[4]
+        # remove directories without checking UFS contents are in sync
+        self.removeUncheckedOption = args[5]
 
 class AlluxioErrorMetrics:
     def __init__(self):
@@ -314,15 +328,32 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def mkdir(self, path, *args, **kwargs):
-        raise NotImplementedError
+        path = self.unstrip_protocol(path)
+        return self.alluxio.mkdir(path)
 
     @fallback_handler
     def makedirs(self, path, *args, **kwargs):
         raise NotImplementedError
 
     @fallback_handler
-    def rm(self, path, *args, **kwargs):
-        raise NotImplementedError
+    def rm(self, path,
+           recursive=False,
+           recursiveAlias=False,
+           removeAlluxioOnly=False,
+           deleteMountPoint=False,
+           syncParentNextTime=False,
+           removeUncheckedOptionChar=False
+           ):
+        path = self.unstrip_protocol(path)
+        option = Option(
+            recursive,
+            recursiveAlias,
+            removeAlluxioOnly,
+            deleteMountPoint,
+            syncParentNextTime,
+            removeUncheckedOptionChar
+        )
+        return self.alluxio.rm(path, option)
 
     @fallback_handler
     def rmdir(self, path, *args, **kwargs):
@@ -342,7 +373,8 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def touch(self, path, *args, **kwargs):
-        raise NotImplementedError
+        path = self.unstrip_protocol(path)
+        return self.alluxio.touch(path)
 
     @fallback_handler
     def created(self, path, *args, **kwargs):
@@ -354,11 +386,15 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def head(self, path, *args, **kwargs):
-        raise NotImplementedError
+        path = self.unstrip_protocol(path)
+        numOfBytes = args[0]
+        return self.alluxio.head(path, numOfBytes)
 
     @fallback_handler
     def tail(self, path, *args, **kwargs):
-        raise NotImplementedError
+        path = self.unstrip_protocol(path)
+        numOfBytes = args[0]
+        return self.alluxio.tail(path, numOfBytes)
 
     @fallback_handler
     def expand_path(self, path, *args, **kwargs):
@@ -371,7 +407,9 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def mv(self, path1, path2, *args, **kwargs):
-        raise NotImplementedError
+        path1 = self.unstrip_protocol(path1)
+        path2 = self.unstrip_protocol(path2)
+        return self.alluxio.mv(path1, path2)
 
     @fallback_handler
     def copy(self, path1, path2, *args, **kwargs):
