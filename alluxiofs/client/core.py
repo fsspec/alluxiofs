@@ -34,7 +34,7 @@ except ModuleNotFoundError:
 
 from .config import AlluxioClientConfig
 from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE, MKDIR_URL_FORMAT, TOUCH_URL_FORMAT, TAIL_URL_FORMAT, \
-    HEAD_URL_FORMAT, MV_URL_FORMAT, RM_URL_FORMAT
+    HEAD_URL_FORMAT, MV_URL_FORMAT, RM_URL_FORMAT, CP_URL_FORMAT
 from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
 from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
@@ -521,6 +521,39 @@ class AlluxioClient:
                 f"worker_host:{worker_host}, worker_http_port:{worker_http_port}"
             ) from e
 
+
+    def write(self, file_path, file_bytes):
+        """
+        Write a byte[] content to the file.
+
+        Args:
+            file_path (str): The full ufs file path to read data from
+            file_bytes (str): The full ufs file content
+
+        Returns:
+            True if the write was successful, False otherwise.
+        """
+        self._validate_path(file_path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            file_path
+        )
+        path_id = self._get_path_hash(file_path)
+        try:
+            if self.data_manager:
+                return b"".join(
+                    self._all_page_generator_alluxiocommon(
+                        worker_host, worker_http_port, path_id, file_path
+                    )
+                )
+            else:
+                return self._all_page_generator_write(
+                    worker_host, worker_http_port, path_id, file_path, file_bytes
+                )
+        except Exception as e:
+            raise Exception(
+                f"Error when reading file {file_path}: error {e}"
+            ) from e
+
     def write_page(self, file_path, page_index, page_bytes):
         """
         Writes a page.
@@ -687,6 +720,41 @@ class AlluxioClient:
                 f"Error remove a file {path}: {e}"
             )
 
+    def cp(self, path1, path2, option):
+        """
+        copy a file which path is 'path1' to 'path2'.
+
+        Args:
+            path1: The path of the file original.
+            path2: The path of the file destination.
+            option: The option to remove.
+
+        Returns:
+            True if the cp was successful, False otherwise.
+        """
+        self._validate_path(path1)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            path1
+        )
+        path_id = self._get_path_hash(path1)
+        parameters = option.__dict__
+        try:
+            response = requests.post(
+                CP_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    srcPath=path1,
+                    dstPath=path2,
+                ), params=parameters
+            )
+            response.raise_for_status()
+            return 200 <= response.status_code < 300
+        except requests.RequestException as e:
+            raise Exception(
+                f"Error copy a file from {path1} to {path2}: {e}"
+            )
+
     def tail(self, file_path, numOfBytes=None):
         """
         show the tail a file which path is 'file_path'.
@@ -812,40 +880,66 @@ class AlluxioClient:
                 break
             page_index += 1
 
+    def _all_page_generator_write(self, worker_host, worker_http_port, path_id, file_path, file_bytes):
+        page_index = 0
+        page_size = self.config.page_size
+        offset = 0
+        try:
+            while True:
+                end = min(offset + page_size, len(file_bytes))
+                page_bytes = file_bytes[offset:end]
+                self._write_page(worker_host,
+                                 worker_http_port,
+                                 path_id,
+                                 file_path,
+                                 page_index,
+                                 page_bytes)
+                page_index += 1
+                offset += page_size
+                if (end >= len(file_bytes)):
+                    break
+            return True
+        except Exception as e:
+            # data_manager won't throw exception if there are any first few content retrieved
+            # hence we always propagte exception from data_manager upwards
+            raise Exception(
+                f"Error when writing all pages of {path_id}: error {e}"
+            ) from e
+
     def _range_page_generator_alluxiocommon(
-        self, worker_host, worker_http_port, path_id, file_path, offset, length
-    ):
-        read_urls = []
-        start = offset
-        while start < offset + length:
-            page_index = start // self.config.page_size
-            inpage_off = start % self.config.page_size
-            inpage_read_len = min(
-                self.config.page_size - inpage_off, offset + length - start
-            )
-            page_url = None
-            if inpage_off == 0 and inpage_read_len == self.config.page_size:
-                page_url = FULL_PAGE_URL_FORMAT.format(
-                    worker_host=worker_host,
-                    http_port=worker_http_port,
-                    path_id=path_id,
-                    file_path=file_path,
-                    page_index=page_index,
+            self, worker_host, worker_http_port, path_id, file_path, offset, length
+        ):
+            read_urls = []
+            start = offset
+            while start < offset + length:
+                page_index = start // self.config.page_size
+                inpage_off = start % self.config.page_size
+                inpage_read_len = min(
+                    self.config.page_size - inpage_off, offset + length - start
                 )
-            else:
-                page_url = PAGE_URL_FORMAT.format(
-                    worker_host=worker_host,
-                    http_port=worker_http_port,
-                    path_id=path_id,
-                    file_path=file_path,
-                    page_index=page_index,
-                    page_offset=inpage_off,
-                    page_length=inpage_read_len,
-                )
-            read_urls.append(page_url)
-            start += inpage_read_len
-        data = self.data_manager.make_multi_http_req(read_urls)
-        return data
+                page_url = None
+                if inpage_off == 0 and inpage_read_len == self.config.page_size:
+                    page_url = FULL_PAGE_URL_FORMAT.format(
+                        worker_host=worker_host,
+                        http_port=worker_http_port,
+                        path_id=path_id,
+                        file_path=file_path,
+                        page_index=page_index,
+                    )
+                else:
+                    page_url = PAGE_URL_FORMAT.format(
+                        worker_host=worker_host,
+                        http_port=worker_http_port,
+                        path_id=path_id,
+                        file_path=file_path,
+                        page_index=page_index,
+                        page_offset=inpage_off,
+                        page_length=inpage_read_len,
+                    )
+                read_urls.append(page_url)
+                start += inpage_read_len
+            data = self.data_manager.make_multi_http_req(read_urls)
+            return data
 
     def _range_page_generator(
         self, worker_host, worker_http_port, path_id, file_path, offset, length
@@ -1032,6 +1126,43 @@ class AlluxioClient:
             raise Exception(
                 f"Error when requesting file {path_id} page {page_index} from {worker_host}: error {e}"
             ) from e
+
+    def _write_page(self,
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    page_index,
+                    page_bytes):
+        """
+        Writes a page.
+
+        Args:
+            file_path: The path of the file where data is to be written.
+            page_index: The page index in the file to write the data.
+            page_bytes: The byte data to write to the specified page, MUST BE FULL PAGE.
+
+        Returns:
+            True if the write was successful, False otherwise.
+        """
+        try:
+            response = requests.post(
+                WRITE_PAGE_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=file_path,
+                    page_index=page_index,
+                ),
+                headers={"Content-Type": "application/octet-stream"},
+                data=page_bytes,
+            )
+            response.raise_for_status()
+            return 200 <= response.status_code < 300
+        except requests.RequestException as e:
+            raise Exception(
+                f"Error writing to file {file_path} at page {page_index}: {e}"
+            )
 
     def _get_path_hash(self, uri):
         hash_functions = [
