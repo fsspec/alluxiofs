@@ -198,8 +198,8 @@ class AlluxioFileSystem(AbstractFileSystem):
             path = self.fs.unstrip_protocol(path)
             if not (
                 path.startswith("file") or path.startswith("alluxiofs")
-            ) and path.contain("///"):
-                path.replace("///", "//", 1)
+            ) and "///" in path:
+                path = path.replace("///", "//", 1)
         return path
 
     def get_error_metrics(self):
