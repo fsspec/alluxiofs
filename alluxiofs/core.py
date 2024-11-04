@@ -196,9 +196,10 @@ class AlluxioFileSystem(AbstractFileSystem):
             #     return self.fs.unstrip_protocol(path[1:])
             # else:
             path = self.fs.unstrip_protocol(path)
-            if not (
-                path.startswith("file") or path.startswith("alluxiofs")
-            ) and "///" in path:
+            if (
+                not (path.startswith("file") or path.startswith("alluxiofs"))
+                and "///" in path
+            ):
                 path = path.replace("///", "//", 1)
         return path
 
