@@ -55,7 +55,6 @@ class CPOption:
         self.preserve = args[5]
 
 
-
 class AlluxioErrorMetrics:
     def __init__(self):
         self.error_counts = {}
@@ -197,7 +196,9 @@ class AlluxioFileSystem(AbstractFileSystem):
             #     return self.fs.unstrip_protocol(path[1:])
             # else:
             path = self.fs.unstrip_protocol(path)
-            if not (path.startswith("file") or path.startswith("alluxiofs")) and path.contain("///"):
+            if not (
+                path.startswith("file") or path.startswith("alluxiofs")
+            ) and path.contain("///"):
                 path.replace("///", "//", 1)
         return path
 
@@ -362,14 +363,16 @@ class AlluxioFileSystem(AbstractFileSystem):
         raise NotImplementedError
 
     @fallback_handler
-    def rm(self, path,
-           recursive=False,
-           recursiveAlias=False,
-           removeAlluxioOnly=False,
-           deleteMountPoint=False,
-           syncParentNextTime=False,
-           removeUncheckedOptionChar=False
-           ):
+    def rm(
+        self,
+        path,
+        recursive=False,
+        recursiveAlias=False,
+        removeAlluxioOnly=False,
+        deleteMountPoint=False,
+        syncParentNextTime=False,
+        removeUncheckedOptionChar=False,
+    ):
         path = self.unstrip_protocol(path)
         option = RMOption(
             recursive,
@@ -377,7 +380,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             removeAlluxioOnly,
             deleteMountPoint,
             syncParentNextTime,
-            removeUncheckedOptionChar
+            removeUncheckedOptionChar,
         )
         return self.alluxio.rm(path, option)
 
@@ -438,23 +441,21 @@ class AlluxioFileSystem(AbstractFileSystem):
         return self.alluxio.mv(path1, path2)
 
     @fallback_handler
-    def copy(self, path1,
-             path2,
-             recursive=False,
-             recursiveAlias=False,
-             force=False,
-             thread=None,
-             bufferSize=None,
-             preserve=None):
+    def copy(
+        self,
+        path1,
+        path2,
+        recursive=False,
+        recursiveAlias=False,
+        force=False,
+        thread=None,
+        bufferSize=None,
+        preserve=None,
+    ):
         path1 = self.unstrip_protocol(path1)
         path2 = self.unstrip_protocol(path2)
         option = CPOption(
-            recursive,
-            recursiveAlias,
-            force,
-            thread,
-            bufferSize,
-            preserve
+            recursive, recursiveAlias, force, thread, bufferSize, preserve
         )
         return self.alluxio.cp(path1, path2, option)
 

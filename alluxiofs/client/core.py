@@ -33,8 +33,16 @@ except ModuleNotFoundError:
     )
 
 from .config import AlluxioClientConfig
-from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE, MKDIR_URL_FORMAT, TOUCH_URL_FORMAT, TAIL_URL_FORMAT, \
-    HEAD_URL_FORMAT, MV_URL_FORMAT, RM_URL_FORMAT, CP_URL_FORMAT
+from .const import (
+    ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE,
+    MKDIR_URL_FORMAT,
+    TOUCH_URL_FORMAT,
+    TAIL_URL_FORMAT,
+    HEAD_URL_FORMAT,
+    MV_URL_FORMAT,
+    RM_URL_FORMAT,
+    CP_URL_FORMAT,
+)
 from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
 from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
@@ -544,7 +552,11 @@ class AlluxioClient:
                 )
             else:
                 return self._all_page_generator_write(
-                    worker_host, worker_http_port, path_id, file_path, file_bytes
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    file_bytes,
                 )
         except Exception as e:
             raise Exception(
@@ -612,9 +624,7 @@ class AlluxioClient:
             response.raise_for_status()
             return 200 <= response.status_code < 300
         except requests.RequestException as e:
-            raise Exception(
-                f"Error making a directory of {file_path}: {e}"
-            )
+            raise Exception(f"Error making a directory of {file_path}: {e}")
 
     def touch(self, file_path):
         """
@@ -641,9 +651,7 @@ class AlluxioClient:
             response.raise_for_status()
             return 200 <= response.status_code < 300
         except requests.RequestException as e:
-            raise Exception(
-                f"Error create a file of {file_path}: {e}"
-            )
+            raise Exception(f"Error create a file of {file_path}: {e}")
 
         # TODO(littelEast7): complete it
 
@@ -675,9 +683,7 @@ class AlluxioClient:
             response.raise_for_status()
             return 200 <= response.status_code < 300
         except requests.RequestException as e:
-            raise Exception(
-                f"Error move a file from {path1} to {path2}: {e}"
-            )
+            raise Exception(f"Error move a file from {path1} to {path2}: {e}")
 
     def rm(self, path, option):
         """
@@ -700,15 +706,14 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=path
-                ), params=parameters
+                    file_path=path,
+                ),
+                params=parameters,
             )
             response.raise_for_status()
             return 200 <= response.status_code < 300
         except requests.RequestException as e:
-            raise Exception(
-                f"Error remove a file {path}: {e}"
-            )
+            raise Exception(f"Error remove a file {path}: {e}")
 
     def cp(self, path1, path2, option):
         """
@@ -734,14 +739,13 @@ class AlluxioClient:
                     path_id=path_id,
                     srcPath=path1,
                     dstPath=path2,
-                ), params=parameters
+                ),
+                params=parameters,
             )
             response.raise_for_status()
             return 200 <= response.status_code < 300
         except requests.RequestException as e:
-            raise Exception(
-                f"Error copy a file from {path1} to {path2}: {e}"
-            )
+            raise Exception(f"Error copy a file from {path1} to {path2}: {e}")
 
     def tail(self, file_path, numOfBytes=None):
         """
@@ -764,13 +768,12 @@ class AlluxioClient:
                     http_port=worker_http_port,
                     path_id=path_id,
                     file_path=file_path,
-                ), params={'numBytes': numOfBytes}
+                ),
+                params={"numBytes": numOfBytes},
             )
-            return b''.join(response.iter_content())
+            return b"".join(response.iter_content())
         except requests.RequestException as e:
-            raise Exception(
-                f"Error show the tail of {file_path}: {e}"
-            )
+            raise Exception(f"Error show the tail of {file_path}: {e}")
 
     def head(self, file_path, numOfBytes=None):
         """
@@ -793,13 +796,12 @@ class AlluxioClient:
                     http_port=worker_http_port,
                     path_id=path_id,
                     file_path=file_path,
-                ), params={'numBytes': numOfBytes}
+                ),
+                params={"numBytes": numOfBytes},
             )
-            return b''.join(response.iter_content())
+            return b"".join(response.iter_content())
         except requests.RequestException as e:
-            raise Exception(
-                f"Error show the head of {file_path}: {e}"
-            )
+            raise Exception(f"Error show the head of {file_path}: {e}")
 
     def _all_page_generator_alluxiocommon(
         self, worker_host, worker_http_port, path_id, file_path
@@ -863,7 +865,9 @@ class AlluxioClient:
                 break
             page_index += 1
 
-    def _all_page_generator_write(self, worker_host, worker_http_port, path_id, file_path, file_bytes):
+    def _all_page_generator_write(
+        self, worker_host, worker_http_port, path_id, file_path, file_bytes
+    ):
         page_index = 0
         page_size = self.config.page_size
         offset = 0
@@ -871,15 +875,17 @@ class AlluxioClient:
             while True:
                 end = min(offset + page_size, len(file_bytes))
                 page_bytes = file_bytes[offset:end]
-                self._write_page(worker_host,
-                                 worker_http_port,
-                                 path_id,
-                                 file_path,
-                                 page_index,
-                                 page_bytes)
+                self._write_page(
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    page_index,
+                    page_bytes,
+                )
                 page_index += 1
                 offset += page_size
-                if (end >= len(file_bytes)):
+                if end >= len(file_bytes):
                     break
             return True
         except Exception as e:
@@ -1110,13 +1116,15 @@ class AlluxioClient:
                 f"Error when requesting file {path_id} page {page_index} from {worker_host}: error {e}"
             ) from e
 
-    def _write_page(self,
-                    worker_host,
-                    worker_http_port,
-                    path_id,
-                    file_path,
-                    page_index,
-                    page_bytes):
+    def _write_page(
+        self,
+        worker_host,
+        worker_http_port,
+        path_id,
+        file_path,
+        page_index,
+        page_bytes,
+    ):
         """
         Writes a page.
         Args:
