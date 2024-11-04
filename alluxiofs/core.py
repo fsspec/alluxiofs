@@ -545,9 +545,9 @@ class AlluxioFile(AbstractBufferedFile):
             self.offset = 0
             try:
                 self._initiate_upload()
-            except:
+            except Exception as e:
                 self.closed = True
-                raise
+                raise e
 
         if self._upload_chunk(final=force) is not False:
             self.offset += self.buffer.seek(0, 2)
