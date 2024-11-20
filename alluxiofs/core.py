@@ -484,6 +484,10 @@ class AlluxioFileSystem(AbstractFileSystem):
         path = self.unstrip_protocol(path)
         return self.alluxio.write(path, value)
 
+    def load_data_from_ufs(self, path, **kwargs):
+        path = self.unstrip_protocol(path)
+        return self.alluxio.load(path, **kwargs)
+
     @fallback_handler
     def upload(self, lpath, rpath, *args, **kwargs):
         raise NotImplementedError
@@ -509,10 +513,6 @@ class AlluxioFileSystem(AbstractFileSystem):
 
 class AlluxioFile(AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
-        if mode != "rb":
-            raise ValueError(
-                'Remote Alluxio files can only be opened in "rb" mode'
-            )
         super().__init__(fs, path, mode, **kwargs)
 
     def _fetch_range(self, start, end):
