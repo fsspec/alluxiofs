@@ -42,7 +42,9 @@ from .const import (
     HEAD_URL_FORMAT,
     MV_URL_FORMAT,
     RM_URL_FORMAT,
-    CP_URL_FORMAT, FULL_CHUNK_URL_FORMAT, WRITE_CHUNK_URL_FORMAT,
+    CP_URL_FORMAT,
+    FULL_CHUNK_URL_FORMAT,
+    WRITE_CHUNK_URL_FORMAT,
 )
 from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
 from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
@@ -467,7 +469,7 @@ class AlluxioClient:
                 f"Error when reading file {file_path}: error {e}"
             ) from e
 
-    def read_chunked(self, file_path, chunk_size=1024*1024):
+    def read_chunked(self, file_path, chunk_size=1024 * 1024):
         """
         Reads the full file.
 
@@ -490,14 +492,20 @@ class AlluxioClient:
                 )
             else:
                 return self._all_chunk_generator(
-                    worker_host, worker_http_port, path_id, file_path, chunk_size
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    chunk_size,
                 )
         except Exception as e:
             raise Exception(
                 f"Error when reading file {file_path}: error {e}"
             ) from e
 
-    def _all_chunk_generator(self, worker_host, worker_http_port, path_id, file_path, chunk_size):
+    def _all_chunk_generator(
+        self, worker_host, worker_http_port, path_id, file_path, chunk_size
+    ):
         """
         Reads the full file.
 
@@ -526,7 +534,6 @@ class AlluxioClient:
                     out.write(chunk)
         out.seek(0)
         return out
-
 
     def read_range(self, file_path, offset, length):
         """
@@ -625,7 +632,7 @@ class AlluxioClient:
                 f"Error when reading file {file_path}: error {e}"
             ) from e
 
-    def write_chunked(self, file_path, file_bytes, chunk_size=1024*1024):
+    def write_chunked(self, file_path, file_bytes, chunk_size=1024 * 1024):
         """
         Write a byte[] content to the file by chunked-transfer.
         Args:
@@ -643,8 +650,8 @@ class AlluxioClient:
         try:
             if self.data_manager:
                 return self._all_page_generator_alluxiocommon(
-                        worker_host, worker_http_port, path_id, file_path
-                    )
+                    worker_host, worker_http_port, path_id, file_path
+                )
             else:
                 return self._all_chunk_generator_write(
                     worker_host,
@@ -675,7 +682,6 @@ class AlluxioClient:
         worker_host, worker_http_port = self._get_preferred_worker_address(
             file_path
         )
-        path_id = self._get_path_hash(file_path)
         try:
             response = requests.post(
                 WRITE_PAGE_URL_FORMAT.format(
@@ -994,24 +1000,39 @@ class AlluxioClient:
     def _file_chunk_generator(self, file_bytes, chunk_size):
         offset = 0
         while offset < len(file_bytes):
-            chunk = file_bytes[offset:offset + chunk_size]
+            chunk = file_bytes[offset : offset + chunk_size]
             offset += chunk_size
             yield chunk
+
     def _all_chunk_generator_write(
-        self, worker_host, worker_http_port, path_id, file_path, file_bytes, chunk_size
+        self,
+        worker_host,
+        worker_http_port,
+        path_id,
+        file_path,
+        file_bytes,
+        chunk_size,
     ):
         try:
-            url = WRITE_CHUNK_URL_FORMAT.format(
-                worker_host=worker_host,
-                http_port=worker_http_port,
-                path_id=path_id,
-                file_path=file_path,
-                chunk_size=chunk_size,
-            ),
+            url = (
+                WRITE_CHUNK_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=file_path,
+                    chunk_size=chunk_size,
+                ),
+            )
 
-            headers = {"transfer-type": 'chunked',
-                       "Content-Type": "application/octet-stream"}
-            response = requests.post(url[0], headers=headers, data=self._file_chunk_generator(file_bytes, chunk_size))
+            headers = {
+                "transfer-type": "chunked",
+                "Content-Type": "application/octet-stream",
+            }
+            response = requests.post(
+                url[0],
+                headers=headers,
+                data=self._file_chunk_generator(file_bytes, chunk_size),
+            )
             return response.status_code == 200
         except Exception as e:
             # data_manager won't throw exception if there are any first few content retrieved
@@ -1019,7 +1040,6 @@ class AlluxioClient:
             raise Exception(
                 f"Error when writing all pages of {file_path}: error {e}"
             ) from e
-
 
     def _range_page_generator_alluxiocommon(
         self, worker_host, worker_http_port, path_id, file_path, offset, length
@@ -1116,7 +1136,7 @@ class AlluxioClient:
         session.mount("http://", adapter)
         return session
 
-    def  _load_file(
+    def _load_file(
         self, worker_host, worker_http_port, path, timeout, verbose
     ):
         try:
@@ -1595,7 +1615,6 @@ class AlluxioAsyncFileSystem:
         """
         self._validate_path(file_path)
         worker_host = self._get_preferred_worker_host(file_path)
-        path_id = self._get_path_hash(file_path)
 
         status, content = await self._request(
             Method.POST,
