@@ -8,6 +8,7 @@
 # See the NOTICE file distributed with this work for information regarding copyright ownership.
 import asyncio
 import hashlib
+import io
 import json
 import logging
 import re
@@ -33,7 +34,18 @@ except ModuleNotFoundError:
     )
 
 from .config import AlluxioClientConfig
-from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
+from .const import (
+    ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE,
+    MKDIR_URL_FORMAT,
+    TOUCH_URL_FORMAT,
+    TAIL_URL_FORMAT,
+    HEAD_URL_FORMAT,
+    MV_URL_FORMAT,
+    RM_URL_FORMAT,
+    CP_URL_FORMAT,
+    FULL_CHUNK_URL_FORMAT,
+    WRITE_CHUNK_URL_FORMAT,
+)
 from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
 from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
@@ -457,6 +469,73 @@ class AlluxioClient:
                 f"Error when reading file {file_path}: error {e}"
             ) from e
 
+    def read_chunked(self, file_path, chunk_size=1024 * 1024):
+        """
+        Reads the full file.
+
+        Args:
+            file_path (str): The full ufs file path to read data from
+            chunk_size (int, optional): The size of each chunk in bytes. Defaults to 1MB.
+
+        Returns:
+            file content (str): The full file content
+        """
+        self._validate_path(file_path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            file_path
+        )
+        path_id = self._get_path_hash(file_path)
+        try:
+            if self.data_manager:
+                self._all_chunk_generator_alluxiocommon(
+                    worker_host, worker_http_port, path_id, file_path
+                )
+            else:
+                return self._all_chunk_generator(
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    chunk_size,
+                )
+        except Exception as e:
+            raise Exception(
+                f"Error when reading file {file_path}: error {e}"
+            ) from e
+
+    def _all_chunk_generator(
+        self, worker_host, worker_http_port, path_id, file_path, chunk_size
+    ):
+        """
+        Reads the full file.
+
+        Args:
+            worker_host (str): The worker host to read data from
+            worker_http_port (int): The worker HTTP port to read data from
+            path_id (int): The path id of the file
+            file_path (str): The full ufs file path to read data from
+
+        Returns:
+            file content (str): The full file content
+        """
+        url_chunk = FULL_CHUNK_URL_FORMAT.format(
+            worker_host=worker_host,
+            http_port=worker_http_port,
+            path_id=path_id,
+            chunk_size=chunk_size,
+            file_path=file_path,
+            page_index=0,
+        )
+        out = io.BytesIO()
+        headers = {"transfer-type": "chunked"}
+        with requests.get(url_chunk, headers=headers, stream=True) as response:
+            response.raise_for_status()
+            for chunk in response.iter_content(chunk_size=chunk_size):
+                if chunk:
+                    out.write(chunk)
+        out.seek(0)
+        return out
+
     def read_range(self, file_path, offset, length):
         """
         Reads parts of a file.
@@ -520,6 +599,74 @@ class AlluxioClient:
                 f"worker_host:{worker_host}, worker_http_port:{worker_http_port}"
             ) from e
 
+    def write(self, file_path, file_bytes):
+        """
+        Write a byte[] content to the file.
+        Args:
+            file_path (str): The full ufs file path to read data from
+            file_bytes (str): The full ufs file content
+        Returns:
+            True if the write was successful, False otherwise.
+        """
+        self._validate_path(file_path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            file_path
+        )
+        path_id = self._get_path_hash(file_path)
+        try:
+            if self.data_manager:
+                return b"".join(
+                    self._all_page_generator_alluxiocommon(
+                        worker_host, worker_http_port, path_id, file_path
+                    )
+                )
+            else:
+                return self._all_page_generator_write(
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    file_bytes,
+                )
+        except Exception as e:
+            raise Exception(
+                f"Error when reading file {file_path}: error {e}"
+            ) from e
+
+    def write_chunked(self, file_path, file_bytes, chunk_size=1024 * 1024):
+        """
+        Write a byte[] content to the file by chunked-transfer.
+        Args:
+            file_path (str): The full ufs file path to read data from
+            file_bytes (bytes): The full ufs file content
+            chunk_size (int, optional): The size of each chunk in bytes. Defaults to 1MB.
+        Returns:
+            True if the write was successful, False otherwise.
+        """
+        self._validate_path(file_path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            file_path
+        )
+        path_id = self._get_path_hash(file_path)
+        try:
+            if self.data_manager:
+                return self._all_page_generator_alluxiocommon(
+                    worker_host, worker_http_port, path_id, file_path
+                )
+            else:
+                return self._all_chunk_generator_write(
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    file_bytes,
+                    chunk_size,
+                )
+        except Exception as e:
+            raise Exception(
+                f"Error when reading file {file_path}: error {e}"
+            ) from e
+
     def write_page(self, file_path, page_index, page_bytes):
         """
         Writes a page.
@@ -555,6 +702,210 @@ class AlluxioClient:
             raise Exception(
                 f"Error writing to file {file_path} at page {page_index}: {e}"
             )
+
+    def mkdir(self, file_path):
+        """
+        make a directory which path is 'file_path'.
+        Args:
+            file_path: The path of the directory to make.
+        Returns:
+            True if the mkdir was successful, False otherwise.
+        """
+        self._validate_path(file_path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            file_path
+        )
+        path_id = self._get_path_hash(file_path)
+        try:
+            response = requests.post(
+                MKDIR_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=file_path,
+                )
+            )
+            response.raise_for_status()
+            return 200 <= response.status_code < 300
+        except requests.RequestException as e:
+            raise Exception(f"Error making a directory of {file_path}: {e}")
+
+    def touch(self, file_path):
+        """
+        create a file which path is 'file_path'.
+        Args:
+            file_path: The path of the file to touch.
+        Returns:
+            True if the touch was successful, False otherwise.
+        """
+        self._validate_path(file_path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            file_path
+        )
+        path_id = self._get_path_hash(file_path)
+        try:
+            response = requests.post(
+                TOUCH_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=file_path,
+                )
+            )
+            response.raise_for_status()
+            return 200 <= response.status_code < 300
+        except requests.RequestException as e:
+            raise Exception(f"Error create a file of {file_path}: {e}")
+
+        # TODO(littelEast7): complete it
+
+    def mv(self, path1, path2):
+        """
+        mv a file from path1 to path2.
+        Args:
+            path1: The path of the file original.
+            path2: The path of the file destination.
+        Returns:
+            True if the mv was successful, False otherwise.
+        """
+        self._validate_path(path1)
+        self._validate_path(path2)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            path1
+        )
+        path_id = self._get_path_hash(path1)
+        try:
+            response = requests.post(
+                MV_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    srcPath=path1,
+                    dstPath=path2,
+                )
+            )
+            response.raise_for_status()
+            return 200 <= response.status_code < 300
+        except requests.RequestException as e:
+            raise Exception(f"Error move a file from {path1} to {path2}: {e}")
+
+    def rm(self, path, option):
+        """
+        remove a file which path is 'path'.
+        Args:
+            path: The path of the file.
+            option: The option to remove.
+        Returns:
+            True if the rm was successful, False otherwise.
+        """
+        self._validate_path(path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            path
+        )
+        path_id = self._get_path_hash(path)
+        parameters = option.__dict__
+        try:
+            response = requests.post(
+                RM_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=path,
+                ),
+                params=parameters,
+            )
+            response.raise_for_status()
+            return 200 <= response.status_code < 300
+        except requests.RequestException as e:
+            raise Exception(f"Error remove a file {path}: {e}")
+
+    def cp(self, path1, path2, option):
+        """
+        copy a file which path is 'path1' to 'path2'.
+        Args:
+            path1: The path of the file original.
+            path2: The path of the file destination.
+            option: The option to remove.
+        Returns:
+            True if the cp was successful, False otherwise.
+        """
+        self._validate_path(path1)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            path1
+        )
+        path_id = self._get_path_hash(path1)
+        parameters = option.__dict__
+        try:
+            response = requests.post(
+                CP_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    srcPath=path1,
+                    dstPath=path2,
+                ),
+                params=parameters,
+            )
+            response.raise_for_status()
+            return 200 <= response.status_code < 300
+        except requests.RequestException as e:
+            raise Exception(f"Error copy a file from {path1} to {path2}: {e}")
+
+    def tail(self, file_path, numOfBytes=None):
+        """
+        show the tail a file which path is 'file_path'.
+        Args:
+            path1: The ufs path of the file.
+            path2: The length of the file to show (like 1kb).
+        Returns:
+            The content of tail of the file.
+        """
+        self._validate_path(file_path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            file_path
+        )
+        path_id = self._get_path_hash(file_path)
+        try:
+            response = requests.get(
+                TAIL_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=file_path,
+                ),
+                params={"numBytes": numOfBytes},
+            )
+            return b"".join(response.iter_content())
+        except requests.RequestException as e:
+            raise Exception(f"Error show the tail of {file_path}: {e}")
+
+    def head(self, file_path, numOfBytes=None):
+        """
+        show the head a file which path is 'file_path'.
+        Args:
+            path1: The ufs path of the file.
+            path2: The length of the file to show (like 1kb).
+        Returns:
+            The content of head of the file.
+        """
+        self._validate_path(file_path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            file_path
+        )
+        path_id = self._get_path_hash(file_path)
+        try:
+            response = requests.get(
+                HEAD_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=file_path,
+                ),
+                params={"numBytes": numOfBytes},
+            )
+            return b"".join(response.iter_content())
+        except requests.RequestException as e:
+            raise Exception(f"Error show the head of {file_path}: {e}")
 
     def _all_page_generator_alluxiocommon(
         self, worker_host, worker_http_port, path_id, file_path
@@ -617,6 +968,81 @@ class AlluxioClient:
             if len(page_content) < self.config.page_size:  # last page
                 break
             page_index += 1
+            print(f"page_index:{page_index} is done")
+
+    def _all_page_generator_write(
+        self, worker_host, worker_http_port, path_id, file_path, file_bytes
+    ):
+        page_index = 0
+        page_size = self.config.page_size
+        offset = 0
+        try:
+            while True:
+                end = min(offset + page_size, len(file_bytes))
+                page_bytes = file_bytes[offset:end]
+                self._write_page(
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    page_index,
+                    page_bytes,
+                )
+                page_index += 1
+                offset += page_size
+                if end >= len(file_bytes):
+                    break
+            return True
+        except Exception as e:
+            # data_manager won't throw exception if there are any first few content retrieved
+            # hence we always propagte exception from data_manager upwards
+            raise Exception(
+                f"Error when writing all pages of {path_id}: error {e}"
+            ) from e
+
+    def _file_chunk_generator(self, file_bytes, chunk_size):
+        offset = 0
+        while offset < len(file_bytes):
+            chunk = file_bytes[offset : offset + chunk_size]
+            offset += chunk_size
+            yield chunk
+
+    def _all_chunk_generator_write(
+        self,
+        worker_host,
+        worker_http_port,
+        path_id,
+        file_path,
+        file_bytes,
+        chunk_size,
+    ):
+        try:
+            url = (
+                WRITE_CHUNK_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=file_path,
+                    chunk_size=chunk_size,
+                ),
+            )
+
+            headers = {
+                "transfer-type": "chunked",
+                "Content-Type": "application/octet-stream",
+            }
+            response = requests.post(
+                url[0],
+                headers=headers,
+                data=self._file_chunk_generator(file_bytes, chunk_size),
+            )
+            return response.status_code == 200
+        except Exception as e:
+            # data_manager won't throw exception if there are any first few content retrieved
+            # hence we always propagte exception from data_manager upwards
+            raise Exception(
+                f"Error when writing all pages of {file_path}: error {e}"
+            ) from e
 
     def _range_page_generator_alluxiocommon(
         self, worker_host, worker_http_port, path_id, file_path, offset, length
@@ -838,6 +1264,43 @@ class AlluxioClient:
             raise Exception(
                 f"Error when requesting file {path_id} page {page_index} from {worker_host}: error {e}"
             ) from e
+
+    def _write_page(
+        self,
+        worker_host,
+        worker_http_port,
+        path_id,
+        file_path,
+        page_index,
+        page_bytes,
+    ):
+        """
+        Writes a page.
+        Args:
+            file_path: The path of the file where data is to be written.
+            page_index: The page index in the file to write the data.
+            page_bytes: The byte data to write to the specified page, MUST BE FULL PAGE.
+        Returns:
+            True if the write was successful, False otherwise.
+        """
+        try:
+            response = requests.post(
+                WRITE_PAGE_URL_FORMAT.format(
+                    worker_host=worker_host,
+                    http_port=worker_http_port,
+                    path_id=path_id,
+                    file_path=file_path,
+                    page_index=page_index,
+                ),
+                headers={"Content-Type": "application/octet-stream"},
+                data=page_bytes,
+            )
+            response.raise_for_status()
+            return 200 <= response.status_code < 300
+        except requests.RequestException as e:
+            raise Exception(
+                f"Error writing to file {file_path} at page {page_index}: {e}"
+            )
 
     def _get_path_hash(self, uri):
         hash_functions = [
@@ -1157,7 +1620,6 @@ class AlluxioAsyncFileSystem:
         self._validate_path(file_path)
         worker_host = self._get_preferred_worker_host(file_path)
         path_id = self._get_path_hash(file_path)
-
         status, content = await self._request(
             Method.POST,
             WRITE_PAGE_URL_FORMAT.format(
