@@ -524,6 +524,7 @@ class AlluxioClient:
             path_id=path_id,
             chunk_size=chunk_size,
             file_path=file_path,
+            page_index=0,
         )
         out = io.BytesIO()
         headers = {"transfer-type": "chunked"}
@@ -682,11 +683,13 @@ class AlluxioClient:
         worker_host, worker_http_port = self._get_preferred_worker_address(
             file_path
         )
+        path_id = self._get_path_hash(file_path)
         try:
             response = requests.post(
                 WRITE_PAGE_URL_FORMAT.format(
                     worker_host=worker_host,
                     http_port=worker_http_port,
+                    path_id=path_id,
                     file_path=file_path,
                     page_index=page_index,
                 ),
@@ -1285,6 +1288,7 @@ class AlluxioClient:
                 WRITE_PAGE_URL_FORMAT.format(
                     worker_host=worker_host,
                     http_port=worker_http_port,
+                    path_id=path_id,
                     file_path=file_path,
                     page_index=page_index,
                 ),
@@ -1615,12 +1619,13 @@ class AlluxioAsyncFileSystem:
         """
         self._validate_path(file_path)
         worker_host = self._get_preferred_worker_host(file_path)
-
+        path_id = self._get_path_hash(file_path)
         status, content = await self._request(
             Method.POST,
             WRITE_PAGE_URL_FORMAT.format(
                 worker_host=worker_host,
                 http_port=self.http_port,
+                path_id=path_id,
                 file_path=file_path,
                 page_index=page_index,
             ),
