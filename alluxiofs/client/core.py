@@ -44,7 +44,7 @@ from .const import (
     RM_URL_FORMAT,
     CP_URL_FORMAT,
     FULL_CHUNK_URL_FORMAT,
-    WRITE_CHUNK_URL_FORMAT,
+    WRITE_CHUNK_URL_FORMAT, FULL_RANGE_URL_FORMAT,
 )
 from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
 from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
@@ -446,6 +446,46 @@ class AlluxioClient:
         Returns:
             file content (str): The full file content
         """
+        try:
+            file_status = self.get_file_status(file_path)
+            if file_status is None:
+                raise FileNotFoundError(f"File {file_path} not found")
+            return self.read_range(file_path, 0, file_status.length)
+        # self._validate_path(file_path)
+        # worker_host, worker_http_port = self._get_preferred_worker_address(
+        #     file_path
+        # )
+        # path_id = self._get_path_hash(file_path)
+        # try:
+        #     if self.data_manager:
+        #         return b"".join(
+        #             self._all_page_generator_alluxiocommon(
+        #                 worker_host, worker_http_port, path_id, file_path
+        #             )
+        #         )
+        #     else:
+        #         return b"".join(
+        #             self._all_page_generator(
+        #                 worker_host, worker_http_port, path_id, file_path
+        #             )
+        #         )
+        except Exception as e:
+            raise Exception(
+                f"Error when reading file {file_path}: error {e}"
+            ) from e
+
+    def read_file_range(self, file_path, offset=0, length=-1):
+        """
+        Reads the full file.
+
+        Args:
+            file_path (str): The full ufs file path to read data from
+            offset (integer): The offset to start reading data from
+            length (integer): The file length to read
+
+        Returns:
+            file content (str): The full file content
+        """
         self._validate_path(file_path)
         worker_host, worker_http_port = self._get_preferred_worker_address(
             file_path
@@ -453,16 +493,17 @@ class AlluxioClient:
         path_id = self._get_path_hash(file_path)
         try:
             if self.data_manager:
-                return b"".join(
-                    self._all_page_generator_alluxiocommon(
-                        worker_host, worker_http_port, path_id, file_path
-                    )
+                self._all_chunk_generator_alluxiocommon(
+                    worker_host, worker_http_port, path_id, file_path
                 )
             else:
-                return b"".join(
-                    self._all_page_generator(
-                        worker_host, worker_http_port, path_id, file_path
-                    )
+                return self._all_file_range_generator(
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    offset,
+                    length
                 )
         except Exception as e:
             raise Exception(
@@ -604,7 +645,7 @@ class AlluxioClient:
         Write a byte[] content to the file.
         Args:
             file_path (str): The full ufs file path to read data from
-            file_bytes (str): The full ufs file content
+            file_bytes (bytes): The full ufs file content
         Returns:
             True if the write was successful, False otherwise.
         """
@@ -883,8 +924,8 @@ class AlluxioClient:
         """
         show the head a file which path is 'file_path'.
         Args:
-            path1: The ufs path of the file.
-            path2: The length of the file to show (like 1kb).
+            file_path: The ufs path of the file.
+            numOfBytes: The length of the file to show (like 1kb).
         Returns:
             The content of head of the file.
         """
@@ -968,7 +1009,6 @@ class AlluxioClient:
             if len(page_content) < self.config.page_size:  # last page
                 break
             page_index += 1
-            print(f"page_index:{page_index} is done")
 
     def _all_page_generator_write(
         self, worker_host, worker_http_port, path_id, file_path, file_bytes
@@ -1130,6 +1170,26 @@ class AlluxioClient:
                 else:
                     # read some data successfully, return those data
                     break
+
+    def _all_file_range_generator(
+        self, worker_host, worker_http_port, path_id, file_path, offset, length
+    ):
+        try:
+            url = FULL_RANGE_URL_FORMAT.format(
+                worker_host=worker_host,
+                http_port=worker_http_port,
+                path_id=path_id,
+                file_path=file_path,
+                offset=offset,
+                length=length,
+            )
+            response = requests.get(url)
+            response.raise_for_status()
+            return response.content
+        except Exception as e:
+            raise Exception(
+                f"Error when reading file {path_id} with offset {offset} and length {length}: error {e}"
+            ) from e
 
     def _create_session(self, concurrency):
         session = requests.Session()

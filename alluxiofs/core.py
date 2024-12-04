@@ -480,21 +480,46 @@ class AlluxioFileSystem(AbstractFileSystem):
     def put(self, lpath, rpath, *args, **kwargs):
         raise NotImplementedError
 
-    def write_bytes(self, path, value, **kwargs):
+    def write(self, path, value, **kwargs):
         path = self.unstrip_protocol(path)
         return self.alluxio.write(path, value)
 
-    def load_data_from_ufs(self, path, **kwargs):
+    def load_data_from_ufs_to_alluxio(self, path, **kwargs):
         path = self.unstrip_protocol(path)
         return self.alluxio.load(path, **kwargs)
 
     @fallback_handler
     def upload(self, lpath, rpath, *args, **kwargs):
-        raise NotImplementedError
+        lpath = self.unstrip_protocol(lpath)
+        try:
+            with open(rpath, "rb") as f:
+                self.alluxio.write_chunked(lpath, f.read())
+            return True
+        except Exception:
+            return False
+
+    def upload(self, lpath, data, *args, **kwargs):
+        lpath = self.unstrip_protocol(lpath)
+        try:
+            self.alluxio.write_chunked(lpath, data)
+            return True
+        except Exception:
+            return False
 
     @fallback_handler
     def download(self, lpath, rpath, *args, **kwargs):
-        raise NotImplementedError
+        lpath = self.unstrip_protocol(lpath)
+        try:
+            with open(rpath, "wb") as f:
+                f.write(self.alluxio.read_chunked(lpath).read())
+            return True
+        except Exception:
+            return False
+
+    def download(self, lpath, *args, **kwargs):
+        lpath = self.unstrip_protocol(lpath)
+        return self.alluxio.read_chunked(lpath)
+
 
     @fallback_handler
     def get(self, rpath, lpath, *args, **kwargs):
@@ -523,7 +548,7 @@ class AlluxioFile(AbstractBufferedFile):
         data = self.buffer.getvalue()
         if not data:
             return False
-        if self.fs.write_bytes(path=self.path, value=data):
+        if self.fs.write(path=self.path, value=data):
             return True
         return False
 

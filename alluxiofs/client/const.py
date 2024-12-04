@@ -24,6 +24,7 @@ ALLUXIO_COMMON_EXTENSION_ENABLE = "alluxio.common.extension.enable"
 ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE = "alluxio.common.ondemandpool.disable"
 LIST_URL_FORMAT = "http://{worker_host}:{http_port}/v1/files"
 FULL_PAGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}?ufsFullPath={file_path}"
+FULL_RANGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/range/{path_id}?ufsFullPath={file_path}&offset={offset}&length={length}"
 FULL_CHUNK_URL_FORMAT = "http://{worker_host}:{http_port}/v1/chunk/{path_id}?ufsFullPath={file_path}&chunkSize={chunk_size}"
 PAGE_URL_FORMAT = (
     "http://{worker_host}:{http_port}/v1/file/{path_id}"
