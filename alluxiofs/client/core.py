@@ -44,7 +44,8 @@ from .const import (
     RM_URL_FORMAT,
     CP_URL_FORMAT,
     FULL_CHUNK_URL_FORMAT,
-    WRITE_CHUNK_URL_FORMAT, FULL_RANGE_URL_FORMAT,
+    WRITE_CHUNK_URL_FORMAT,
+    FULL_RANGE_URL_FORMAT,
 )
 from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
 from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
@@ -503,7 +504,7 @@ class AlluxioClient:
                     path_id,
                     file_path,
                     offset,
-                    length
+                    length,
                 )
         except Exception as e:
             raise Exception(
