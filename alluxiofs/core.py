@@ -10,6 +10,7 @@ import inspect
 import io
 import logging
 import time
+from dataclasses import dataclass
 from functools import wraps
 from typing import Callable
 
@@ -23,36 +24,34 @@ from alluxiofs.client.utils import set_log_level
 logger = logging.getLogger(__name__)
 
 
+@dataclass
 class RMOption:
-    def __init__(self, *args):
-        # delete files and subdirectories recursively
-        self.recursive = args[0]
-        # copy files in subdirectories recursively
-        self.recursiveAlias = args[1]
-        # remove data and metadata from Alluxio space only
-        self.removeAlluxioOnly = args[2]
-        # remove mount points in the directory
-        self.deleteMountPoint = args[3]
-        # Marks a directory to either trigger a metadata sync or skip the metadata sync on next access.
-        self.syncParentNextTime = args[4]
-        # remove directories without checking UFS contents are in sync
-        self.removeUncheckedOption = args[5]
+    # delete files and subdirectories recursively
+    recursive: bool = False
+    recursiveAlias: bool = False
+    # Marks a directory to either trigger a metadata sync or skip the metadata sync on next access.
+    sync_parent_next_time: bool = False
+    # remove directories without checking UFS contents are in sync
+    remove_unchecked_option: bool = False
+    # remove data and metadata from Alluxio space only
+    remove_alluxio_only: bool = True
+    # remove mount points in the directory
+    delete_mount_point: bool = False
 
 
+@dataclass(frozen=True)
 class CPOption:
-    def __init__(self, *args):
-        # delete files and subdirectories recursively
-        self.recursive = args[0]
-        # copy files in subdirectories recursively
-        self.recursiveAlias = args[1]
-        # forces to overwrite the destination file if it exists
-        self.forced = args[2]
-        # Number of threads used to copy files in parallel, default value is CPU cores * 2
-        self.thread = args[3]
-        # Read buffer size in bytes, default is 8MB when copying from local, and 64MB when copying to local
-        self.bufferSize = args[4]
-        # Preserve file permission attributes when copying files. All ownership, permissions and ACLs will be preserved
-        self.preserve = args[5]
+    # delete files and subdirectories recursively
+    recursive: bool = True
+    recursiveAlias: bool = False
+    # forces to overwrite the destination file if it exists
+    forced: bool = False
+    # Number of threads used to copy files in parallel, default value is CPU cores * 2
+    thread: int = None
+    # Read buffer size in bytes, default is 8MB when copying from local, and 64MB when copying to local
+    buffer_size: str = None
+    # Preserve file permission attributes when copying files. All ownership, permissions and ACLs will be preserved
+    preserve: bool = True
 
 
 class AlluxioErrorMetrics:
@@ -217,6 +216,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                 "last_modification_time_ms": getattr(
                     file_status, "last_modification_time_ms", None
                 ),
+                "content_hash": file_status.content_hash,
             }
         else:
             return self._strip_protocol(file_status.ufs_path)
@@ -368,20 +368,20 @@ class AlluxioFileSystem(AbstractFileSystem):
         self,
         path,
         recursive=False,
-        recursiveAlias=False,
-        removeAlluxioOnly=False,
-        deleteMountPoint=False,
-        syncParentNextTime=False,
-        removeUncheckedOptionChar=False,
+        recursive_alias=False,
+        remove_alluxio_only=False,
+        delete_mount_point=False,
+        sync_parent_next_time=False,
+        remove_unchecked_option_char=False,
     ):
         path = self.unstrip_protocol(path)
         option = RMOption(
             recursive,
-            recursiveAlias,
-            removeAlluxioOnly,
-            deleteMountPoint,
-            syncParentNextTime,
-            removeUncheckedOptionChar,
+            recursive_alias,
+            recursive_alias,
+            delete_mount_point,
+            sync_parent_next_time,
+            remove_unchecked_option_char,
         )
         return self.alluxio.rm(path, option)
 
@@ -417,14 +417,12 @@ class AlluxioFileSystem(AbstractFileSystem):
     @fallback_handler
     def head(self, path, *args, **kwargs):
         path = self.unstrip_protocol(path)
-        numOfBytes = args[0]
-        return self.alluxio.head(path, numOfBytes)
+        return self.alluxio.head(path, **kwargs)
 
     @fallback_handler
     def tail(self, path, *args, **kwargs):
         path = self.unstrip_protocol(path)
-        numOfBytes = args[0]
-        return self.alluxio.tail(path, numOfBytes)
+        return self.alluxio.tail(file_path=path, **kwargs)
 
     @fallback_handler
     def expand_path(self, path, *args, **kwargs):
@@ -462,15 +460,15 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def cp_file(self, path1, path2, *args, **kwargs):
-        raise NotImplementedError
+        return self.copy(path1, path2, *args, **kwargs)
 
     @fallback_handler
     def rename(self, path1, path2, **kwargs):
-        raise NotImplementedError
+        return self.mv(path1, path2, **kwargs)
 
     @fallback_handler
     def move(self, path1, path2, **kwargs):
-        raise NotImplementedError
+        return self.mv(path1, path2, **kwargs)
 
     @fallback_handler
     def put_file(self, lpath, rpath, *args, **kwargs):
@@ -480,21 +478,49 @@ class AlluxioFileSystem(AbstractFileSystem):
     def put(self, lpath, rpath, *args, **kwargs):
         raise NotImplementedError
 
-    def write_bytes(self, path, value, **kwargs):
-        path = self.unstrip_protocol(path)
-        return self.alluxio.write(path, value)
+    def write(self, path, value, **kwargs):
+        # path = self.unstrip_protocol(path)
+        # return self.alluxio.write(path, value)
+        return self.upload_data(path, value, **kwargs)
 
-    def load_data_from_ufs(self, path, **kwargs):
+    def read(self, path, *args, **kwargs):
+        return self.cat_file(path)
+
+    def load_file_from_ufs_to_alluxio(self, path, **kwargs):
         path = self.unstrip_protocol(path)
         return self.alluxio.load(path, **kwargs)
 
     @fallback_handler
-    def upload(self, lpath, rpath, *args, **kwargs):
-        raise NotImplementedError
+    def upload(self, lpath: str, rpath: str, *args, **kwargs) -> bool:
+        lpath = self.unstrip_protocol(lpath)
+        try:
+            with open(rpath, "rb") as f:
+                self.alluxio.write_chunked(lpath, f.read())
+            return True
+        except Exception:
+            return False
+
+    def upload_data(self, path: str, data: b"", *args, **kwargs) -> bool:
+        path = self.unstrip_protocol(path)
+        try:
+            self.alluxio.write_chunked(path, data)
+            return True
+        except Exception:
+            return False
 
     @fallback_handler
     def download(self, lpath, rpath, *args, **kwargs):
-        raise NotImplementedError
+        lpath = self.unstrip_protocol(lpath)
+        try:
+            with open(rpath, "wb") as f:
+                f.write(self.alluxio.read_chunked(lpath).read())
+            return True
+        except Exception:
+            return False
+
+    def download_data(self, lpath, *args, **kwargs):
+        lpath = self.unstrip_protocol(lpath)
+        return self.alluxio.read_chunked(lpath)
 
     @fallback_handler
     def get(self, rpath, lpath, *args, **kwargs):
@@ -523,7 +549,7 @@ class AlluxioFile(AbstractBufferedFile):
         data = self.buffer.getvalue()
         if not data:
             return False
-        if self.fs.write_bytes(path=self.path, value=data):
+        if self.fs.write(path=self.path, value=data):
             return True
         return False
 
