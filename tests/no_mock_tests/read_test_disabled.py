@@ -30,7 +30,7 @@ file_names = [
 
 
 @pytest.mark.skip(reason="no-mock test")
-def read_test(file_name="test.csv"):
+def read_test_disabled(file_name="test.csv"):
     file_path_ufs = home_path + "/" + file_name
     file_path_local = "../assets/" + file_name
 
@@ -67,5 +67,5 @@ def read_test(file_name="test.csv"):
 
 # for file_name in file_names:
 #     print(file_name)
-#     read_test(file_name)
-read_test()
+#     read_test_disabled(file_name)
+read_test_disabled()

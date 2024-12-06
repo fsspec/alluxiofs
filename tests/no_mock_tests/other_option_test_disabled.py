@@ -34,7 +34,7 @@ def verify_result(num):
 
 
 @pytest.mark.skip(reason="no-mock test")
-def main():
+def other_option_test_disabled():
 
     # # init
     if alluxio_fs.exists(home_path):
@@ -140,4 +140,4 @@ def main():
 
 # if __name__ == '__main__':
 for i in range(1):
-    main()
+    other_option_test_disabled()
