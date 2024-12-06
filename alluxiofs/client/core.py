@@ -288,6 +288,8 @@ class AlluxioClient:
             )
             response.raise_for_status()
             data = json.loads(response.content)[0]
+            if data["mContentHash"] is None:
+                data["mContentHash"] = ""
             return AlluxioPathStatus(
                 data["mType"],
                 data["mName"],
