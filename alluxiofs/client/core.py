@@ -74,6 +74,7 @@ class AlluxioPathStatus:
     last_modification_time_ms: int
     human_readable_file_size: str
     length: int
+    content_hash: str = None
 
 
 class LoadState(Enum):
@@ -258,6 +259,7 @@ class AlluxioClient:
                 - last_modification_time_ms (long): the last modification time
                 - length (integer): length of the file or 0 for directory
                 - human_readable_file_size (string): the size of the human readable files
+                - content_hash (string): the hash of the file content
 
         Example:
             {
@@ -268,6 +270,7 @@ class AlluxioClient:
                 last_modification_time_ms: 0,
                 length: 0,
                 human_readable_file_size: '0B'
+                content_hash: 'd41d8cd98f00b204e9800998ecf8427e'
             }
         """
         self._validate_path(path)
@@ -293,6 +296,7 @@ class AlluxioClient:
                 data["mLastModificationTimeMs"],
                 data["mHumanReadableFileSize"],
                 data["mLength"],
+                data["mContentHash"].strip('"'),
             )
         except Exception as e:
             raise Exception(
@@ -893,12 +897,12 @@ class AlluxioClient:
         except requests.RequestException as e:
             raise Exception(f"Error copy a file from {path1} to {path2}: {e}")
 
-    def tail(self, file_path, numOfBytes=None):
+    def tail(self, file_path, num_of_bytes=None):
         """
         show the tail a file which path is 'file_path'.
         Args:
-            path1: The ufs path of the file.
-            path2: The length of the file to show (like 1kb).
+            file_path: The ufs path of the file.
+            num_of_bytes: The length of the file to show (like 1kb).
         Returns:
             The content of tail of the file.
         """
@@ -915,18 +919,18 @@ class AlluxioClient:
                     path_id=path_id,
                     file_path=file_path,
                 ),
-                params={"numBytes": numOfBytes},
+                params={"numOfBytes": num_of_bytes},
             )
             return b"".join(response.iter_content())
         except requests.RequestException as e:
             raise Exception(f"Error show the tail of {file_path}: {e}")
 
-    def head(self, file_path, numOfBytes=None):
+    def head(self, file_path, num_of_bytes=None):
         """
         show the head a file which path is 'file_path'.
         Args:
             file_path: The ufs path of the file.
-            numOfBytes: The length of the file to show (like 1kb).
+            num_of_bytes: The length of the file to show (like 1kb).
         Returns:
             The content of head of the file.
         """
@@ -943,7 +947,7 @@ class AlluxioClient:
                     path_id=path_id,
                     file_path=file_path,
                 ),
-                params={"numBytes": numOfBytes},
+                params={"numBytes": num_of_bytes},
             )
             return b"".join(response.iter_content())
         except requests.RequestException as e:
@@ -1044,7 +1048,7 @@ class AlluxioClient:
     def _file_chunk_generator(self, file_bytes, chunk_size):
         offset = 0
         while offset < len(file_bytes):
-            chunk = file_bytes[offset : offset + chunk_size]
+            chunk = file_bytes[offset: offset + chunk_size]
             offset += chunk_size
             yield chunk
 
