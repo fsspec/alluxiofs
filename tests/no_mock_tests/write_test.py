@@ -1,10 +1,11 @@
 import hashlib
+
 import fsspec
+import pytest
+
 from alluxiofs import AlluxioFileSystem
 
-fsspec.register_implementation(
-    "alluxiofs", AlluxioFileSystem, clobber=True
-)
+fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
 alluxio_fs = fsspec.filesystem(
     "alluxiofs",
     etcd_hosts="localhost",
@@ -20,13 +21,15 @@ test_folder_name = "python_sdk_test"
 home_path = "s3://" + bucket_name + "/" + test_folder_name
 
 file_names = [
-             "random1MB.txt",
-             "random10MB.txt",
-             "random100MB.txt",
-             "random1GB.txt",
-             # "random10GB.txt"
-             ]
+    "random1MB.txt",
+    "random10MB.txt",
+    "random100MB.txt",
+    "random1GB.txt",
+    # "random10GB.txt"
+]
 
+
+@pytest.mark.skip(reason="no-mock test")
 def write_test(file_name="test.csv"):
     file_path_ufs = home_path + "/" + file_name
     file_path_local = "../assets/" + file_name
@@ -49,7 +52,7 @@ def write_test(file_name="test.csv"):
         sha256_local.update(data)
     file_status = alluxio_fs.info(file_path_ufs)
     md5_remote = file_status["content_hash"]
-    if '-' in md5_remote:
+    if "-" in md5_remote:
         md5_remote_calculated = hashlib.md5()
         data = alluxio_fs.download_data(file_path_ufs).read()
         md5_remote_calculated.update(data)

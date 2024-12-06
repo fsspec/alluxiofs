@@ -1048,7 +1048,7 @@ class AlluxioClient:
     def _file_chunk_generator(self, file_bytes, chunk_size):
         offset = 0
         while offset < len(file_bytes):
-            chunk = file_bytes[offset: offset + chunk_size]
+            chunk = file_bytes[offset : offset + chunk_size]
             offset += chunk_size
             yield chunk
 

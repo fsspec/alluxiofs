@@ -1,17 +1,18 @@
 import hashlib
+
 import fsspec
+import pytest
+
 from alluxiofs import AlluxioFileSystem
 
-fsspec.register_implementation(
-    "alluxiofs", AlluxioFileSystem, clobber=True
-)
+fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
 alluxio_fs = fsspec.filesystem(
     "alluxiofs",
     etcd_hosts="localhost",
     etcd_port=2379,
     # target_options=oss_options,
     target_protocol="s3",
-    page_size="1MB"
+    page_size="1MB",
 )
 
 bucket_name = "yxd-fsspec"
@@ -20,13 +21,14 @@ test_folder_name = "python_sdk_test"
 home_path = "s3://" + bucket_name + "/" + test_folder_name
 
 file_names = [
-             "random1MB.txt",
-             "random10MB.txt",
-             "random100MB.txt",
-             "random1GB.txt",
-             # "random10GB.txt"
-             ]
+    "random1MB.txt",
+    "random10MB.txt",
+    "random100MB.txt",
+    "random1GB.txt",
+    # "random10GB.txt"
+]
 
+@pytest.mark.skip(reason="no-mock test")
 def read_test(file_name="test.csv"):
     file_path_ufs = home_path + "/" + file_name
     file_path_local = "../assets/" + file_name
@@ -60,7 +62,6 @@ def read_test(file_name="test.csv"):
     assert md5_local.hexdigest() == md5_remote_page.hexdigest()
     assert md5_local.hexdigest() == md5_remote_range.hexdigest()
     assert md5_local.hexdigest() == md5_remote_chunk.hexdigest()
-
 
 
 # for file_name in file_names:

@@ -23,6 +23,7 @@ from alluxiofs.client.utils import set_log_level
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class RMOption:
     # delete files and subdirectories recursively
@@ -51,6 +52,7 @@ class CPOption:
     buffer_size: str = None
     # Preserve file permission attributes when copying files. All ownership, permissions and ACLs will be preserved
     preserve: bool = True
+
 
 class AlluxioErrorMetrics:
     def __init__(self):
@@ -498,7 +500,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         except Exception:
             return False
 
-    def upload_data(self, path: str, data: b'', *args, **kwargs) -> bool:
+    def upload_data(self, path: str, data: b"", *args, **kwargs) -> bool:
         path = self.unstrip_protocol(path)
         try:
             self.alluxio.write_chunked(path, data)
