@@ -99,7 +99,7 @@ def main():
     # # upload
     with open("../assets/test.csv", "rb") as f:
         data = f.read()
-        alluxio_fs.upload(
+        alluxio_fs.upload_data(
             path=home_path + "/python_sdk_test_folder/file3", data=data
         )
 

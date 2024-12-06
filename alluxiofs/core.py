@@ -415,12 +415,12 @@ class AlluxioFileSystem(AbstractFileSystem):
     @fallback_handler
     def head(self, path, *args, **kwargs):
         path = self.unstrip_protocol(path)
-        return self.alluxio.head(path, *args, **kwargs)
+        return self.alluxio.head(path, **kwargs)
 
     @fallback_handler
     def tail(self, path, *args, **kwargs):
         path = self.unstrip_protocol(path)
-        return self.alluxio.tail(file_path=path, num_of_bytes=args[0])
+        return self.alluxio.tail(file_path=path, **kwargs)
 
     @fallback_handler
     def expand_path(self, path, *args, **kwargs):

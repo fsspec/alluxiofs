@@ -11,7 +11,6 @@ alluxio_fs = fsspec.filesystem(
     etcd_port=2379,
     # target_options=oss_options,
     target_protocol="s3",
-    cluster_name="alluxio",
     page_size="1MB"
 )
 
