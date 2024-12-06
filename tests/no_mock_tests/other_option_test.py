@@ -32,6 +32,7 @@ def verify_result(num):
     res = alluxio_fs.ls(home_path)
     assert len(res) == num
 
+
 @pytest.mark.skip(reason="no-mock test")
 def main():
 
