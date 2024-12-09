@@ -417,12 +417,12 @@ class AlluxioFileSystem(AbstractFileSystem):
     @fallback_handler
     def head(self, path, *args, **kwargs):
         path = self.unstrip_protocol(path)
-        return self.alluxio.head(path, **kwargs)
+        return self.alluxio.head(path, *args, **kwargs)
 
     @fallback_handler
     def tail(self, path, *args, **kwargs):
         path = self.unstrip_protocol(path)
-        return self.alluxio.tail(file_path=path, **kwargs)
+        return self.alluxio.tail(path, *args, **kwargs)
 
     @fallback_handler
     def expand_path(self, path, *args, **kwargs):
@@ -479,8 +479,6 @@ class AlluxioFileSystem(AbstractFileSystem):
         raise NotImplementedError
 
     def write(self, path, value, **kwargs):
-        # path = self.unstrip_protocol(path)
-        # return self.alluxio.write(path, value)
         return self.upload_data(path, value, **kwargs)
 
     def read(self, path, *args, **kwargs):

@@ -458,24 +458,6 @@ class AlluxioClient:
             if file_status is None:
                 raise FileNotFoundError(f"File {file_path} not found")
             return self.read_range(file_path, 0, file_status.length)
-        # self._validate_path(file_path)
-        # worker_host, worker_http_port = self._get_preferred_worker_address(
-        #     file_path
-        # )
-        # path_id = self._get_path_hash(file_path)
-        # try:
-        #     if self.data_manager:
-        #         return b"".join(
-        #             self._all_page_generator_alluxiocommon(
-        #                 worker_host, worker_http_port, path_id, file_path
-        #             )
-        #         )
-        #     else:
-        #         return b"".join(
-        #             self._all_page_generator(
-        #                 worker_host, worker_http_port, path_id, file_path
-        #             )
-        #         )
         except Exception as e:
             raise Exception(
                 f"Error when reading file {file_path}: error {e}"
