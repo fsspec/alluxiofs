@@ -1,0 +1,5 @@
+fsspec~=2024.10.0
+humanfriendly~=10.0
+aiohttp~=3.11.10
+requests~=2.32.3
+alluxio~=0.1.0
