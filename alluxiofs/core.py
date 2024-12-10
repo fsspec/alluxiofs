@@ -14,12 +14,12 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Callable
 
+from alluxio.logger import set_log_level
 from fsspec import AbstractFileSystem
 from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
 
-from alluxiofs.client import AlluxioClient
-from alluxiofs.client.utils import set_log_level
+from alluxio.client import AlluxioClient
 
 logger = logging.getLogger(__name__)
 
