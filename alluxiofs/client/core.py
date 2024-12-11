@@ -931,7 +931,7 @@ class AlluxioClient:
                     path_id=path_id,
                     file_path=file_path,
                 ),
-                params={"numBytes": num_of_bytes},
+                params={"numOfBytes": num_of_bytes},
             )
             return b"".join(response.iter_content())
         except requests.RequestException as e:
