@@ -10,6 +10,7 @@ import asyncio
 import hashlib
 import io
 import json
+import logging
 import re
 import time
 import weakref
@@ -129,7 +130,7 @@ class AlluxioClient:
 
     def __init__(
         self,
-        logger,
+        logger=logging.getLogger(__name__),
         **kwargs,
     ):
         """
@@ -161,7 +162,7 @@ class AlluxioClient:
         self.data_manager = None
         self.logger = logger
         if kwargs.get(ALLUXIO_COMMON_EXTENSION_ENABLE, False):
-            logger.info("alluxiocommon extension enabled.")
+            self.logger.info("alluxiocommon extension enabled.")
             self.data_manager = _DataManager(
                 self.config.concurrency,
                 ondemand_pool_disabled=kwargs.get(
@@ -170,7 +171,7 @@ class AlluxioClient:
             )
 
         test_options = kwargs.get("test_options", {})
-        set_log_level(logger, test_options)
+        set_log_level(self.logger, test_options)
 
     def listdir(self, path):
         """
