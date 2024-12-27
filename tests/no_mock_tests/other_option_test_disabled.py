@@ -92,7 +92,8 @@ def other_option_test_disabled():
     with open("../assets/test.csv", "rb") as f:
         data = f.read()
         assert alluxio_fs.upload_data(
-            path=home_path + "/python_sdk_test_folder/file3", data=data
+            path="4564" + home_path + "/python_sdk_test_folder/file3",
+            data=data,
         )
 
     # # move

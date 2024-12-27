@@ -26,21 +26,23 @@ def setup_logger(file_path=None, level=logging.INFO):
     import os
 
     # log dir
-    file_name = 'user.log'
+    file_name = "user.log"
     if file_path is None:
         project_dir = os.getcwd()
-        logs_dir = os.path.join(project_dir, 'logs')
+        logs_dir = os.path.join(project_dir, "logs")
         if not os.path.exists(logs_dir):
             os.makedirs(logs_dir)
         log_file = os.path.join(logs_dir, file_name)
     else:
-        log_file = file_path + '/' + file_name
+        log_file = file_path + "/" + file_name
     # set handler
     file_handler = logging.FileHandler(log_file)
     file_handler.setLevel(level)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(level)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
     # init logger
@@ -49,7 +51,6 @@ def setup_logger(file_path=None, level=logging.INFO):
     logger.addHandler(console_handler)
     logger.setLevel(level)
     return logger
-
 
 
 @dataclass
@@ -183,6 +184,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             self.alluxio = None
         else:
             self.alluxio = AlluxioClient(
+                logger=self.logger,
                 **kwargs,
             )
             if preload_path is not None:
@@ -311,9 +313,13 @@ class AlluxioFileSystem(AbstractFileSystem):
                     return res
             except Exception as e:
                 if not isinstance(e, NotImplementedError):
-                    if alluxio_impl.__name__ not in ['write', 'upload', 'upload_data']:
+                    if alluxio_impl.__name__ not in [
+                        "write",
+                        "upload",
+                        "upload_data",
+                    ]:
                         self.logger.error(
-                            f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}) {e}\nfallback to ufs"
+                            f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}): {e}\nfallback to ufs"
                         )
                     else:
                         self.logger.error(
@@ -362,7 +368,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             path = self.unstrip_protocol(path)
             self.alluxio.get_file_status(path)
             return True
-        except:
+        except Exception:
             return False
 
     @fallback_handler
@@ -556,7 +562,6 @@ class AlluxioFileSystem(AbstractFileSystem):
         lpath = self.unstrip_protocol(lpath)
         with open(rpath, "wb") as f:
             return f.write(self.alluxio.read_chunked(lpath).read())
-
 
     @fallback_handler
     def download_data(self, lpath, *args, **kwargs):
