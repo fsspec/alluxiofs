@@ -239,9 +239,7 @@ class AlluxioClient:
                 )
             return result
         except Exception as e:
-            raise Exception(
-                f"Error when listing path {path}: error {e}"
-            ) from e
+            raise Exception(response.content.decode('utf-8'))
 
     def get_file_status(self, path):
         """
@@ -301,9 +299,7 @@ class AlluxioClient:
                 data["mContentHash"].strip('"'),
             )
         except Exception as e:
-            raise Exception(
-                f"Error when getting file status path {path}: error {e}"
-            ) from e
+            raise Exception(response.content.decode('utf-8'))
 
     def load(
         self,
@@ -401,7 +397,8 @@ class AlluxioClient:
             return content[ALLUXIO_SUCCESS_IDENTIFIER]
         except Exception as e:
             raise Exception(
-                f"Error when stopping load job for path {path} from {worker_host}: error {e}"
+                f"Error when stopping load job for path {path} from "
+                f"{worker_host}: error {response.content.decode('utf-8')}"
             ) from e
 
     def load_progress(
@@ -660,7 +657,7 @@ class AlluxioClient:
                 )
         except Exception as e:
             raise Exception(
-                f"Error when reading file {file_path}: error {e}"
+                f"Error when writing file {file_path}: error {e}"
             ) from e
 
     def write_chunked(self, file_path, file_bytes, chunk_size=1024 * 1024):
@@ -693,9 +690,7 @@ class AlluxioClient:
                     chunk_size,
                 )
         except Exception as e:
-            raise Exception(
-                f"Error when reading file {file_path}: error {e}"
-            ) from e
+            raise e
 
     def write_page(self, file_path, page_index, page_bytes):
         """
@@ -729,9 +724,7 @@ class AlluxioClient:
             response.raise_for_status()
             return 200 <= response.status_code < 300
         except requests.RequestException as e:
-            raise Exception(
-                f"Error writing to file {file_path} at page {page_index}: {e}"
-            )
+            raise Exception(response.content.decode('utf-8'))
 
     def mkdir(self, file_path):
         """
@@ -741,6 +734,7 @@ class AlluxioClient:
         Returns:
             True if the mkdir was successful, False otherwise.
         """
+        
         self._validate_path(file_path)
         worker_host, worker_http_port = self._get_preferred_worker_address(
             file_path
@@ -758,7 +752,7 @@ class AlluxioClient:
             response.raise_for_status()
             return 200 <= response.status_code < 300
         except requests.RequestException as e:
-            raise Exception(f"Error making a directory of {file_path}: {e}")
+            raise Exception(response.content.decode('utf-8'))
 
     def touch(self, file_path):
         """
@@ -768,6 +762,7 @@ class AlluxioClient:
         Returns:
             True if the touch was successful, False otherwise.
         """
+        
         self._validate_path(file_path)
         worker_host, worker_http_port = self._get_preferred_worker_address(
             file_path
@@ -785,10 +780,9 @@ class AlluxioClient:
             response.raise_for_status()
             return 200 <= response.status_code < 300
         except requests.RequestException as e:
-            raise Exception(f"Error create a file of {file_path}: {e}")
+            raise Exception(response.content.decode('utf-8'))
 
-        # TODO(littelEast7): complete it
-
+    # TODO(littelEast7): review it
     def mv(self, path1, path2):
         """
         mv a file from path1 to path2.
@@ -798,6 +792,7 @@ class AlluxioClient:
         Returns:
             True if the mv was successful, False otherwise.
         """
+        
         self._validate_path(path1)
         self._validate_path(path2)
         worker_host, worker_http_port = self._get_preferred_worker_address(
@@ -817,7 +812,7 @@ class AlluxioClient:
             response.raise_for_status()
             return 200 <= response.status_code < 300
         except requests.RequestException as e:
-            raise Exception(f"Error move a file from {path1} to {path2}: {e}")
+            raise Exception(response.content.decode('utf-8'))
 
     def rm(self, path, option):
         """
@@ -828,6 +823,7 @@ class AlluxioClient:
         Returns:
             True if the rm was successful, False otherwise.
         """
+        
         self._validate_path(path)
         worker_host, worker_http_port = self._get_preferred_worker_address(
             path
@@ -847,7 +843,7 @@ class AlluxioClient:
             response.raise_for_status()
             return 200 <= response.status_code < 300
         except requests.RequestException as e:
-            raise Exception(f"Error remove a file {path}: {e}")
+            raise Exception(response.content.decode('utf-8'))
 
     def cp(self, path1, path2, option):
         """
@@ -859,6 +855,7 @@ class AlluxioClient:
         Returns:
             True if the cp was successful, False otherwise.
         """
+        
         self._validate_path(path1)
         worker_host, worker_http_port = self._get_preferred_worker_address(
             path1
@@ -879,7 +876,7 @@ class AlluxioClient:
             response.raise_for_status()
             return 200 <= response.status_code < 300
         except requests.RequestException as e:
-            raise Exception(f"Error copy a file from {path1} to {path2}: {e}")
+            raise Exception(response.content.decode('utf-8'))
 
     def tail(self, file_path, num_of_bytes=None):
         """
@@ -890,6 +887,7 @@ class AlluxioClient:
         Returns:
             The content of tail of the file.
         """
+        
         self._validate_path(file_path)
         worker_host, worker_http_port = self._get_preferred_worker_address(
             file_path
@@ -905,9 +903,10 @@ class AlluxioClient:
                 ),
                 params={"numOfBytes": num_of_bytes},
             )
+            response.raise_for_status()
             return b"".join(response.iter_content())
         except requests.RequestException as e:
-            raise Exception(f"Error show the tail of {file_path}: {e}")
+            raise Exception(response.content.decode('utf-8'))
 
     def head(self, file_path, num_of_bytes=None):
         """
@@ -933,9 +932,10 @@ class AlluxioClient:
                 ),
                 params={"numOfBytes": num_of_bytes},
             )
+            response.raise_for_status()
             return b"".join(response.iter_content())
         except requests.RequestException as e:
-            raise Exception(f"Error show the head of {file_path}: {e}")
+            raise Exception(response.content.decode('utf-8'))
 
     def _all_page_generator_alluxiocommon(
         self, worker_host, worker_http_port, path_id, file_path
@@ -1065,12 +1065,13 @@ class AlluxioClient:
                 headers=headers,
                 data=self._file_chunk_generator(file_bytes, chunk_size),
             )
-            return response.status_code == 200
+            response.raise_for_status()
+            return 200 <= response.status_code < 300
         except Exception as e:
             # data_manager won't throw exception if there are any first few content retrieved
             # hence we always propagte exception from data_manager upwards
             raise Exception(
-                f"Error when writing all pages of {file_path}: error {e}"
+                f"Error when writing all pages of {file_path}: {response.content.decode('utf-8')}"
             ) from e
 
     def _range_page_generator_alluxiocommon(
@@ -1244,10 +1245,11 @@ class AlluxioClient:
                     return False
 
         except Exception as e:
-            logger.debug(
-                f"Error when loading file {path} from {worker_host} with timeout {timeout}: error {e}"
+            logger.error(
+                f"Error when loading file {path} from {worker_host} with timeout {timeout}:"
+                f" error {response.content.decode('utf-8')}"
             )
-            return False
+            raise Exception(response.content.decode('utf-8'))
 
     def _load_progress_internal(
         self, load_url: str, params: Dict

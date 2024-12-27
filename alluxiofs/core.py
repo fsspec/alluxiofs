@@ -21,7 +21,35 @@ from fsspec.spec import AbstractBufferedFile
 from alluxiofs.client import AlluxioClient
 from alluxiofs.client.utils import set_log_level
 
-logger = logging.getLogger(__name__)
+
+def setup_logger(file_path=None, level=logging.INFO):
+    import os
+
+    # log dir
+    file_name = 'user.log'
+    if file_path is None:
+        project_dir = os.getcwd()
+        logs_dir = os.path.join(project_dir, 'logs')
+        if not os.path.exists(logs_dir):
+            os.makedirs(logs_dir)
+        log_file = os.path.join(logs_dir, file_name)
+    else:
+        log_file = file_path + '/' + file_name
+    # set handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(level)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(level)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    # init logger
+    logger = logging.getLogger(__name__)
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    logger.setLevel(level)
+    return logger
+
 
 
 @dataclass
@@ -82,6 +110,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         target_protocol=None,
         target_options=None,
         fs=None,
+        logger=None,
         **kwargs,
     ):
         """
@@ -116,13 +145,16 @@ class AlluxioFileSystem(AbstractFileSystem):
             **kwargs: other parameters for core session.
         """
         super().__init__(**kwargs)
+        self.logger = logger
+        if self.logger is None:
+            self.logger = setup_logger()
         if fs and target_protocol:
             raise ValueError(
                 "Please provide one of filesystem instance (fs) or"
                 " target_protocol, not both"
             )
         if fs is None and target_protocol is None:
-            logger.warning(
+            self.logger.warning(
                 "Neither filesystem instance(fs) nor target_protocol is "
                 "provided. Will not fall back to under file systems when "
                 "accessed files are not in Alluxiofs"
@@ -146,7 +178,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             self.fs = filesystem(target_protocol, **self.target_options)
             self.target_protocol = target_protocol
         test_options = kwargs.get("test_options", {})
-        set_log_level(logger, test_options)
+        set_log_level(self.logger, test_options)
         if test_options.get("skip_alluxio") is True:
             self.alluxio = None
         else:
@@ -273,15 +305,20 @@ class AlluxioFileSystem(AbstractFileSystem):
                 if self.alluxio:
                     start_time = time.time()
                     res = alluxio_impl(self, *positional_params, **kwargs)
-                    logger.debug(
+                    self.logger.debug(
                         f"Exit(Ok): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}) time({(time.time() - start_time):.2f}s)"
                     )
                     return res
             except Exception as e:
                 if not isinstance(e, NotImplementedError):
-                    logger.debug(
-                        f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}) {e}"
-                    )
+                    if alluxio_impl.__name__ not in ['write', 'upload', 'upload_data']:
+                        self.logger.error(
+                            f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}) {e}\nfallback to ufs"
+                        )
+                    else:
+                        self.logger.error(
+                            f"Exit(Error): alluxio op({alluxio_impl.__name__}) {e}\nfallback to ufs"
+                        )
                     self.error_metrics.record_error(alluxio_impl.__name__, e)
                 if self.fs is None:
                     raise e
@@ -289,12 +326,15 @@ class AlluxioFileSystem(AbstractFileSystem):
             fs_method = getattr(self.fs, alluxio_impl.__name__, None)
 
             if fs_method:
-                res = fs_method(*positional_params, **kwargs)
-
-                logger.debug(
-                    f"Exit(Ok): ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs})"
-                )
-                return res
+                try:
+                    res = fs_method(*positional_params, **kwargs)
+                    self.logger.debug(
+                        f"Exit(Ok): ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs})"
+                    )
+                    return res
+                except Exception as e:
+                    self.logger.error(f"fallback to ufs is failed: {e}")
+                    raise Exception(f"fallback to ufs is failed: {e}")
             raise NotImplementedError(
                 f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.target_protocol}"
             )
@@ -315,6 +355,15 @@ class AlluxioFileSystem(AbstractFileSystem):
         path = self.unstrip_protocol(path)
         file_status = self.alluxio.get_file_status(path)
         return self._translate_alluxio_info_to_fsspec_info(file_status, True)
+
+    @fallback_handler
+    def exists(self, path, **kwargs):
+        try:
+            path = self.unstrip_protocol(path)
+            self.alluxio.get_file_status(path)
+            return True
+        except:
+            return False
 
     @fallback_handler
     def isdir(self, path, **kwargs):
@@ -478,12 +527,15 @@ class AlluxioFileSystem(AbstractFileSystem):
     def put(self, lpath, rpath, *args, **kwargs):
         raise NotImplementedError
 
+    @fallback_handler
     def write(self, path, value, **kwargs):
         return self.upload_data(path, value, **kwargs)
 
+    @fallback_handler
     def read(self, path, *args, **kwargs):
         return self.cat_file(path)
 
+    @fallback_handler
     def load_file_from_ufs_to_alluxio(self, path, **kwargs):
         path = self.unstrip_protocol(path)
         return self.alluxio.load(path, **kwargs)
@@ -491,31 +543,22 @@ class AlluxioFileSystem(AbstractFileSystem):
     @fallback_handler
     def upload(self, lpath: str, rpath: str, *args, **kwargs) -> bool:
         lpath = self.unstrip_protocol(lpath)
-        try:
-            with open(rpath, "rb") as f:
-                self.alluxio.write_chunked(lpath, f.read())
-            return True
-        except Exception:
-            return False
+        with open(rpath, "rb") as f:
+            return self.alluxio.write_chunked(lpath, f.read())
 
+    @fallback_handler
     def upload_data(self, path: str, data: b"", *args, **kwargs) -> bool:
         path = self.unstrip_protocol(path)
-        try:
-            self.alluxio.write_chunked(path, data)
-            return True
-        except Exception:
-            return False
+        return self.alluxio.write_chunked(path, data)
 
     @fallback_handler
     def download(self, lpath, rpath, *args, **kwargs):
         lpath = self.unstrip_protocol(lpath)
-        try:
-            with open(rpath, "wb") as f:
-                f.write(self.alluxio.read_chunked(lpath).read())
-            return True
-        except Exception:
-            return False
+        with open(rpath, "wb") as f:
+            return f.write(self.alluxio.read_chunked(lpath).read())
 
+
+    @fallback_handler
     def download_data(self, lpath, *args, **kwargs):
         lpath = self.unstrip_protocol(lpath)
         return self.alluxio.read_chunked(lpath)
