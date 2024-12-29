@@ -7,19 +7,51 @@
 #
 # See the NOTICE file distributed with this work for information regarding copyright ownership.
 import inspect
+import io
 import logging
 import time
+from dataclasses import dataclass
 from functools import wraps
 from typing import Callable
 
+from alluxio.logger import set_log_level
 from fsspec import AbstractFileSystem
 from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
 
-from alluxiofs.client import AlluxioClient
-from alluxiofs.client.utils import set_log_level
+from alluxio.client import AlluxioClient
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RMOption:
+    # delete files and subdirectories recursively
+    recursive: bool = False
+    recursiveAlias: bool = False
+    # Marks a directory to either trigger a metadata sync or skip the metadata sync on next access.
+    sync_parent_next_time: bool = False
+    # remove directories without checking UFS contents are in sync
+    remove_unchecked_option: bool = False
+    # remove data and metadata from Alluxio space only
+    remove_alluxio_only: bool = True
+    # remove mount points in the directory
+    delete_mount_point: bool = False
+
+
+@dataclass(frozen=True)
+class CPOption:
+    # delete files and subdirectories recursively
+    recursive: bool = True
+    recursiveAlias: bool = False
+    # forces to overwrite the destination file if it exists
+    forced: bool = False
+    # Number of threads used to copy files in parallel, default value is CPU cores * 2
+    thread: int = None
+    # Read buffer size in bytes, default is 8MB when copying from local, and 64MB when copying to local
+    buffer_size: str = None
+    # Preserve file permission attributes when copying files. All ownership, permissions and ACLs will be preserved
+    preserve: bool = True
 
 
 class AlluxioErrorMetrics:
@@ -155,10 +187,19 @@ class AlluxioFileSystem(AbstractFileSystem):
 
         self.error_metrics = AlluxioErrorMetrics()
 
+    # TODO(littleEast7): there may be a bug.
     def unstrip_protocol(self, path):
         if self.fs:
             # avoid adding Alluxiofs protocol to the full ufs url
-            return self.fs.unstrip_protocol(path)
+            # if path.startswith('/'):
+            #     return self.fs.unstrip_protocol(path[1:])
+            # else:
+            path = self.fs.unstrip_protocol(path)
+            if (
+                not (path.startswith("file") or path.startswith("alluxiofs"))
+                and "///" in path
+            ):
+                path = path.replace("///", "//", 1)
         return path
 
     def get_error_metrics(self):
@@ -175,6 +216,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                 "last_modification_time_ms": getattr(
                     file_status, "last_modification_time_ms", None
                 ),
+                "content_hash": file_status.content_hash,
             }
         else:
             return self._strip_protocol(file_status.ufs_path)
@@ -300,7 +342,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         )
 
     @fallback_handler
-    def cat_file(self, path, start=None, end=None, **kwargs):
+    def cat_file(self, path, start=0, end=None, **kwargs):
         if end is None:
             length = -1
         else:
@@ -314,15 +356,34 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def mkdir(self, path, *args, **kwargs):
-        raise NotImplementedError
+        path = self.unstrip_protocol(path)
+        return self.alluxio.mkdir(path)
 
     @fallback_handler
     def makedirs(self, path, *args, **kwargs):
         raise NotImplementedError
 
     @fallback_handler
-    def rm(self, path, *args, **kwargs):
-        raise NotImplementedError
+    def rm(
+        self,
+        path,
+        recursive=False,
+        recursive_alias=False,
+        remove_alluxio_only=False,
+        delete_mount_point=False,
+        sync_parent_next_time=False,
+        remove_unchecked_option_char=False,
+    ):
+        path = self.unstrip_protocol(path)
+        option = RMOption(
+            recursive,
+            recursive_alias,
+            recursive_alias,
+            delete_mount_point,
+            sync_parent_next_time,
+            remove_unchecked_option_char,
+        )
+        return self.alluxio.rm(path, option)
 
     @fallback_handler
     def rmdir(self, path, *args, **kwargs):
@@ -342,7 +403,8 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def touch(self, path, *args, **kwargs):
-        raise NotImplementedError
+        path = self.unstrip_protocol(path)
+        return self.alluxio.touch(path)
 
     @fallback_handler
     def created(self, path, *args, **kwargs):
@@ -354,11 +416,13 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def head(self, path, *args, **kwargs):
-        raise NotImplementedError
+        path = self.unstrip_protocol(path)
+        return self.alluxio.head(path, *args, **kwargs)
 
     @fallback_handler
     def tail(self, path, *args, **kwargs):
-        raise NotImplementedError
+        path = self.unstrip_protocol(path)
+        return self.alluxio.tail(path, *args, **kwargs)
 
     @fallback_handler
     def expand_path(self, path, *args, **kwargs):
@@ -371,23 +435,40 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def mv(self, path1, path2, *args, **kwargs):
-        raise NotImplementedError
+        path1 = self.unstrip_protocol(path1)
+        path2 = self.unstrip_protocol(path2)
+        return self.alluxio.mv(path1, path2)
 
     @fallback_handler
-    def copy(self, path1, path2, *args, **kwargs):
-        raise NotImplementedError
+    def copy(
+        self,
+        path1,
+        path2,
+        recursive=False,
+        recursiveAlias=False,
+        force=False,
+        thread=None,
+        bufferSize=None,
+        preserve=None,
+    ):
+        path1 = self.unstrip_protocol(path1)
+        path2 = self.unstrip_protocol(path2)
+        option = CPOption(
+            recursive, recursiveAlias, force, thread, bufferSize, preserve
+        )
+        return self.alluxio.cp(path1, path2, option)
 
     @fallback_handler
     def cp_file(self, path1, path2, *args, **kwargs):
-        raise NotImplementedError
+        return self.copy(path1, path2, *args, **kwargs)
 
     @fallback_handler
     def rename(self, path1, path2, **kwargs):
-        raise NotImplementedError
+        return self.mv(path1, path2, **kwargs)
 
     @fallback_handler
     def move(self, path1, path2, **kwargs):
-        raise NotImplementedError
+        return self.mv(path1, path2, **kwargs)
 
     @fallback_handler
     def put_file(self, lpath, rpath, *args, **kwargs):
@@ -397,13 +478,47 @@ class AlluxioFileSystem(AbstractFileSystem):
     def put(self, lpath, rpath, *args, **kwargs):
         raise NotImplementedError
 
+    def write(self, path, value, **kwargs):
+        return self.upload_data(path, value, **kwargs)
+
+    def read(self, path, *args, **kwargs):
+        return self.cat_file(path)
+
+    def load_file_from_ufs_to_alluxio(self, path, **kwargs):
+        path = self.unstrip_protocol(path)
+        return self.alluxio.load(path, **kwargs)
+
     @fallback_handler
-    def upload(self, lpath, rpath, *args, **kwargs):
-        raise NotImplementedError
+    def upload(self, lpath: str, rpath: str, *args, **kwargs) -> bool:
+        lpath = self.unstrip_protocol(lpath)
+        try:
+            with open(rpath, "rb") as f:
+                self.alluxio.write_chunked(lpath, f.read())
+            return True
+        except Exception:
+            return False
+
+    def upload_data(self, path: str, data: b"", *args, **kwargs) -> bool:
+        path = self.unstrip_protocol(path)
+        try:
+            self.alluxio.write_chunked(path, data)
+            return True
+        except Exception:
+            return False
 
     @fallback_handler
     def download(self, lpath, rpath, *args, **kwargs):
-        raise NotImplementedError
+        lpath = self.unstrip_protocol(lpath)
+        try:
+            with open(rpath, "wb") as f:
+                f.write(self.alluxio.read_chunked(lpath).read())
+            return True
+        except Exception:
+            return False
+
+    def download_data(self, lpath, *args, **kwargs):
+        lpath = self.unstrip_protocol(lpath)
+        return self.alluxio.read_chunked(lpath)
 
     @fallback_handler
     def get(self, rpath, lpath, *args, **kwargs):
@@ -422,10 +537,6 @@ class AlluxioFileSystem(AbstractFileSystem):
 
 class AlluxioFile(AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
-        if mode != "rb":
-            raise ValueError(
-                'Remote Alluxio files can only be opened in "rb" mode'
-            )
         super().__init__(fs, path, mode, **kwargs)
 
     def _fetch_range(self, start, end):
@@ -433,7 +544,37 @@ class AlluxioFile(AbstractBufferedFile):
         return self.fs.cat_file(path=self.path, start=start, end=end)
 
     def _upload_chunk(self, final=False):
-        pass
+        data = self.buffer.getvalue()
+        if not data:
+            return False
+        if self.fs.write(path=self.path, value=data):
+            return True
+        return False
 
     def _initiate_upload(self):
         pass
+
+    def flush(self, force=False):
+        if self.closed:
+            raise ValueError("Flush on closed file")
+        if force and self.forced:
+            raise ValueError("Force flush cannot be called more than once")
+        if force:
+            self.forced = True
+
+        if self.mode not in {"wb", "ab"}:
+            # no-op to flush on read-mode
+            return
+
+        if self.offset is None:
+            # Initialize a multipart upload
+            self.offset = 0
+            try:
+                self._initiate_upload()
+            except Exception as e:
+                self.closed = True
+                raise e
+
+        if self._upload_chunk(final=force) is not False:
+            self.offset += self.buffer.seek(0, 2)
+            self.buffer = io.BytesIO()
