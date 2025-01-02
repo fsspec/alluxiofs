@@ -39,9 +39,6 @@ def other_option_test_disabled():
     if alluxio_fs.exists(home_path):
         alluxio_fs.rm(home_path, recursive=True)
 
-    # # load file from ufs to alluxio
-    assert alluxio_fs.load_file_from_ufs_to_alluxio(path="s3://" + bucket_name)
-
     # # mkdir
     res = alluxio_fs.mkdir(home_path)
     assert res
@@ -56,6 +53,9 @@ def other_option_test_disabled():
     assert res
     verify_result(1)
     show_files(home_path)
+
+    # # load file from ufs to alluxio
+    # assert alluxio_fs.load_file_from_ufs_to_alluxio(home_path)
 
     # # get file status
     res_folder = alluxio_fs.info(home_path)
@@ -88,10 +88,12 @@ def other_option_test_disabled():
     verify_result(1)
 
     # # upload
+    print("upload file for test")
     with open("../assets/test.csv", "rb") as f:
         data = f.read()
-        alluxio_fs.upload_data(
-            path=home_path + "/python_sdk_test_folder/file3", data=data
+        assert alluxio_fs.upload_data(
+            path="4564" + home_path + "/python_sdk_test_folder/file3",
+            data=data,
         )
 
     # # move

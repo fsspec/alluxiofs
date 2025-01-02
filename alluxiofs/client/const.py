@@ -55,3 +55,6 @@ LOAD_STOP_URL_FORMAT = (
     "http://{worker_host}:{http_port}/v1/load?path={path}&opType=stop"
 )
 ETCD_PREFIX_FORMAT = "/ServiceDiscovery/{cluster_name}/"
+EXCEPTION_CONTENT = (
+    "Worker's address: {worker_host}:{http_port}, Error: {error}"
+)
