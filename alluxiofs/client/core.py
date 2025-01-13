@@ -227,17 +227,9 @@ class AlluxioClient:
             response.raise_for_status()
             result = []
             for data in json.loads(response.content):
-                result.append(
-                    AlluxioPathStatus(
-                        data["mType"],
-                        data["mName"],
-                        data["mPath"],
-                        data["mUfsPath"],
-                        data["mLastModificationTimeMs"],
-                        data["mHumanReadableFileSize"],
-                        data["mLength"],
-                    )
-                )
+                data['mType'] = "directory" if data['mFolder'] else "file"
+                data.pop('mFolder')
+                result.append(data)
             return result
         except Exception:
             raise Exception(
@@ -292,19 +284,10 @@ class AlluxioClient:
                 params=params,
             )
             response.raise_for_status()
-            data = json.loads(response.content)[0]
-            if data.get("mContentHash") is None:
-                data["mContentHash"] = '"'
-            return AlluxioPathStatus(
-                data["mType"],
-                data["mName"],
-                data["mPath"],
-                data["mUfsPath"],
-                data["mLastModificationTimeMs"],
-                data["mHumanReadableFileSize"],
-                data["mLength"],
-                data["mContentHash"].strip('"'),
-            )
+            data = json.loads(response.content)
+            data['mType'] = "directory" if data['mFolder'] else "file"
+            data.pop('mFolder')
+            return data
         except Exception:
             raise Exception(
                 EXCEPTION_CONTENT.format(

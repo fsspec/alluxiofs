@@ -241,19 +241,18 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def _translate_alluxio_info_to_fsspec_info(self, file_status, detail):
         if detail:
-            return {
-                "name": self._strip_protocol(file_status.ufs_path),
-                "type": file_status.type,
-                "size": file_status.length
-                if file_status.type == "file"
-                else None,
-                "last_modification_time_ms": getattr(
-                    file_status, "last_modification_time_ms", None
-                ),
-                "content_hash": file_status.content_hash,
-            }
+            return file_status
         else:
-            return self._strip_protocol(file_status.ufs_path)
+            return {
+                "name": self._strip_protocol(file_status.get('mName', None)),
+                "type": file_status.get('mType', None),
+                "size": file_status.get('mLength', None)
+                if file_status['mType'] == "file"
+                else None,
+                "last_modification_time_ms": file_status.get('mLastModificationTimeMs', None),
+                "content_hash": file_status.get('mContentHash', ''),
+                "in_alluxio_percentage": file_status.get('mInAlluxioPercentage', None)
+            }
 
     def fallback_handler(alluxio_impl):
         @wraps(alluxio_impl)
@@ -348,7 +347,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         return fallback_wrapper
 
     @fallback_handler
-    def ls(self, path, detail=True, **kwargs):
+    def ls(self, path, detail=False, **kwargs):
         path = self.unstrip_protocol(path)
         paths = self.alluxio.listdir(path)
         return [
@@ -360,7 +359,7 @@ class AlluxioFileSystem(AbstractFileSystem):
     def info(self, path, **kwargs):
         path = self.unstrip_protocol(path)
         file_status = self.alluxio.get_file_status(path)
-        return self._translate_alluxio_info_to_fsspec_info(file_status, True)
+        return self._translate_alluxio_info_to_fsspec_info(file_status, False)
 
     @fallback_handler
     def exists(self, path, **kwargs):
