@@ -227,8 +227,8 @@ class AlluxioClient:
             response.raise_for_status()
             result = []
             for data in json.loads(response.content):
-                data['mType'] = "directory" if data['mFolder'] else "file"
-                data.pop('mFolder')
+                data["mType"] = "directory" if data["mFolder"] else "file"
+                data.pop("mFolder")
                 result.append(data)
             return result
         except Exception:
@@ -285,8 +285,8 @@ class AlluxioClient:
             )
             response.raise_for_status()
             data = json.loads(response.content)
-            data['mType'] = "directory" if data['mFolder'] else "file"
-            data.pop('mFolder')
+            data["mType"] = "directory" if data["mFolder"] else "file"
+            data.pop("mFolder")
             return data
         except Exception:
             raise Exception(

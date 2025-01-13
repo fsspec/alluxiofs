@@ -244,14 +244,18 @@ class AlluxioFileSystem(AbstractFileSystem):
             return file_status
         else:
             return {
-                "name": self._strip_protocol(file_status.get('mName', None)),
-                "type": file_status.get('mType', None),
-                "size": file_status.get('mLength', None)
-                if file_status['mType'] == "file"
+                "name": self._strip_protocol(file_status.get("mName", None)),
+                "type": file_status.get("mType", None),
+                "size": file_status.get("mLength", None)
+                if file_status["mType"] == "file"
                 else None,
-                "last_modification_time_ms": file_status.get('mLastModificationTimeMs', None),
-                "content_hash": file_status.get('mContentHash', ''),
-                "in_alluxio_percentage": file_status.get('mInAlluxioPercentage', None)
+                "last_modification_time_ms": file_status.get(
+                    "mLastModificationTimeMs", None
+                ),
+                "content_hash": file_status.get("mContentHash", ""),
+                "in_alluxio_percentage": file_status.get(
+                    "mInAlluxioPercentage", None
+                ),
             }
 
     def fallback_handler(alluxio_impl):
