@@ -40,7 +40,7 @@ def other_option_test_disabled():
         alluxio_fs.rm(home_path, recursive=True)
 
     # # mkdir
-    res = alluxio_fs.mkdir(home_path)
+    res = alluxio_fs.mkdir("5476"+home_path)
     assert res
 
     # # ls

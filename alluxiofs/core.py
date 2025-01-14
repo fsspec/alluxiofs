@@ -343,7 +343,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                     return res
                 except Exception as e:
                     self.logger.error(f"fallback to ufs is failed: {e}")
-                    raise Exception(f"fallback to ufs is failed: {e}")
+                raise Exception("fallback to ufs is failed")
             raise NotImplementedError(
                 f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.target_protocol}"
             )
