@@ -21,7 +21,7 @@ home_path = "s3://" + bucket_name + "/" + test_folder_name
 
 
 def show_files(path):
-    res = alluxio_fs.ls(path, detail=True)
+    res = alluxio_fs.ls(path)
     formatted_res = json.dumps(res, indent=4, ensure_ascii=False)
     print(formatted_res)
     print()
@@ -61,9 +61,7 @@ def other_option_test_disabled():
     # # get file status
     res_folder = alluxio_fs.info(home_path)
     assert res_folder and res_folder["type"] == "directory"
-    print(res_folder)
     res_file = alluxio_fs.info(home_path + "/python_sdk_test_file")
-
     print(res_file)
 
     # # remove file

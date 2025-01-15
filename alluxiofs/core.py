@@ -243,17 +243,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         if detail:
             return file_status.__dict__
         else:
-            return {
-                "name": self._strip_protocol(file_status.ufs_path),
-                "type": file_status.type,
-                "length": file_status.size
-                if file_status.type == "file"
-                else None,
-                "human_readable_file_size": file_status.human_readable_file_size,
-                "ufs_path": file_status.ufs_path,
-                "in_alluxio_percentage": file_status.in_alluxio_percentage,
-                "content_hash": file_status.content_hash,
-            }
+            return file_status.path
 
     def fallback_handler(alluxio_impl):
         @wraps(alluxio_impl)
@@ -360,7 +350,7 @@ class AlluxioFileSystem(AbstractFileSystem):
     def info(self, path, **kwargs):
         path = self.unstrip_protocol(path)
         file_status = self.alluxio.get_file_status(path)
-        return self._translate_alluxio_info_to_fsspec_info(file_status, False)
+        return self._translate_alluxio_info_to_fsspec_info(file_status, True)
 
     @fallback_handler
     def exists(self, path, **kwargs):
