@@ -241,21 +241,18 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def _translate_alluxio_info_to_fsspec_info(self, file_status, detail):
         if detail:
-            return file_status
+            return file_status.__dict__
         else:
             return {
-                "name": self._strip_protocol(file_status.get("mName", None)),
-                "type": file_status.get("mType", None),
-                "size": file_status.get("mLength", None)
-                if file_status["mType"] == "file"
+                "name": self._strip_protocol(file_status.ufs_path),
+                "type": file_status.type,
+                "length": file_status.length
+                if file_status.type == "file"
                 else None,
-                "last_modification_time_ms": file_status.get(
-                    "mLastModificationTimeMs", None
-                ),
-                "content_hash": file_status.get("mContentHash", ""),
-                "in_alluxio_percentage": file_status.get(
-                    "mInAlluxioPercentage", None
-                ),
+                "human_readable_file_size": file_status.human_readable_file_size,
+                "ufs_path": file_status.ufs_path,
+                "in_alluxio_percentage": file_status.in_alluxio_percentage,
+                "content_hash": file_status.content_hash
             }
 
     def fallback_handler(alluxio_impl):

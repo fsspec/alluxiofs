@@ -21,7 +21,7 @@ home_path = "s3://" + bucket_name + "/" + test_folder_name
 
 
 def show_files(path):
-    res = alluxio_fs.ls(path)
+    res = alluxio_fs.ls(path, detail=True)
     formatted_res = json.dumps(res, indent=4, ensure_ascii=False)
     print(formatted_res)
     print()
@@ -51,6 +51,7 @@ def other_option_test_disabled():
     print("create file python_sdk_test_file")
     res = alluxio_fs.touch(home_path + "/python_sdk_test_file")
     assert res
+    show_files(home_path + "/python_sdk_test_file")
     verify_result(1)
     show_files(home_path)
 
