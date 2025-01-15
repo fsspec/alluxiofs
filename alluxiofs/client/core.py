@@ -70,7 +70,7 @@ class AlluxioPathStatus:
     name: str
     path: str
     ufs_path: str
-    size: int
+    length: int
     human_readable_file_size: str
     completed: bool
     owner: str
@@ -110,11 +110,6 @@ class OpType(Enum):
 
 # TODO(littlEast7): This function is to make the SDK adapt to open source code of alluxio，if we will not support open source, remove it.
 def open_source_adapter(data):
-    if data.get("mContentHash") is None:
-        data["mContentHash"] = '"'
-    if data.get("mCompleted") is None:
-        data["mCompleted"] = bool
-    # if data.get
     return data
 
 
