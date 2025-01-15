@@ -55,6 +55,10 @@ def other_option_test_disabled():
     verify_result(1)
     show_files(home_path)
 
+    ## open file
+    with alluxio_fs.open(home_path + "/python_sdk_test_file") as f:
+        f.read()
+
     # # load file from ufs to alluxio
     # assert alluxio_fs.load_file_from_ufs_to_alluxio(home_path)
 
