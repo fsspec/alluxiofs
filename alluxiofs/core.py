@@ -242,7 +242,7 @@ class AlluxioFileSystem(AbstractFileSystem):
     def _translate_alluxio_info_to_fsspec_info(self, file_status, detail):
         if detail:
             res = file_status.__dict__
-            res['size'] = res.pop('length')
+            res["size"] = res.pop("length")
             return res
         else:
             return file_status.path
