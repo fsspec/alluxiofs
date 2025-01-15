@@ -70,7 +70,7 @@ class AlluxioPathStatus:
     name: str
     path: str
     ufs_path: str
-    length: int
+    size: int
     human_readable_file_size: str
     completed: bool
     owner: str
@@ -107,6 +107,7 @@ class OpType(Enum):
     PROGRESS = "progress"
     STOP = "stop"
 
+
 # TODO(littlEast7): This function is to make the SDK adapt to open source code of alluxio，if we will not support open source, remove it.
 def open_source_adapter(data):
     if data.get("mContentHash") is None:
@@ -115,6 +116,7 @@ def open_source_adapter(data):
         data["mCompleted"] = bool
     # if data.get
     return data
+
 
 class AlluxioClient:
     """
@@ -245,22 +247,22 @@ class AlluxioClient:
             for data in json.loads(response.content):
                 result.append(
                     AlluxioPathStatus(
-                        data.get('mType', ''),
-                        data.get('mName', ''),
-                        data.get('mPath', ''),
-                        data.get('mUfsPath', ''),
-                        data.get('mLength', 0),
-                        data.get('mHumanReadableFileSize', ''),
-                        data.get('mCompleted', None),
-                        data.get('mOwner', ''),
-                        data.get('mGroup', ''),
-                        data.get('mMode', ''),
-                        data.get('mCreationTimeMs', 0),
-                        data.get('mLastModificationTimeMs', 0),
-                        data.get('mLastAccessTimeMs', 0),
-                        data.get('mPersisted', None),
-                        data.get('mInAlluxioPercentage', 0),
-                        data.get('mContentHash', '')
+                        data.get("mType", ""),
+                        data.get("mName", ""),
+                        data.get("mPath", ""),
+                        data.get("mUfsPath", ""),
+                        data.get("mLength", 0),
+                        data.get("mHumanReadableFileSize", ""),
+                        data.get("mCompleted", None),
+                        data.get("mOwner", ""),
+                        data.get("mGroup", ""),
+                        data.get("mMode", ""),
+                        data.get("mCreationTimeMs", 0),
+                        data.get("mLastModificationTimeMs", 0),
+                        data.get("mLastAccessTimeMs", 0),
+                        data.get("mPersisted", None),
+                        data.get("mInAlluxioPercentage", 0),
+                        data.get("mContentHash", ""),
                     )
                 )
             return result
@@ -320,22 +322,22 @@ class AlluxioClient:
             data = json.loads(response.content)[0]
             data = open_source_adapter(data)
             return AlluxioPathStatus(
-                data.get('mType', ''),
-                data.get('mName', ''),
-                data.get('mPath', ''),
-                data.get('mUfsPath', ''),
-                data.get('mLength', 0),
-                data.get('mHumanReadableFileSize', ''),
-                data.get('mCompleted', None),
-                data.get('mOwner', ''),
-                data.get('mGroup', ''),
-                data.get('mMode', ''),
-                data.get('mCreationTimeMs', 0),
-                data.get('mLastModificationTimeMs', 0),
-                data.get('mLastAccessTimeMs', 0),
-                data.get('mPersisted', None),
-                data.get('mInAlluxioPercentage', 0),
-                data.get('mContentHash', '')
+                data.get("mType", ""),
+                data.get("mName", ""),
+                data.get("mPath", ""),
+                data.get("mUfsPath", ""),
+                data.get("mLength", 0),
+                data.get("mHumanReadableFileSize", ""),
+                data.get("mCompleted", None),
+                data.get("mOwner", ""),
+                data.get("mGroup", ""),
+                data.get("mMode", ""),
+                data.get("mCreationTimeMs", 0),
+                data.get("mLastModificationTimeMs", 0),
+                data.get("mLastAccessTimeMs", 0),
+                data.get("mPersisted", None),
+                data.get("mInAlluxioPercentage", 0),
+                data.get("mContentHash", ""),
             )
         except Exception:
             raise Exception(

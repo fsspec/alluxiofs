@@ -246,13 +246,13 @@ class AlluxioFileSystem(AbstractFileSystem):
             return {
                 "name": self._strip_protocol(file_status.ufs_path),
                 "type": file_status.type,
-                "length": file_status.length
+                "length": file_status.size
                 if file_status.type == "file"
                 else None,
                 "human_readable_file_size": file_status.human_readable_file_size,
                 "ufs_path": file_status.ufs_path,
                 "in_alluxio_percentage": file_status.in_alluxio_percentage,
-                "content_hash": file_status.content_hash
+                "content_hash": file_status.content_hash,
             }
 
     def fallback_handler(alluxio_impl):
