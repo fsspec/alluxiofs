@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name="alluxiofs",
-    version="1.0.4",
+    version="1.0.6",
     description="Alluxio Fsspec provides Alluxio filesystem spec implementation.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
@@ -33,8 +33,8 @@ setup(
         ]
     },
     python_requires=">=3.8",
-    maintainer="Lu Qiu",
-    maintainer_email="luqiujob@gmail.com",
+    maintainer="Jiaming Mai, Xiaodong Yang, Lu Qiu",
+    maintainer_email="jiamingmai@163.com, xiaodong163831@gmail.com, luqiujob@gmail.com",
     entry_points={
         "fsspec.specs": [
             "alluxio=alluxiofs.AlluxioFileSystem",
