@@ -11,7 +11,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 def check_file_info(file_info, file_size):
-    assert file_info.get("name") == FILE_PATH
+    assert file_info.get("path") == FILE_PATH
     assert file_info.get("type") == "file"
     assert file_info.get("size") == file_size
 
@@ -19,7 +19,7 @@ def check_file_info(file_info, file_size):
 def alluxio_fsspec_test_file(alluxio_file_system, alluxio_path, local_path):
     file_size = os.path.getsize(local_path)
 
-    file_list = alluxio_file_system.ls(alluxio_path)
+    file_list = alluxio_file_system.ls(alluxio_path, detail=True)
     assert len(file_list) == 1
     check_file_info(file_list[0], file_size)
     file_info = alluxio_file_system.info(alluxio_path)

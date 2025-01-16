@@ -51,8 +51,13 @@ def other_option_test_disabled():
     print("create file python_sdk_test_file")
     res = alluxio_fs.touch(home_path + "/python_sdk_test_file")
     assert res
+    show_files(home_path + "/python_sdk_test_file")
     verify_result(1)
     show_files(home_path)
+
+    ## open file
+    with alluxio_fs.open(home_path + "/python_sdk_test_file") as f:
+        f.read()
 
     # # load file from ufs to alluxio
     # assert alluxio_fs.load_file_from_ufs_to_alluxio(home_path)
@@ -60,9 +65,7 @@ def other_option_test_disabled():
     # # get file status
     res_folder = alluxio_fs.info(home_path)
     assert res_folder and res_folder["type"] == "directory"
-    print(res_folder)
     res_file = alluxio_fs.info(home_path + "/python_sdk_test_file")
-
     print(res_file)
 
     # # remove file

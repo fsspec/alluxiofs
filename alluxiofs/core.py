@@ -241,19 +241,11 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def _translate_alluxio_info_to_fsspec_info(self, file_status, detail):
         if detail:
-            return {
-                "name": self._strip_protocol(file_status.ufs_path),
-                "type": file_status.type,
-                "size": file_status.length
-                if file_status.type == "file"
-                else None,
-                "last_modification_time_ms": getattr(
-                    file_status, "last_modification_time_ms", None
-                ),
-                "content_hash": file_status.content_hash,
-            }
+            res = file_status.__dict__
+            res["size"] = res.pop("length")
+            return res
         else:
-            return self._strip_protocol(file_status.ufs_path)
+            return file_status.path
 
     def fallback_handler(alluxio_impl):
         @wraps(alluxio_impl)
@@ -340,7 +332,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                     return res
                 except Exception as e:
                     self.logger.error(f"fallback to ufs is failed: {e}")
-                    raise Exception(f"fallback to ufs is failed: {e}")
+                raise Exception("fallback to ufs is failed")
             raise NotImplementedError(
                 f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.target_protocol}"
             )
@@ -348,7 +340,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         return fallback_wrapper
 
     @fallback_handler
-    def ls(self, path, detail=True, **kwargs):
+    def ls(self, path, detail=False, **kwargs):
         path = self.unstrip_protocol(path)
         paths = self.alluxio.listdir(path)
         return [

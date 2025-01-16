@@ -14,7 +14,7 @@ FILE_PREFIX = "file://"
 
 
 def check_dir_info(dir_info, dir_path):
-    assert dir_info.get("name") == dir_path
+    assert dir_info.get("path") == dir_path
     assert dir_info.get("type") == "directory"
     assert not dir_info.get("size")
 
@@ -22,7 +22,7 @@ def check_dir_info(dir_info, dir_path):
 def alluxio_fsspec_test_dir(alluxio_file_system, alluxio_dir_path):
     file_size = os.path.getsize(LOCAL_FILE_PATH)
 
-    file_list = alluxio_file_system.ls(alluxio_dir_path)
+    file_list = alluxio_file_system.ls(alluxio_dir_path, detail=True)
     assert len(file_list) == 2
     if file_list[0].get("type") == "file":
         check_file_info(file_list[0], file_size)
