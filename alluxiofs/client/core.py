@@ -975,7 +975,7 @@ class AlluxioClient:
                 )
             )
 
-    def tail(self, file_path, num_of_bytes=None):
+    def tail(self, file_path, num_of_bytes=1024):
         """
         show the tail a file which path is 'file_path'.
         Args:
@@ -1011,7 +1011,7 @@ class AlluxioClient:
                 )
             )
 
-    def head(self, file_path, num_of_bytes=None):
+    def head(self, file_path, num_of_bytes=1024):
         """
         show the head a file which path is 'file_path'.
         Args:
