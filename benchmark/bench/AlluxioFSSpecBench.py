@@ -93,14 +93,18 @@ class AlluxioFSSpecBench(AbstractAlluxioFSSpecTraverseBench):
         self.metrics.update(Metrics.TOTAL_BYTES, file_size)
 
     def bench_download_data(self, file_path, file_size):
-        self.alluxio_fs.alluxio.read_chunked(file_path, chunk_size=self.buffer_size).read()
+        self.alluxio_fs.alluxio.read_chunked(
+            file_path, chunk_size=self.buffer_size
+        ).read()
         self.metrics.update(Metrics.TOTAL_OPS, 1)
         self.metrics.update(Metrics.TOTAL_BYTES, file_size)
 
     def bench_upload_data(self, file_path, local_path):
-        with open(local_path, 'rb') as f:
+        with open(local_path, "rb") as f:
             data = f.read()
-            self.alluxio_fs.alluxio.write_chunked(file_path, data, chunk_size=self.buffer_size)
+            self.alluxio_fs.alluxio.write_chunked(
+                file_path, data, chunk_size=self.buffer_size
+            )
         self.metrics.update(Metrics.TOTAL_OPS, 1)
         self.metrics.update(Metrics.TOTAL_BYTES, len(data))
 

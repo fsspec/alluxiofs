@@ -150,7 +150,10 @@ class AbstractAlluxioFSSpecTraverseBench(AbstractBench, ABC):
         if entry["type"] == "directory":
             self.directories.append(entry_path)
             for sub_path in self.alluxio_fs.ls(path, detail=True):
-                self.traverse(sub_path.get("ufs_path"), self.alluxio_fs.info(sub_path.get("ufs_path")))
+                self.traverse(
+                    sub_path.get("ufs_path"),
+                    self.alluxio_fs.info(sub_path.get("ufs_path")),
+                )
         else:
             if self.file_type is not None:
                 if entry_path.endswith(self.file_type) or entry_path.endswith(
@@ -171,6 +174,7 @@ class AbstractAlluxioFSSpecTraverseBench(AbstractBench, ABC):
                 raise Exception("can't upload data to a directory")
             else:
                 self.files.append((lpath, rpath))
+
 
 class AbstractArgumentParser(ABC):
     @abstractmethod

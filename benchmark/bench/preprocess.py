@@ -2,22 +2,52 @@ import argparse
 import os
 import random
 import string
+
 import fsspec
+
 from alluxiofs import AlluxioFileSystem
 
 fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
 
-generate_data_chunk_size = 2*1024*1024*1024
+generate_data_chunk_size = 2 * 1024 * 1024 * 1024
+
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Preprocess files for benchmark")
-    parser.add_argument('--op', type=str, choices=['read', 'write', 'read_batch'], required=True,
-                        help="Operation type: read, write or read_batch")
-    parser.add_argument('--size', nargs='+', required=True, help="List of file sizes to create (e.g., 1MB 10MB 100MB)")
-    parser.add_argument("--number", type=str, required=False, help="The number of files to generate")
+    parser = argparse.ArgumentParser(
+        description="Preprocess files for benchmark"
+    )
+    parser.add_argument(
+        "--op",
+        type=str,
+        choices=["read", "write", "read_batch"],
+        required=True,
+        help="Operation type: read, write or read_batch",
+    )
+    parser.add_argument(
+        "--size",
+        nargs="+",
+        required=True,
+        help="List of file sizes to create (e.g., 1MB 10MB 100MB)",
+    )
+    parser.add_argument(
+        "--number",
+        type=str,
+        required=False,
+        help="The number of files to generate",
+    )
     # parser.add_argument("--file_size", type=str, required=False, help="file size")
-    parser.add_argument('--path', type=str, required=True, help="Path where files will be writen to in remote")
-    parser.add_argument('--local_path', type=str, required=False, help="Path where files will be writen from in local")
+    parser.add_argument(
+        "--path",
+        type=str,
+        required=True,
+        help="Path where files will be writen to in remote",
+    )
+    parser.add_argument(
+        "--local_path",
+        type=str,
+        required=False,
+        help="Path where files will be writen from in local",
+    )
     return parser.parse_args()
 
 
@@ -25,7 +55,9 @@ def generate_random_data(size):
     num_bytes = convert_size_to_bytes(size)
     while num_bytes > 0:
         chunk_size = min(generate_data_chunk_size, num_bytes)
-        yield ''.join(random.choices(string.ascii_letters + string.digits, k=chunk_size)).encode('utf-8')
+        yield "".join(
+            random.choices(string.ascii_letters + string.digits, k=chunk_size)
+        ).encode("utf-8")
         num_bytes -= chunk_size
 
 
@@ -58,7 +90,7 @@ def create_files_write(alluxio_fs, path, local_path, size):
     file_path = os.path.join(local_path, size)
     if not os.path.exists(file_path):
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, 'ab') as f:
+        with open(file_path, "ab") as f:
             for data_chunk in generate_random_data(size):
                 f.write(data_chunk)
 
@@ -78,7 +110,7 @@ def create_files_read_batch(alluxio_fs, path, local_path, file_size, number):
         file_path_fuse = os.path.join(local_path, str(i))
         if not os.path.exists(file_path_fuse):
             os.makedirs(os.path.dirname(file_path_fuse), exist_ok=True)
-        with open(file_path_fuse, 'ab') as f:
+        with open(file_path_fuse, "ab") as f:
             for data_chunk in generate_random_data(file_size):
                 f.write(data_chunk)
 
@@ -94,7 +126,9 @@ def main():
 
     size_list = args.size
 
-    alluxio_fs = fsspec.filesystem("alluxiofs", etcd_hosts="localhost", etcd_port=2379)
+    alluxio_fs = fsspec.filesystem(
+        "alluxiofs", etcd_hosts="localhost", etcd_port=2379
+    )
 
     if args.op == "read":
         for s in size_list:
@@ -106,7 +140,9 @@ def main():
 
     elif args.op == "read_batch":
         for s in size_list:
-            create_files_read_batch(alluxio_fs, args.path, args.local_path, s, int(args.number))
+            create_files_read_batch(
+                alluxio_fs, args.path, args.local_path, s, int(args.number)
+            )
 
 
 if __name__ == "__main__":

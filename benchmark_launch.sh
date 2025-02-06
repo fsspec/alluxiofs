@@ -224,4 +224,3 @@ python ./benchmark/bench/fuse_stats.py --batch=1 --inputs_dir=$FUSE_RESULT_DIR_B
 python ./benchmark/bench/fsspec_stats.py --batch=1 --inputs_dir=$FSSPEC_RESULT_DIR_BATCH --outputs_dir=$SUMMARIZE_RESULT_BATCH
 
 echo "All benchmarks completed!"
-
