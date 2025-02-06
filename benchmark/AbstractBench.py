@@ -75,11 +75,13 @@ class AbstractBench(ABC):
 class AbstractAlluxioFSSpecTraverseBench(AbstractBench, ABC):
     def __init__(self, process_id, num_process, args, **kwargs):
         super().__init__(process_id, num_process, args, **kwargs)
+        self.read_file = None
         self.directories: List[str] = []
         self.files: List[Tuple[str, float]] = []
         self.args = args
         self.file_num = 0
         self.dir_num = 0
+        self.read_type = "file"
 
     def get_protocol(self, full_path: str) -> str:
         parsed_url = urlparse(full_path)
@@ -102,7 +104,18 @@ class AbstractAlluxioFSSpecTraverseBench(AbstractBench, ABC):
             # test_options={"log_level": "debug"}
             # target_protocol=protocol
         )
-        self.traverse(self.args.path)
+        if self.args.op == "upload_data":
+            if self.read_type == "directory":
+                self.traverse_write(self.args.path, self.args.local_path)
+            else:
+                self.write_file = (self.args.path, self.args.local_path)
+        else:
+            entry = self.alluxio_fs.info(self.args.path)
+            self.read_type = entry["type"]
+            if self.read_type == "directory":
+                self.traverse(self.args.path, entry)
+            else:
+                self.read_file = (entry["ufs_path"], entry["size"])
 
     def next_dir(self) -> str:
         if len(self.directories) < self.num_process:
@@ -116,23 +129,28 @@ class AbstractAlluxioFSSpecTraverseBench(AbstractBench, ABC):
         return next_dir
 
     def next_file(self) -> Tuple[str, float]:
-        if len(self.files) < self.num_process:
-            raise ValueError(
-                f"Total number of files is {len(self.files)} but process num is {self.num_process}"
-            )
-        if self.file_num >= len(self.files):
-            self.file_num = self.process_id
-        next_file = self.files[self.file_num]
-        self.file_num += self.num_process
-        return next_file
+        if self.read_type == "directory":
+            if len(self.files) < self.num_process:
+                raise ValueError(
+                    f"Total number of files is {len(self.files)} but process num is {self.num_process}"
+                )
+            if self.file_num >= len(self.files):
+                self.file_num = self.process_id
+            next_file = self.files[self.file_num]
+            self.file_num += self.num_process
+            return next_file
+        else:
+            if self.args.op == "upload_data":
+                return self.write_file
+            else:
+                return self.read_file
 
-    def traverse(self, path):
-        entry = self.alluxio_fs.info(path)
-        entry_path = entry["name"]
+    def traverse(self, path, entry):
+        entry_path = entry["ufs_path"]
         if entry["type"] == "directory":
             self.directories.append(entry_path)
-            for sub_path in self.alluxio_fs.ls(path, detail=False):
-                self.traverse(sub_path)
+            for sub_path in self.alluxio_fs.ls(path, detail=True):
+                self.traverse(sub_path.get("ufs_path"), self.alluxio_fs.info(sub_path.get("ufs_path")))
         else:
             if self.file_type is not None:
                 if entry_path.endswith(self.file_type) or entry_path.endswith(
@@ -142,6 +160,17 @@ class AbstractAlluxioFSSpecTraverseBench(AbstractBench, ABC):
             else:
                 self.files.append((entry_path, entry["size"]))
 
+    def traverse_write(self, lpath, rpath):
+        if rpath is None or rpath == "":
+            raise Exception("local_path can't be empty")
+        if not self.alluxio_fs.exists(lpath):
+            self.files.append((lpath, rpath))
+        else:
+            entry = self.alluxio_fs.info(lpath)
+            if entry["type"] == "directory":
+                raise Exception("can't upload data to a directory")
+            else:
+                self.files.append((lpath, rpath))
 
 class AbstractArgumentParser(ABC):
     @abstractmethod

@@ -6,6 +6,7 @@
 # either express or implied, as more fully set forth in the License.
 #
 # See the NOTICE file distributed with this work for information regarding copyright ownership.
+import copy
 import random
 from enum import Enum
 
@@ -22,11 +23,14 @@ class Op(Enum):
     cat_file = "cat_file"
     open_seq_read = "open_seq_read"
     open_random_read = "open_random_read"
+    open_seq_write = "open_seq_write"
+    upload_data = "upload_data"
+    download_data = "download_data"
 
 
 class AlluxioFSSpecArgumentParser(AbstractArgumentParser):
     def __init__(self, main_parser):
-        self.parser = main_parser
+        self.parser = copy.deepcopy(main_parser)
         self.parser.add_argument(
             "--op",
             choices=[op.value for op in Op],
@@ -36,7 +40,7 @@ class AlluxioFSSpecArgumentParser(AbstractArgumentParser):
         self.parser.add_argument(
             "--bs",
             type=str,
-            default=256 * 1024,
+            default="256k",
             help="Buffer size for read operations, in KB or MB.",
         )
 
@@ -58,6 +62,10 @@ class AlluxioFSSpecBench(AbstractAlluxioFSSpecTraverseBench):
             self.bench_info(*self.next_file())
         elif self.args.op == Op.cat_file.value:
             self.bench_cat_file(*self.next_file())
+        elif self.args.op == Op.upload_data.value:
+            self.bench_upload_data(*self.next_file())
+        elif self.args.op == Op.download_data.value:
+            self.bench_download_data(*self.next_file())
         elif self.args.op == Op.open_seq_read.value:
             self.bench_open_seq_read(*self.next_file())
         elif self.args.op == Op.open_random_read.value:
@@ -82,7 +90,19 @@ class AlluxioFSSpecBench(AbstractAlluxioFSSpecTraverseBench):
             self.alluxio_fs.cat_file(file_path, 0, read_bytes)
             file_read += read_bytes
         self.metrics.update(Metrics.TOTAL_OPS, 1)
-        self.metrics.update(Metrics.TOTAL_BYTES, read_bytes)
+        self.metrics.update(Metrics.TOTAL_BYTES, file_size)
+
+    def bench_download_data(self, file_path, file_size):
+        self.alluxio_fs.alluxio.read_chunked(file_path, chunk_size=self.buffer_size).read()
+        self.metrics.update(Metrics.TOTAL_OPS, 1)
+        self.metrics.update(Metrics.TOTAL_BYTES, file_size)
+
+    def bench_upload_data(self, file_path, local_path):
+        with open(local_path, 'rb') as f:
+            data = f.read()
+            self.alluxio_fs.alluxio.write_chunked(file_path, data, chunk_size=self.buffer_size)
+        self.metrics.update(Metrics.TOTAL_OPS, 1)
+        self.metrics.update(Metrics.TOTAL_BYTES, len(data))
 
     def bench_open_seq_read(self, file_path, file_size):
         with self.alluxio_fs.open(file_path, "rb") as f:
