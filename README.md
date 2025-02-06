@@ -210,3 +210,9 @@ with py_fs.open_input_file("s3://example_bucket/datasets/example.parquet") as f:
 
 # End of Python example
 ```
+
+## benchmark
+If you want to benchmark the Python SDK against FUSE, you can run the following command:
+```bash
+/bin/bash benchmark_launch.sh
+```
