@@ -223,4 +223,6 @@ echo ""
 python ./benchmark/bench/fuse_stats.py --batch=1 --inputs_dir=$FUSE_RESULT_DIR_BATCH --outputs_dir=$SUMMARIZE_RESULT_BATCH
 python ./benchmark/bench/fsspec_stats.py --batch=1 --inputs_dir=$FSSPEC_RESULT_DIR_BATCH --outputs_dir=$SUMMARIZE_RESULT_BATCH
 
+
+python ./benchmark/bench/figure_plot.py --fuse_summarize_dir="./bench_result/fuse_summarize_results.csv" --fsspec_summarize_dir="./bench_result/fsspec_summarize_results.csv"
 echo "All benchmarks completed!"
