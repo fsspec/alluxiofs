@@ -581,7 +581,9 @@ class AlluxioFile(AbstractBufferedFile):
 
     def _fetch_range(self, start, end):
         """Get the specified set of bytes from remote"""
-        return self.fs.alluxio.read_file_range(file_path=self.path, offset=start, length=end-start)
+        return self.fs.alluxio.read_file_range(
+            file_path=self.path, offset=start, length=end - start
+        )
 
     def read(self, length=-1):
         length = -1 if length is None else int(length)

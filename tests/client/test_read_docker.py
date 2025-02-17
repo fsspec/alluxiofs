@@ -53,7 +53,7 @@ def validate_invalid_read_range(
 ):
     try:
         alluxio_fs.read_range(alluxio_file_path, offset, length)
-    except Exception as e:
+    except Exception:
         pass
     else:
         raise AssertionError(
@@ -131,7 +131,7 @@ def _test_alluxio_client(alluxio_client: AlluxioClient):
     special_test_cases = [
         (file_size - 1, 0),
         (file_size - 2, 1),
-        (file_size-101, 100),
+        (file_size - 101, 100),
     ]
 
     for offset, length in special_test_cases:
