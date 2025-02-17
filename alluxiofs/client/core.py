@@ -657,32 +657,8 @@ class AlluxioClient:
                 f"Invalid length: {length}. Length must be a non-negative integer, -1, or None. Requested offset: {offset}"
             )
 
-        worker_host, worker_http_port = self._get_preferred_worker_address(
-            file_path
-        )
-        path_id = self._get_path_hash(file_path)
-
         try:
-            if self.data_manager:
-                return self._range_page_generator_alluxiocommon(
-                    worker_host,
-                    worker_http_port,
-                    path_id,
-                    file_path,
-                    offset,
-                    length,
-                )
-            else:
-                return b"".join(
-                    self._range_page_generator(
-                        worker_host,
-                        worker_http_port,
-                        path_id,
-                        file_path,
-                        offset,
-                        length,
-                    )
-                )
+            return self.read_file_range(file_path, offset, length)
         except Exception as e:
             raise Exception(e)
 

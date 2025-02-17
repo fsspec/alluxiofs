@@ -581,7 +581,25 @@ class AlluxioFile(AbstractBufferedFile):
 
     def _fetch_range(self, start, end):
         """Get the specified set of bytes from remote"""
-        return self.fs.cat_file(path=self.path, start=start, end=end)
+        return self.fs.alluxio.read_file_range(file_path=self.path, offset=start, length=end-start)
+
+    def read(self, length=-1):
+        length = -1 if length is None else int(length)
+        if self.mode != "rb":
+            raise ValueError("File not in read mode")
+        if self.closed:
+            raise ValueError("I/O operation on closed file.")
+        if length < 0:
+            length = self.size - self.loc
+        if length == 0:
+            # don't even bother calling fetch
+            return b""
+        if length == self.size:
+            out = self.fs.alluxio.read_chunked(self.path).read()
+        else:
+            out = self.cache._fetch(self.loc, self.loc + length)
+        self.loc += len(out)
+        return out
 
     def _upload_chunk(self, final=False):
         data = self.buffer.getvalue()

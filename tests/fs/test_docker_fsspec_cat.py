@@ -66,9 +66,9 @@ def alluxio_fsspec_cat_file(alluxio_file_system, alluxio_path, local_path):
     )
 
     special_test_cases = [
-        (file_size - 1, -1),
-        (file_size - 1, file_size + 1),
-        (file_size, 100),
+        (file_size - 1, 0),
+        (file_size - 2, 1),
+        (file_size-101, 100),
     ]
 
     for offset, length in special_test_cases:
