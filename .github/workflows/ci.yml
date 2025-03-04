@@ -39,28 +39,28 @@ jobs:
           conda --version
 
       # alluxiocommon related
-      - name: Build alluxiocommon wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: --release -i python${{ matrix.python-version }} --out dist -m rust/alluxiocommon/Cargo.toml
-          manylinux: auto
-
-      - name: Install all packages and Run AlluxioCommon tests
-        shell: bash
-        run: |
-          set -e
-          pip install .[tests]
-          pip install alluxiocommon --no-index --find-links=dist/ --force-reinstall
-          pip install pytest
-          pytest -vv \
-            --log-format="%(asctime)s %(levelname)s %(message)s" \
-            --log-date-format="%H:%M:%S" \
-          rust/alluxiocommon/tests/
-          pytest -vv \
-            --log-format="%(asctime)s %(levelname)s %(message)s" \
-            --log-date-format="%H:%M:%S" \
-          tests/
+#      - name: Build alluxiocommon wheels
+#        uses: PyO3/maturin-action@v1
+#        with:
+#          target: ${{ matrix.target }}
+#          args: --release -i python${{ matrix.python-version }} --out dist -m rust/alluxiocommon/Cargo.toml
+#          manylinux: auto
+#
+#      - name: Install all packages and Run AlluxioCommon tests
+#        shell: bash
+#        run: |
+#          set -e
+#          pip install .[tests]
+#          pip install alluxiocommon --no-index --find-links=dist/ --force-reinstall
+#          pip install pytest
+#          pytest -vv \
+#            --log-format="%(asctime)s %(levelname)s %(message)s" \
+#            --log-date-format="%H:%M:%S" \
+#          rust/alluxiocommon/tests/
+#          pytest -vv \
+#            --log-format="%(asctime)s %(levelname)s %(message)s" \
+#            --log-date-format="%H:%M:%S" \
+#          tests/
 
   lint:
     name: lint

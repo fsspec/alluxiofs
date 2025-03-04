@@ -21,6 +21,13 @@ ALLUXIO_FILE_PATH = "file://{}".format("/opt/alluxio/ufs/test.csv")
 MASTER_CONTAINER = "alluxio-master"
 WORKER_CONTAINER = "alluxio-worker"
 ETCD_CONTAINER = "etcd"
+LICENSE_ID = ""
+LICENSE_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "license-id"
+)
+if os.path.exists(LICENSE_PATH):
+    with open(LICENSE_PATH, "r") as f:
+        LICENSE_ID = f.read()
 
 
 def stop_docker(container):
@@ -49,7 +56,7 @@ def yield_url():
             time.sleep(10)
 
 
-def launch_alluxio_dockers(with_etcd=False):
+def launch_alluxio_dockers(with_etcd=True):
     network_cmd = "docker network create alluxio_network"
 
     run_cmd_master = (
@@ -59,7 +66,9 @@ def launch_alluxio_dockers(with_etcd=False):
         "-Dalluxio.security.authentication.type=NOSASL "
         "-Dalluxio.security.authorization.permission.enabled=false "
         "-Dalluxio.security.authorization.plugins.enabled=false "
+        "-Dlicense.check.enabled=false "
         "-Dalluxio.master.journal.type=NOOP "
+        f"-Dalluxio.license={LICENSE_ID} "
         "-Dalluxio.master.scheduler.initial.wait.time=1s "
         "-Dalluxio.dora.client.ufs.root=file:/// "
         + (
@@ -68,7 +77,7 @@ def launch_alluxio_dockers(with_etcd=False):
             if with_etcd
             else ""
         )
-        + '-Dalluxio.underfs.xattr.change.enabled=false " alluxio/alluxio:310-SNAPSHOT master'
+        + '-Dalluxio.underfs.xattr.change.enabled=false " alluxio-local:MAIN-SNAPSHOT master'
     )
 
     run_cmd_worker = (
@@ -76,8 +85,10 @@ def launch_alluxio_dockers(with_etcd=False):
         f"--name=alluxio-worker --shm-size=1G -v {TEST_DIR}:/opt/alluxio/ufs "
         '-e ALLUXIO_JAVA_OPTS=" -Dalluxio.master.hostname=alluxio-master '
         "-Dalluxio.security.authentication.type=NOSASL "
+        "-Dlicense.check.enabled=false "
         "-Dalluxio.security.authorization.permission.enabled=false "
         "-Dalluxio.security.authorization.plugins.enabled=false "
+        f"-Dalluxio.license={LICENSE_ID} "
         "-Dalluxio.dora.client.ufs.root=file:/// "
         + (
             "-Dalluxio.worker.hostname=localhost "
@@ -87,7 +98,7 @@ def launch_alluxio_dockers(with_etcd=False):
             if with_etcd
             else ""
         )
-        + '-Dalluxio.underfs.xattr.change.enabled=false " alluxio/alluxio:310-SNAPSHOT worker'
+        + '-Dalluxio.underfs.xattr.change.enabled=false " alluxio-local:MAIN-SNAPSHOT worker'
     )
 
     run_cmd_etcd = (

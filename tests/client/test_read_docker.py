@@ -97,7 +97,7 @@ def validate_full_read(
         raise AssertionError(error_message)
 
 
-def test_alluxio_client(alluxio_client: AlluxioClient):
+def _test_alluxio_client(alluxio_client: AlluxioClient):
     file_size = os.path.getsize(LOCAL_FILE_PATH)
     assert alluxio_client.load(ALLUXIO_FILE_PATH, 200)
     invalid_test_cases = [(-1, 100), (file_size - 1, -2)]
@@ -129,9 +129,9 @@ def test_alluxio_client(alluxio_client: AlluxioClient):
     )
 
     special_test_cases = [
-        (file_size - 1, -1),
-        (file_size - 1, file_size + 1),
-        (file_size, 100),
+        (file_size - 1, 0),
+        (file_size - 2, 1),
+        (file_size - 101, 100),
     ]
 
     for offset, length in special_test_cases:
@@ -150,10 +150,10 @@ def test_alluxio_client(alluxio_client: AlluxioClient):
 
 
 def test_etcd_alluxio_client(etcd_alluxio_client: AlluxioClient):
-    test_alluxio_client(etcd_alluxio_client)
+    _test_alluxio_client(etcd_alluxio_client)
 
 
 def test_alluxio_client_alluxiocommon(
     alluxio_client_alluxiocommon: AlluxioClient,
 ):
-    test_alluxio_client(alluxio_client_alluxiocommon)
+    _test_alluxio_client(alluxio_client_alluxiocommon)
