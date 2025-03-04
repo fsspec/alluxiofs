@@ -14,6 +14,8 @@ import os
 import shutil
 import time
 from enum import Enum
+from multiprocessing import Manager
+from multiprocessing import Process
 
 from benchmark.AbstractBench import Metrics
 from benchmark.bench import AlluxioFSSpecBench
@@ -43,7 +45,14 @@ def init_main_parser():
         "--path",
         type=str,
         required=True,
-        help="dataset dir uri, e.g. s3://air-example-data-2/10G-xgboost-data.parquet/",
+        help="path of test file or dir, e.g. s3://air-example-data-2/10G-xgboost-data.parquet/",
+    )
+
+    parser.add_argument(
+        "--local_path",
+        type=str,
+        required=False,
+        help="the local path of the file to upload to alluxio, e.g. ./tests/assets/test.csv",
     )
 
     parser.add_argument(
@@ -164,84 +173,82 @@ def configure_logging(path):
     return logger
 
 
+def worker_task(i, main_args, main_parser, num_process):
+    test_suite = get_test_suite(main_parser, main_args, i, num_process)
+    test_suite.init()
+    start_time = time.time()
+
+    if main_args.profile:
+        import cProfile
+
+        profile_result_location = os.path.join(
+            main_args.result_dir, PROFILE_RESULT_FORMAT.format(i)
+        )
+        cProfile.runctx(
+            "runtest(start_time, main_args.runtime, test_suite)",
+            globals(),
+            locals(),
+            filename=profile_result_location,
+        )
+        print(
+            f"Profile result of worker {i} saved to {profile_result_location}"
+        )
+    else:
+        runtest(start_time, main_args.runtime, test_suite)
+
+    duration = time.time() - start_time
+    print(
+        f"Benchmark against {main_args.testsuite}: total time: {duration} seconds"
+    )
+
+    result = {
+        "worker": i,
+        "op": main_args.testsuite,
+        "metrics": {DURATION_METRIC_KEY: duration},
+    }
+    if test_suite.metrics.get(Metrics.TOTAL_OPS):
+        total_ops = test_suite.metrics.get(Metrics.TOTAL_OPS)
+        ops_per_second = total_ops / duration
+        result["metrics"][TOTAL_OPS_METRIC_KEY] = total_ops
+        result["metrics"][OPS_PER_SECOND_METRIC_KEY] = ops_per_second
+        print(
+            f"{TOTAL_OPS_METRIC_KEY}: {total_ops}, {OPS_PER_SECOND_METRIC_KEY}: {ops_per_second}"
+        )
+    if test_suite.metrics.get(Metrics.TOTAL_BYTES):
+        total_bytes = test_suite.metrics.get(Metrics.TOTAL_BYTES)
+        bytes_per_second = total_bytes / duration
+        result["metrics"][TOTAL_BYTES_METRIC_KEY] = total_bytes
+        result["metrics"][BYTES_PER_SECOND_METRIC_KEY] = bytes_per_second
+        print(
+            f"{TOTAL_BYTES_METRIC_KEY}: {total_bytes}, {BYTES_PER_SECOND_METRIC_KEY}: {bytes_per_second / (1024 * 1024)}MB"
+        )
+
+    json_result_location = os.path.join(
+        main_args.result_dir, BENCH_RESULT_FORMAT.format(i)
+    )
+    with open(json_result_location, "w") as f:
+        json.dump(result, f)
+    print(f"Find more benchmark results in dir {main_args.result_dir}")
+
+
 def main():
     main_parser = init_main_parser()
     main_args, remaining_args = main_parser.parse_known_args()
     create_empty_dir(main_args.result_dir)
-    logger = configure_logging(main_args.result_dir)
-    i_am_child = False
-    for i in range(main_args.numjobs):
-        processid = os.fork()
-        if processid <= 0:
-            i_am_child = True
-            print(f"Child Process:{i}")
-            test_suite = get_test_suite(
-                main_parser, main_args, i, main_args.numjobs
+    configure_logging(main_args.result_dir)
+
+    with Manager():
+        jobs = []
+        for i in range(main_args.numjobs):
+            process = Process(
+                target=worker_task,
+                args=(i, main_args, main_parser, main_args.numjobs),
             )
-            test_suite.init()
-            start_time = time.time()
+            jobs.append(process)
+            process.start()
 
-            if main_args.profile:
-                import cProfile
-
-                profile_result_location = os.path.join(
-                    main_args.result_dir, PROFILE_RESULT_FORMAT.format(i)
-                )
-                cProfile.runctx(
-                    "runtest(start_time, main_args.runtime, test_suite)",
-                    globals(),
-                    locals(),
-                    filename=profile_result_location,
-                )
-                print(
-                    f"Profile result of worker {i} saved to {profile_result_location}"
-                )
-            else:
-                runtest(start_time, main_args.runtime, test_suite)
-
-            duration = time.time() - start_time
-            print(
-                f"Benchmark against {main_args.testsuite}: "
-                f"total time: {duration} seconds"
-            )
-
-            result = {
-                "worker": i,
-                "op": main_args.testsuite,
-                "metrics": {
-                    DURATION_METRIC_KEY: duration,
-                },
-            }
-            if test_suite.metrics.get(Metrics.TOTAL_OPS):
-                total_ops = test_suite.metrics.get(Metrics.TOTAL_OPS)
-                ops_per_second = total_ops / duration
-                result["metrics"][TOTAL_OPS_METRIC_KEY] = total_ops
-                result["metrics"][OPS_PER_SECOND_METRIC_KEY] = ops_per_second
-                print(
-                    f"{TOTAL_OPS_METRIC_KEY}: {total_ops}, "
-                    f"{OPS_PER_SECOND_METRIC_KEY}: {ops_per_second}"
-                )
-            if test_suite.metrics.get(Metrics.TOTAL_BYTES):
-                total_bytes = test_suite.metrics.get(Metrics.TOTAL_BYTES)
-                bytes_per_second = total_bytes / duration
-                result["metrics"][TOTAL_BYTES_METRIC_KEY] = total_bytes
-                result["metrics"][
-                    BYTES_PER_SECOND_METRIC_KEY
-                ] = bytes_per_second
-                print(
-                    f"{TOTAL_BYTES_METRIC_KEY}: {total_bytes}, "
-                    f"{BYTES_PER_SECOND_METRIC_KEY}: {bytes_per_second}"
-                )
-            json_result_location = os.path.join(
-                main_args.result_dir, BENCH_RESULT_FORMAT.format(i)
-            )
-            with open(json_result_location, "w") as f:
-                json.dump(result, f)
-            print(f"Find more benchmark results in dir {main_args.result_dir}")
-        else:
-            print(f"Parent Process, {i}th Child process, id:{processid}")
-    if not i_am_child:
-        os.wait()
+        for job in jobs:
+            job.join()
 
 
 if __name__ == "__main__":

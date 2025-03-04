@@ -70,7 +70,7 @@ pip install alluxiofs
 ```
 
 [Optional] Install from the source code
-```commandline
+```shell
 git clone git@github.com:fsspec/alluxiofs.git
 cd alluxiofs && python3 setup.py bdist_wheel && \
      pip3 install dist/alluxiofs-<alluxiofs_version>-py3-none-any.whl
@@ -209,4 +209,10 @@ with py_fs.open_input_file("s3://example_bucket/datasets/example.parquet") as f:
     alluxio_file_data = f.read()
 
 # End of Python example
+```
+
+## benchmark
+If you want to benchmark the Python SDK against FUSE, you can run the following command:
+```bash
+/bin/bash benchmark_launch.sh
 ```
