@@ -3,8 +3,6 @@ import os
 import shutil
 import time
 
-import fsspec
-
 from alluxiofs import AlluxioFileSystem
 
 

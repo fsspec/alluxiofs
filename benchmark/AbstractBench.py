@@ -100,7 +100,7 @@ class AbstractAlluxioFSSpecTraverseBench(AbstractBench, ABC):
             "etcd_hosts": self.args.etcd_hosts,
             "etcd_port": self.args.etcd_port,
             "worker_hosts": self.args.worker_hosts,
-            "options": alluxio_options
+            "options": alluxio_options,
         }
 
         if self.args.target_protocol is not None:
