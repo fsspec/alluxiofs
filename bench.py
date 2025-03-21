@@ -82,6 +82,24 @@ def init_main_parser():
         help="The host address(es) for etcd",
     )
     parser.add_argument(
+        "--etcd_port",
+        type=int,
+        required=False,
+        help="The port for etcd",
+    )
+    parser.add_argument(
+        "--cluster_name",
+        type=str,
+        required=False,
+        help="The name of the cluster of alluxio",
+    )
+    parser.add_argument(
+        "--target_protocol",
+        type=str,
+        required=False,
+        help="The target's protocol of UFS",
+    )
+    parser.add_argument(
         "--worker_hosts",
         type=str,
         required=False,

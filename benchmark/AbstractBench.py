@@ -96,14 +96,20 @@ class AbstractAlluxioFSSpecTraverseBench(AbstractBench, ABC):
             alluxio_options[
                 "alluxio.worker.page.store.page.size"
             ] = self.args.page_size
-        print(f"options for AlluxioFileSystem:{alluxio_options}")
-        self.alluxio_fs = AlluxioFileSystem(
-            etcd_hosts=self.args.etcd_hosts,
-            worker_hosts=self.args.worker_hosts,
-            options=alluxio_options,
-            # test_options={"log_level": "debug"}
-            # target_protocol=protocol
-        )
+        alluxio_args = {
+            "etcd_hosts": self.args.etcd_hosts,
+            "etcd_port": self.args.etcd_port,
+            "worker_hosts": self.args.worker_hosts,
+            "options": alluxio_options
+        }
+
+        if self.args.target_protocol is not None:
+            alluxio_args["target_protocol"] = self.args.target_protocol
+        if self.args.cluster_name is not None:
+            alluxio_args["cluster_name"] = self.args.cluster_name
+
+        self.alluxio_fs = AlluxioFileSystem(**alluxio_args)
+
         if self.args.op == "upload_data":
             if self.read_type == "directory":
                 self.traverse_write(self.args.path, self.args.local_path)
