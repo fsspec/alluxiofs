@@ -17,6 +17,36 @@ def parse_args():
         description="Preprocess files for benchmark"
     )
     parser.add_argument(
+        "--etcd_hosts",
+        type=str,
+        required=False,
+        help="The host address(es) for etcd",
+    )
+    parser.add_argument(
+        "--etcd_port",
+        type=int,
+        required=False,
+        help="The port for etcd",
+    )
+    parser.add_argument(
+        "--cluster_name",
+        type=str,
+        required=False,
+        help="The name of the cluster of alluxio",
+    )
+    parser.add_argument(
+        "--target_protocol",
+        type=str,
+        required=False,
+        help="The target's protocol of UFS",
+    )
+    parser.add_argument(
+        "--worker_hosts",
+        type=str,
+        required=False,
+        help="The host address(es) for etcd",
+    )
+    parser.add_argument(
         "--op",
         type=str,
         choices=["read", "write", "read_batch"],
@@ -125,10 +155,25 @@ def main():
     args = parse_args()
 
     size_list = args.size
+    alluxio_args_dict = {}
+    if args.etcd_hosts is None:
+        alluxio_args_dict["etcd_hosts"] = "localhost"
+    else:
+        alluxio_args_dict["etcd_hosts"] = args.etcd_hosts
 
-    alluxio_fs = fsspec.filesystem(
-        "alluxiofs", etcd_hosts="localhost", etcd_port=2379
-    )
+    if args.etcd_port is None:
+        alluxio_args_dict["etcd_port"] = 2379
+    else:
+        alluxio_args_dict["etcd_port"] = args.etcd_port
+
+    if args.cluster_name is not None:
+        alluxio_args_dict["cluster_name"] = args.cluster_name
+    if args.target_protocol is not None:
+        alluxio_args_dict["target_protocol"] = args.target_protocol
+    if args.worker_hosts is not None:
+        alluxio_args_dict["worker_hosts"] = args.worker_hosts
+
+    alluxio_fs = AlluxioFileSystem(**alluxio_args_dict)
 
     if args.op == "read":
         for s in size_list:

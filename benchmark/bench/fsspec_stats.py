@@ -101,7 +101,7 @@ def summarize_results(results):
             "file_size": "first",  # Keep the first 'file_size' of each 'file_name'
             "bs": "first",  # Calculate the mean of 'bs'
             "numjobs": "first",  # Keep the first 'numjobs' of each 'file_name'
-            "bw_numeric": "mean",  # Calculate the mean of 'bw_numeric'
+            "bw_numeric": "sum",  # Calculate the sum of 'bw_numeric'
             "iops": "first",  # Keep the first 'iops' of each 'file_name'
             "worker": "first",  # Keep the first 'worker' of each 'file_name'
         }

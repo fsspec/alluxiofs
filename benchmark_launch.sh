@@ -11,6 +11,12 @@ echo ""
 echo "*****************************************************************"
 echo ""
 
+# the config of alluxiofs
+ETCD_HOSTS="localhost"
+ETCD_PORT=2379
+CLUSTER_NAME="DefaultAlluxioCluster"
+TARGET_PROTOCOL="local"
+
 # the result dir
 FUSE_RESULT_DIR="./bench_result/fuse-benchmark"
 FSSPEC_RESULT_DIR="./bench_result/fsspec-benchmark"
@@ -71,9 +77,22 @@ done
 # 2. Alluxio-FSSpec benchmark
 # preprocess
 # shellcheck disable=SC2145
-python ./benchmark/bench/preprocess.py --op=read --size "${FILE_SIZE[@]}" --path=$FSSPEC_REMOTE_PATH_READ
+python ./benchmark/bench/preprocess.py --etcd_hosts=$ETCD_HOSTS \
+                                       --etcd_port=$ETCD_PORT \
+                                       --target_protocol=$TARGET_PROTOCOL \
+                                       --cluster_name=$CLUSTER_NAME \
+                                       --op=read \
+                                       --size "${FILE_SIZE[@]}" \
+                                       --path=$FSSPEC_REMOTE_PATH_READ
 # shellcheck disable=SC2145
-python ./benchmark/bench/preprocess.py --op=write --size "${FILE_SIZE[@]}" --path=$FSSPEC_REMOTE_PATH_WRITE --local_path=$FSSPEC_LOCAL_PATH
+python ./benchmark/bench/preprocess.py --etcd_hosts=$ETCD_HOSTS \
+                                       --etcd_port=$ETCD_PORT \
+                                       --target_protocol=$TARGET_PROTOCOL \
+                                       --cluster_name=$CLUSTER_NAME \
+                                       --op=write \
+                                       --size "${FILE_SIZE[@]}" \
+                                       --path=$FSSPEC_REMOTE_PATH_WRITE \
+                                       --local_path=$FSSPEC_LOCAL_PATH
 
 # run benchmark
 for op in "${FSSPEC_OP[@]}"; do
@@ -97,12 +116,15 @@ for op in "${FSSPEC_OP[@]}"; do
           path="${FSSPEC_REMOTE_PATH_WRITE}/${size}"
           local_path=${FSSPEC_LOCAL_PATH}/${size}
         fi
-
-        python bench.py --etcd_hosts=localhost \
+        # the `cluster_name` and `target_protocol` is optional to set
+        python bench.py --etcd_hosts=$ETCD_HOSTS \
+                        --etcd_port=$ETCD_PORT \
                         --numjobs=$numjobs \
                         --runtime=$RUNTIME \
                         --testsuite=FSSPEC \
                         --path=$path \
+                        --target_protocol=$TARGET_PROTOCOL\
+                        --cluster_name=$CLUSTER_NAME\
                         --op=$op \
                         --bs=$bs \
                         --local_path=$local_path \
@@ -116,10 +138,30 @@ done
 echo "Post-process the files"
 #postprocess
 echo "Post-process the files"
-#python postprocess.py --local_path=${FUSE_PATH}/read/
-python ./benchmark/bench/postprocess.py --local_path=${FUSE_PATH}/write/
-python ./benchmark/bench/postprocess.py --path=$FSSPEC_REMOTE_PATH_READ
-python ./benchmark/bench/postprocess.py --path=$FSSPEC_REMOTE_PATH_WRITE --local_path=$FSSPEC_LOCAL_PATH
+python ./benchmark/bench/postprocess.py --local_path=${FUSE_PATH}/read/ \
+                                        --etcd_hosts=$ETCD_HOSTS \
+                                        --etcd_port=$ETCD_PORT \
+                                        --target_protocol=$TARGET_PROTOCOL \
+                                        --cluster_name=$CLUSTER_NAME
+
+python ./benchmark/bench/postprocess.py --local_path=${FUSE_PATH}/write/ \
+                                        --etcd_hosts=$ETCD_HOSTS \
+                                        --etcd_port=$ETCD_PORT \
+                                        --target_protocol=$TARGET_PROTOCOL \
+                                        --cluster_name=$CLUSTER_NAME
+
+python ./benchmark/bench/postprocess.py --path=$FSSPEC_REMOTE_PATH_READ \
+                                        --etcd_hosts=$ETCD_HOSTS \
+                                        --etcd_port=$ETCD_PORT \
+                                        --target_protocol=$TARGET_PROTOCOL \
+                                        --cluster_name=$CLUSTER_NAME
+
+python ./benchmark/bench/postprocess.py --path=$FSSPEC_REMOTE_PATH_WRITE \
+                                        --local_path=$FSSPEC_LOCAL_PATH \
+                                        --etcd_hosts=$ETCD_HOSTS \
+                                        --etcd_port=$ETCD_PORT \
+                                        --target_protocol=$TARGET_PROTOCOL \
+                                        --cluster_name=$CLUSTER_NAME
 
 # the benchmark for batch-read
 
@@ -130,6 +172,8 @@ echo "The benchmark for batch-read starts"
 echo ""
 echo "*****************************************************************"
 echo ""
+
+
 
 # the result dir
 FUSE_RESULT_DIR_BATCH="./bench_result/fuse-batch-benchmark"
@@ -163,8 +207,15 @@ for rw in "${FUSE_RW_BATCH[@]}"; do
     for num in "${FIlE_NUMBER_BATCH[@]}"; do
         # preprocess
         echo "Prepare the files"
-        python ./benchmark/bench/preprocess.py --op=read_batch --size=$size --number=$num\
-         --path=${FSSPEC_REMOTE_PATH_READ_BATCH}/${size} --local_path=${FUSE_PATH_READ_BATCH}/${size}
+        python ./benchmark/bench/preprocess.py --etcd_hosts=$ETCD_HOSTS \
+                                               --etcd_port=$ETCD_PORT \
+                                               --target_protocol=$TARGET_PROTOCOL \
+                                               --cluster_name=$CLUSTER_NAME \
+                                               --op=read_batch \
+                                               --size=$size \
+                                               --number=$num \
+                                               --path=${FSSPEC_REMOTE_PATH_READ_BATCH}/${size} \
+                                               --local_path=${FUSE_PATH_READ_BATCH}/${size}
 
         echo "fuse start"
         # fuse
@@ -186,11 +237,15 @@ for rw in "${FUSE_RW_BATCH[@]}"; do
         path="${FSSPEC_REMOTE_PATH_READ_BATCH}/${size}"
         local_path=""
         echo "fsspec start"
-        python bench.py --etcd_hosts=localhost \
+        # the `cluster_name` and `target_protocol` is optional to set
+        python bench.py --etcd_hosts=$ETCD_HOSTS \
+                        --etcd_port=$ETCD_PORT \
                         --numjobs=$NUMJOBS_BATCH \
                         --runtime=$RUNTIME_BATCH \
                         --testsuite=FSSPEC \
                         --path=$path \
+                        --target_protocol=$TARGET_PROTOCOL\
+                        --cluster_name=$CLUSTER_NAME\
                         --op=$FSSPEC_OP_BATCH \
                         --bs=$BS_BATCH \
                         --local_path=$local_path \
@@ -198,7 +253,12 @@ for rw in "${FUSE_RW_BATCH[@]}"; do
 
         #postprocess
         echo "Post-process the files"
-        python ./benchmark/bench/postprocess.py --path=$path --local_path=$FUSE_PATH_READ_BATCH/${size}/
+        python ./benchmark/bench/postprocess.py --path=$path \
+                                                --local_path=$FUSE_PATH_READ_BATCH/${size}/ \
+                                                --etcd_hosts=$ETCD_HOSTS \
+                                                --etcd_port=$ETCD_PORT \
+                                                --target_protocol=$TARGET_PROTOCOL \
+                                                --cluster_name=$CLUSTER_NAME
     done
   done
 done

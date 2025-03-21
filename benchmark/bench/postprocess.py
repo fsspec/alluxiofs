@@ -3,14 +3,42 @@ import os
 import shutil
 import time
 
-import fsspec
-
 from alluxiofs import AlluxioFileSystem
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Postprocess and clean up files for benchmark"
+    )
+    parser.add_argument(
+        "--etcd_hosts",
+        type=str,
+        required=False,
+        help="The host address(es) for etcd",
+    )
+    parser.add_argument(
+        "--etcd_port",
+        type=int,
+        required=False,
+        help="The port for etcd",
+    )
+    parser.add_argument(
+        "--cluster_name",
+        type=str,
+        required=False,
+        help="The name of the cluster of alluxio",
+    )
+    parser.add_argument(
+        "--target_protocol",
+        type=str,
+        required=False,
+        help="The target's protocol of UFS",
+    )
+    parser.add_argument(
+        "--worker_hosts",
+        type=str,
+        required=False,
+        help="The host address(es) for etcd",
     )
     parser.add_argument(
         "--path",
@@ -53,13 +81,25 @@ def clean_local_files(local_path):
 def main():
     args = parse_args()
 
-    # Assuming alluxio is configured to use fsspec
-    fsspec.register_implementation(
-        "alluxiofs", AlluxioFileSystem, clobber=True
-    )
-    alluxio_fs = fsspec.filesystem(
-        "alluxiofs", etcd_hosts="localhost", etcd_port=2379
-    )
+    alluxio_args_dict = {}
+    if args.etcd_hosts is None:
+        alluxio_args_dict["etcd_hosts"] = "localhost"
+    else:
+        alluxio_args_dict["etcd_hosts"] = args.etcd_hosts
+
+    if args.etcd_port is None:
+        alluxio_args_dict["etcd_port"] = 2379
+    else:
+        alluxio_args_dict["etcd_port"] = args.etcd_port
+
+    if args.cluster_name is not None:
+        alluxio_args_dict["cluster_name"] = args.cluster_name
+    if args.target_protocol is not None:
+        alluxio_args_dict["target_protocol"] = args.target_protocol
+    if args.worker_hosts is not None:
+        alluxio_args_dict["worker_hosts"] = args.worker_hosts
+
+    alluxio_fs = AlluxioFileSystem(**alluxio_args_dict)
 
     # Clean up remote files on Alluxio
     if args.path:
