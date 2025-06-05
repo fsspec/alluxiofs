@@ -5,7 +5,7 @@ use reqwest::blocking::Client;
 use rayon::{ThreadPool, ThreadPoolBuildError};
 use env_logger::Env;
 use log::debug;
-
+use pyo3::types::PyBool;
 use pyo3::{
     exceptions::PyValueError,
     exceptions::PyException,
@@ -72,7 +72,7 @@ impl DataManager {
         }
     }
 
-    fn make_multi_http_req(self_: PyRef<'_, Self>, urls: Vec<String>) -> PyResult<PyObject> {
+    fn make_multi_read_page_http_req(self_: PyRef<'_, Self>, urls: Vec<String>) -> PyResult<PyObject> {
         let num_reqs = urls.len();
         let mut senders = Vec::with_capacity(num_reqs);
         for _ in 0..num_reqs {
@@ -156,6 +156,188 @@ impl DataManager {
         }
         Ok(PyBytes::new(self_.py(), &concatenated_data).to_object(self_.py()))
     }
+
+    fn make_multi_read_file_http_req(self_: PyRef<'_, Self>, urls: Vec<String>) -> PyResult<PyObject> {
+        let num_reqs = urls.len();
+        let mut senders = Vec::with_capacity(num_reqs);
+        for _ in 0..num_reqs {
+            senders.push(None);
+        }
+
+        let thread_pool /*: Arc<ThreadPool>*/ = match self_.ondemand_pool {
+            true => {
+                match create_pool(cmp::min(self_.max_threads, num_reqs),
+                                  String::from(DEFAULT_THREADPOOL_NAME))
+                {
+                    Ok(pool) => Arc::new(pool),
+                    Err(err) => {
+                        PyException::new_err(err.to_string())
+                            .restore(self_.py());
+                        return Err(PyErr::fetch(self_.py()));
+                    },
+                }
+            },
+            false => {
+                Arc::clone(&(self_.thread_pool.as_ref().unwrap())) // it can't be None here once instantiated
+            }
+        };
+
+        let request_client = match self_.ondemand_pool {
+            true => {
+                Arc::new(Client::new())
+            },
+            false => {
+                Arc::clone(&(self_.request_client.as_ref().unwrap()))
+            }
+        };
+        for i in 0..num_reqs {
+            let url_owned = urls[i].to_owned();
+            let client_clone = Arc::clone(&(request_client));
+            let (send, recv) = tokio::sync::oneshot::channel();
+            let install_res = thread_pool.install(move || -> Result<(), reqwest::Error> {
+                let body = perform_http_get(url_owned.as_str(), client_clone.as_ref());
+                send.send(body).unwrap();
+                Ok(())
+            });
+            match install_res {
+                Ok(_success) => {},
+                Err(err) => {
+                    PyException::new_err(err.to_string())
+                        .restore(self_.py());
+                    return Err(PyErr::fetch(self_.py()));
+                },
+            }
+            senders[i] = Some(recv);
+        }
+
+        let mut results: Vec<PyObject> = Vec::with_capacity(num_reqs);
+        let mut somedata_read: bool = false;
+        for sender in senders {
+            let result = sender.unwrap().blocking_recv();
+            match result {
+                Ok(content_result) => {
+                    match content_result {
+                        Ok(content) => {
+                            results.push(PyBytes::new(self_.py(), &content).to_object(self_.py()));
+                            somedata_read = true;
+                        },
+                        Err(err) => {
+                            if somedata_read {
+                                break;
+                            }
+                            let err_str = err.to_string();
+                            PyException::new_err(format!("Error in getting result, {}", err_str))
+                                .restore(self_.py());
+                            return Err(PyErr::fetch(self_.py()));
+                        }
+                    }
+                },
+                Err(err) => {
+                    PyException::new_err(err.to_string())
+                        .restore(self_.py());
+                    return Err(PyErr::fetch(self_.py()));
+                }
+            }
+        }
+        Ok(results.to_object(self_.py()))
+    }
+
+    fn make_multi_write_file_http_req(self_: PyRef<'_, Self>, urls: Vec<String>, data: Vec<Vec<u8>>) -> PyResult<PyObject> {
+        let num_reqs = urls.len();
+        let mut senders = Vec::with_capacity(num_reqs);
+
+        for _ in 0..num_reqs {
+            senders.push(None);
+        }
+
+        let thread_pool: Arc<ThreadPool> = match self_.ondemand_pool {
+            true => {
+                match create_pool(cmp::min(self_.max_threads, num_reqs),
+                                  String::from(DEFAULT_THREADPOOL_NAME))
+                {
+                    Ok(pool) => Arc::new(pool),
+                    Err(err) => {
+                        PyException::new_err(err.to_string())
+                            .restore(self_.py());
+                        return Err(PyErr::fetch(self_.py()));
+                    },
+                }
+            },
+            false => {
+                Arc::clone(&(self_.thread_pool.as_ref().unwrap()))
+            }
+        };
+
+        let request_client = match self_.ondemand_pool {
+            true => {
+                Arc::new(Client::new())
+            },
+            false => {
+                Arc::clone(&(self_.request_client.as_ref().unwrap()))
+            }
+        };
+
+        for i in 0..num_reqs {
+            let url_owned = urls[i].to_owned();
+            let data_owned = data[i].to_owned();
+            let client_clone = Arc::clone(&(request_client));
+            let (send, recv) = tokio::sync::oneshot::channel();
+
+            let install_res = thread_pool.install(move || -> Result<(), reqwest::Error> {
+                let body = perform_http_post(url_owned.as_str(), &data_owned, client_clone.as_ref());
+                send.send(body).unwrap();
+                Ok(())
+            });
+
+            match install_res {
+                Ok(_success) => {},
+                Err(err) => {
+                    PyException::new_err(err.to_string())
+                        .restore(self_.py());
+                    return Err(PyErr::fetch(self_.py()));
+                },
+            }
+
+            senders[i] = Some(recv);
+        }
+
+        let mut results: Vec<PyObject> = Vec::with_capacity(num_reqs);
+        let mut somedata_written: bool = false;
+
+        for sender in senders {
+            let result = sender.unwrap().blocking_recv();
+            match result {
+                Ok(content_result) => {
+                    match content_result {
+                        Ok(_) => {
+                            results.push(PyBool::new(self_.py(), true).to_object(self_.py()));
+                            somedata_written = true;
+                        },
+                        Err(err) => {
+                            if somedata_written {
+                                break;
+                            }
+                            let err_str = err.to_string();
+                            PyException::new_err(format!("Error in posting data, {}", err_str))
+                                .restore(self_.py());
+                            return Err(PyErr::fetch(self_.py()));
+                        }
+                    }
+                },
+                Err(err) => {
+                    PyException::new_err(err.to_string())
+                        .restore(self_.py());
+                    return Err(PyErr::fetch(self_.py()));
+                }
+            }
+        }
+
+        if results.len() == num_reqs {
+            Ok(PyBool::new(self_.py(), true).to_object(self_.py()))
+        } else {
+            Ok(PyBool::new(self_.py(), false).to_object(self_.py()))
+        }
+    }
 }
 
 fn perform_http_get(url: &str, client: &Client) -> Result<Vec<u8>, reqwest::Error> {
@@ -163,6 +345,14 @@ fn perform_http_get(url: &str, client: &Client) -> Result<Vec<u8>, reqwest::Erro
         .bytes()?;
     let bytes_vec = bytes.as_ref().to_owned();
     Ok(bytes_vec)
+}
+
+fn perform_http_post(url: &str, data: &[u8], client: &Client) -> Result<Vec<u8>, reqwest::Error> {
+    let res = client.post(url)
+        .header("transfer-type", "chunked")
+        .body(data.to_vec())
+        .send()?;
+    res.bytes().map(|b| b.to_vec())
 }
 
 fn create_pool(num_threads: usize, thread_name_prefix: String) -> Result<ThreadPool, Box<ThreadPoolBuildError>> {

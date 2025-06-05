@@ -561,6 +561,11 @@ class AlluxioFileSystem(AbstractFileSystem):
         return self.alluxio.read_chunked(lpath)
 
     @fallback_handler
+    def download_batch_data(self, lpath, *args, **kwargs):
+        lpath = self.unstrip_protocol(lpath)
+        return self.alluxio.read_batch(lpath)
+
+    @fallback_handler
     def get(self, rpath, lpath, *args, **kwargs):
         raise NotImplementedError
 
