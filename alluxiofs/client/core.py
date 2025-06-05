@@ -573,7 +573,11 @@ class AlluxioClient:
         try:
             if self.data_manager:
                 self._all_chunk_generator_alluxiocommon(
-                    worker_host, worker_http_port, path_id, file_path, chunk_size
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    chunk_size,
                 )
             else:
                 return self._all_chunk_generator(
@@ -588,7 +592,7 @@ class AlluxioClient:
 
     # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
     def _all_chunk_generator_alluxiocommon(
-            self, worker_host, worker_http_port, path_id, file_path, chunk_size
+        self, worker_host, worker_http_port, path_id, file_path, chunk_size
     ):
         return self._all_chunk_generator(
             worker_host,
@@ -657,7 +661,7 @@ class AlluxioClient:
                 path_id=path_id,
                 file_path=path,
                 offset=0,
-                length=-1
+                length=-1,
             )
             urls.append(url)
         if self.data_manager is None:
@@ -758,7 +762,7 @@ class AlluxioClient:
                     path_id,
                     file_path,
                     file_bytes,
-                    chunk_size
+                    chunk_size,
                 )
             else:
                 return self._all_chunk_generator_write(
@@ -1203,7 +1207,13 @@ class AlluxioClient:
 
     # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
     def _all_chunk_generator_write_alluxiocommon(
-        self, worker_host, worker_http_port, path_id, file_path, file_bytes, chunk_size
+        self,
+        worker_host,
+        worker_http_port,
+        path_id,
+        file_path,
+        file_bytes,
+        chunk_size,
     ):
         return self._all_chunk_generator_write(
             worker_host,
@@ -1325,7 +1335,6 @@ class AlluxioClient:
                     f" error: {response.content.decode('utf-8')}",
                 )
             )
-
 
     # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
     def _all_file_range_generator_alluxiocommon(
