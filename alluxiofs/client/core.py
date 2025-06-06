@@ -174,7 +174,7 @@ class AlluxioClient:
         self.hash_provider = ConsistentHashProvider(self.config)
         self.data_manager = None
         self.logger = logger
-        if kwargs.get(ALLUXIO_COMMON_EXTENSION_ENABLE, False):
+        if kwargs.get(ALLUXIO_COMMON_EXTENSION_ENABLE, True):
             self.logger.info("alluxiocommon extension enabled.")
             self.data_manager = _DataManager(
                 self.config.concurrency,
@@ -528,8 +528,13 @@ class AlluxioClient:
         path_id = self._get_path_hash(file_path)
         try:
             if self.data_manager:
-                self._all_chunk_generator_alluxiocommon(
-                    worker_host, worker_http_port, path_id, file_path
+                self._all_file_range_generator_alluxiocommon(
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    offset,
+                    length,
                 )
             else:
                 return self._all_file_range_generator(
@@ -568,7 +573,11 @@ class AlluxioClient:
         try:
             if self.data_manager:
                 self._all_chunk_generator_alluxiocommon(
-                    worker_host, worker_http_port, path_id, file_path
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    chunk_size,
                 )
             else:
                 return self._all_chunk_generator(
@@ -580,6 +589,18 @@ class AlluxioClient:
                 )
         except Exception as e:
             raise Exception(e)
+
+    # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
+    def _all_chunk_generator_alluxiocommon(
+        self, worker_host, worker_http_port, path_id, file_path, chunk_size
+    ):
+        return self._all_chunk_generator(
+            worker_host,
+            worker_http_port,
+            path_id,
+            file_path,
+            chunk_size,
+        )
 
     def _all_chunk_generator(
         self, worker_host, worker_http_port, path_id, file_path, chunk_size
@@ -625,6 +646,28 @@ class AlluxioClient:
                     + response.content.decode("utf-8"),
                 )
             )
+
+    def read_batch(self, paths):
+        urls = []
+        for path in paths:
+            self._validate_path(path)
+            worker_host, worker_http_port = self._get_preferred_worker_address(
+                path
+            )
+            path_id = self._get_path_hash(path)
+            url = FULL_RANGE_URL_FORMAT.format(
+                worker_host=worker_host,
+                http_port=worker_http_port,
+                path_id=path_id,
+                file_path=path,
+                offset=0,
+                length=-1,
+            )
+            urls.append(url)
+        if self.data_manager is None:
+            raise RuntimeError("alluxiocommon extension disabled.")
+        data = self.data_manager.make_multi_read_file_http_req(urls)
+        return data
 
     def read_range(self, file_path, offset, length):
         """
@@ -713,8 +756,13 @@ class AlluxioClient:
         path_id = self._get_path_hash(file_path)
         try:
             if self.data_manager:
-                return self._all_page_generator_alluxiocommon(
-                    worker_host, worker_http_port, path_id, file_path
+                return self._all_chunk_generator_write_alluxiocommon(
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    file_path,
+                    file_bytes,
+                    chunk_size,
                 )
             else:
                 return self._all_chunk_generator_write(
@@ -1157,6 +1205,25 @@ class AlluxioClient:
                 )
             )
 
+    # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
+    def _all_chunk_generator_write_alluxiocommon(
+        self,
+        worker_host,
+        worker_http_port,
+        path_id,
+        file_path,
+        file_bytes,
+        chunk_size,
+    ):
+        return self._all_chunk_generator_write(
+            worker_host,
+            worker_http_port,
+            path_id,
+            file_path,
+            file_bytes,
+            chunk_size,
+        )
+
     def _range_page_generator_alluxiocommon(
         self, worker_host, worker_http_port, path_id, file_path, offset, length
     ):
@@ -1268,6 +1335,19 @@ class AlluxioClient:
                     f" error: {response.content.decode('utf-8')}",
                 )
             )
+
+    # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
+    def _all_file_range_generator_alluxiocommon(
+        self, worker_host, worker_http_port, path_id, file_path, offset, length
+    ):
+        return self._all_file_range_generator(
+            worker_host,
+            worker_http_port,
+            path_id,
+            file_path,
+            offset,
+            length,
+        )
 
     def _create_session(self, concurrency):
         session = requests.Session()
