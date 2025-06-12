@@ -528,7 +528,7 @@ class AlluxioClient:
         path_id = self._get_path_hash(file_path)
         try:
             if self.data_manager:
-                self._all_file_range_generator_alluxiocommon(
+                return self._all_file_range_generator_alluxiocommon(
                     worker_host,
                     worker_http_port,
                     path_id,
@@ -572,7 +572,7 @@ class AlluxioClient:
         path_id = self._get_path_hash(file_path)
         try:
             if self.data_manager:
-                self._all_chunk_generator_alluxiocommon(
+                return self._all_chunk_generator_alluxiocommon(
                     worker_host,
                     worker_http_port,
                     path_id,
