@@ -26,6 +26,8 @@ class AlluxioClientConfig:
         etcd_username: Optional[str] = None,
         etcd_password: Optional[str] = None,
         concurrency=64,
+        use_mem_cache=False,
+        mem_map_capacity=1024,
         **kwargs,
     ):
         """
@@ -62,6 +64,14 @@ class AlluxioClientConfig:
             isinstance(concurrency, int) and concurrency > 0
         ), "'concurrency' should be a positive integer"
 
+        assert (
+            isinstance(use_mem_cache, bool)
+        ), "'use_mem_cache' should be a boolean"
+
+        assert (
+            isinstance(mem_map_capacity, int) and mem_map_capacity > 0
+        ), "'mem_map_capacity' should be a positive integer"
+
         assert isinstance(
             etcd_refresh_workers_interval, int
         ), "'etcd_refresh_workers_interval' should be an integer"
@@ -87,3 +97,5 @@ class AlluxioClientConfig:
         self.etcd_username = etcd_username
         self.etcd_password = etcd_password
         self.concurrency = concurrency
+        self.use_mem_cache = use_mem_cache
+        self.mem_map_capacity = mem_map_capacity

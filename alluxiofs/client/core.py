@@ -11,17 +11,18 @@ import hashlib
 import io
 import json
 import logging
+import random
 import re
 import time
 import weakref
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict
-from typing import Tuple
+from typing import Dict, List, Tuple
 
 import aiohttp
 import humanfriendly
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 
 from .utils import set_log_level
@@ -176,15 +177,14 @@ class AlluxioClient:
         self.logger = logger
         if kwargs.get(ALLUXIO_COMMON_EXTENSION_ENABLE, True):
             self.logger.info("alluxiocommon extension enabled.")
-            self.data_manager = _DataManager(
-                self.config.concurrency,
-                ondemand_pool_disabled=kwargs.get(
-                    ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE, False
-                ),
-            )
+            self.data_manager = _DataManager(self.config.concurrency)
 
         test_options = kwargs.get("test_options", {})
         set_log_level(self.logger, test_options)
+        self.executor = None
+        self.mem_map = {}
+        self.use_mem_cache = self.config.use_mem_cache
+        self.mem_map_capacity = self.config.mem_map_capacity
 
     def listdir(self, path):
         """
@@ -590,6 +590,92 @@ class AlluxioClient:
         except Exception as e:
             raise Exception(e)
 
+
+    def _retrieve_from_mem_map(self, paths):
+        files = []
+        paths_still_need_to_read = []
+        for path in paths:
+            file = self.mem_map.get(path)
+            if file is not None:
+                files.append(file)
+            else:
+                paths_still_need_to_read.append(path)
+        return files, paths_still_need_to_read
+
+
+    def _store_to_mem_map(self, paths, files):
+        for i in range(len(files)):
+            if len(self.mem_map) >= self.mem_map_capacity:
+                self._evict(10)
+            self.mem_map[paths[i]] = files[i]
+
+
+    def _evict(self, num: int) -> None:
+        for i in range(num):
+            if self.mem_map:
+                random_key = random.choice(list(self.mem_map.keys()))
+                try:
+                    del self.mem_map[random_key]
+                except KeyError:
+                    pass
+            else:
+                self.logger.info("Dictionary is empty!")
+                return
+
+
+    def read_batch_threaded(self, paths: List[str]):
+        start = time.time()
+        if self.executor is None:
+            self.executor = ThreadPoolExecutor(max_workers=self.config.concurrency)
+
+        if self.use_mem_cache:
+            cached_files, paths_to_read = self._retrieve_from_mem_map(paths)
+        else:
+            cached_files = []
+            paths_to_read = paths
+
+        if len(paths_to_read) <= 0:
+            return cached_files
+
+        future_to_index = {
+            self.executor.submit(self.read_chunked, path): i
+            for i, path in enumerate(paths_to_read)
+        }
+
+        files = []
+        for future in as_completed(future_to_index):
+            idx = future_to_index[future]
+            try:
+                content = future.result()
+                files.append((idx, content))
+            except Exception as e:
+                self.logger.warning(f"Error processing file {paths_to_read[idx]}: {e}")
+
+        # sort the data according to the original order
+        files.sort(key=lambda x: x[0])
+
+        sorted_files = []
+        for idx, file in enumerate(files):
+            if isinstance(file[1], io.BytesIO):
+                sorted_files.append(file[1].getvalue())
+            else:
+                sorted_files.append(file[1])
+
+        if not sorted_files:
+            raise ValueError("No valid images processed")
+
+        cached_files.extend(sorted_files)
+
+        end = time.time()
+        read_bytes = 0
+        for i in range(len(cached_files)):
+            read_bytes += len(cached_files[i])
+        self.logger.info(f'number of images: {len(cached_files)} throughput: {read_bytes / (end - start) / 1024 / 1024:.2f} MB/s')
+
+        if self.use_mem_cache:
+            self._store_to_mem_map(paths_to_read, sorted_files)
+        return cached_files
+
     # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
     def _all_chunk_generator_alluxiocommon(
         self, worker_host, worker_http_port, path_id, file_path, chunk_size
@@ -647,7 +733,7 @@ class AlluxioClient:
                 )
             )
 
-    def read_batch(self, paths):
+    def read_batch(self, paths, chunk_size = 1024 * 1024):
         urls = []
         for path in paths:
             self._validate_path(path)
@@ -655,13 +741,12 @@ class AlluxioClient:
                 path
             )
             path_id = self._get_path_hash(path)
-            url = FULL_RANGE_URL_FORMAT.format(
+            url = FULL_CHUNK_URL_FORMAT.format(
                 worker_host=worker_host,
                 http_port=worker_http_port,
                 path_id=path_id,
                 file_path=path,
-                offset=0,
-                length=-1,
+                chunk_size=chunk_size,
             )
             urls.append(url)
         if self.data_manager is None:
