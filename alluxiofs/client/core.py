@@ -14,6 +14,7 @@ import logging
 import random
 import re
 import time
+import urllib
 import weakref
 from dataclasses import dataclass
 from enum import Enum
@@ -708,7 +709,7 @@ class AlluxioClient:
             http_port=worker_http_port,
             path_id=path_id,
             chunk_size=chunk_size,
-            file_path=file_path,
+            file_path=urllib.parse.quote(file_path),
             page_index=0,
         )
         out = io.BytesIO()
@@ -884,7 +885,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     page_index=page_index,
                 ),
                 headers={"Content-Type": "application/octet-stream"},
@@ -922,7 +923,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                 )
             )
             response.raise_for_status()
@@ -956,7 +957,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                 )
             )
             response.raise_for_status()
@@ -1105,7 +1106,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                 ),
                 params={"numOfBytes": num_of_bytes},
             )
@@ -1140,7 +1141,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                 ),
                 params={"numOfBytes": num_of_bytes},
             )
@@ -1168,7 +1169,7 @@ class AlluxioClient:
                         worker_host=worker_host,
                         http_port=worker_http_port,
                         path_id=path_id,
-                        file_path=file_path,
+                        file_path=urllib.parse.quote(file_path),
                         page_index=page_index,
                     )
                     read_urls.append(page_url)
@@ -1265,7 +1266,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     chunk_size=chunk_size,
                 ),
             )
@@ -1326,7 +1327,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     page_index=page_index,
                 )
             else:
@@ -1334,7 +1335,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     page_index=page_index,
                     page_offset=inpage_off,
                     page_length=inpage_read_len,
@@ -1404,7 +1405,7 @@ class AlluxioClient:
                 worker_host=worker_host,
                 http_port=worker_http_port,
                 path_id=path_id,
-                file_path=file_path,
+                file_path=urllib.parse.quote(file_path),
                 offset=offset,
                 length=length,
             )
@@ -1547,7 +1548,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     page_index=page_index,
                 )
                 self.logger.debug(f"Reading full page request {page_url}")
@@ -1556,7 +1557,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     page_index=page_index,
                     page_offset=offset,
                     page_length=length,
@@ -1597,7 +1598,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     page_index=page_index,
                 ),
                 headers={"Content-Type": "application/octet-stream"},
@@ -1938,7 +1939,7 @@ class AlluxioAsyncFileSystem:
                 worker_host=worker_host,
                 http_port=self.http_port,
                 path_id=path_id,
-                file_path=file_path,
+                file_path=urllib.parse.quote(file_path),
                 page_index=page_index,
             ),
             headers={"Content-Type": "application/octet-stream"},
@@ -2077,7 +2078,7 @@ class AlluxioAsyncFileSystem:
                 worker_host=worker_host,
                 http_port=self.http_port,
                 path_id=path_id,
-                file_path=file_path,
+                file_path=urllib.parse.quote(file_path),
                 page_index=page_index,
             )
         else:
@@ -2085,7 +2086,7 @@ class AlluxioAsyncFileSystem:
                 worker_host=worker_host,
                 http_port=self.http_port,
                 path_id=path_id,
-                file_path=file_path,
+                file_path=urllib.parse.quote(file_path),
                 page_index=page_index,
                 page_offset=offset,
                 page_length=length,
