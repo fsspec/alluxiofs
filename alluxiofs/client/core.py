@@ -14,15 +14,19 @@ import logging
 import random
 import re
 import time
+import urllib
 import weakref
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Tuple
+from typing import Dict
+from typing import List
+from typing import Tuple
 
 import aiohttp
 import humanfriendly
 import requests
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 
 from .utils import set_log_level
@@ -49,7 +53,6 @@ from .const import (
     FULL_RANGE_URL_FORMAT,
     EXCEPTION_CONTENT,
 )
-from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
 from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
@@ -590,7 +593,6 @@ class AlluxioClient:
         except Exception as e:
             raise Exception(e)
 
-
     def _retrieve_from_mem_map(self, paths):
         files = []
         paths_still_need_to_read = []
@@ -602,13 +604,11 @@ class AlluxioClient:
                 paths_still_need_to_read.append(path)
         return files, paths_still_need_to_read
 
-
     def _store_to_mem_map(self, paths, files):
         for i in range(len(files)):
             if len(self.mem_map) >= self.mem_map_capacity:
                 self._evict(10)
             self.mem_map[paths[i]] = files[i]
-
 
     def _evict(self, num: int) -> None:
         for i in range(num):
@@ -622,11 +622,12 @@ class AlluxioClient:
                 self.logger.info("Dictionary is empty!")
                 return
 
-
     def read_batch_threaded(self, paths: List[str]):
         start = time.time()
         if self.executor is None:
-            self.executor = ThreadPoolExecutor(max_workers=self.config.concurrency)
+            self.executor = ThreadPoolExecutor(
+                max_workers=self.config.concurrency
+            )
 
         if self.use_mem_cache:
             cached_files, paths_to_read = self._retrieve_from_mem_map(paths)
@@ -649,7 +650,9 @@ class AlluxioClient:
                 content = future.result()
                 files.append((idx, content))
             except Exception as e:
-                self.logger.warning(f"Error processing file {paths_to_read[idx]}: {e}")
+                self.logger.warning(
+                    f"Error processing file {paths_to_read[idx]}: {e}"
+                )
 
         # sort the data according to the original order
         files.sort(key=lambda x: x[0])
@@ -670,7 +673,9 @@ class AlluxioClient:
         read_bytes = 0
         for i in range(len(cached_files)):
             read_bytes += len(cached_files[i])
-        self.logger.info(f'number of images: {len(cached_files)} throughput: {read_bytes / (end - start) / 1024 / 1024:.2f} MB/s')
+        self.logger.info(
+            f"number of images: {len(cached_files)} throughput: {read_bytes / (end - start) / 1024 / 1024:.2f} MB/s"
+        )
 
         if self.use_mem_cache:
             self._store_to_mem_map(paths_to_read, sorted_files)
@@ -708,7 +713,7 @@ class AlluxioClient:
             http_port=worker_http_port,
             path_id=path_id,
             chunk_size=chunk_size,
-            file_path=file_path,
+            file_path=urllib.parse.quote(file_path),
             page_index=0,
         )
         out = io.BytesIO()
@@ -733,7 +738,7 @@ class AlluxioClient:
                 )
             )
 
-    def read_batch(self, paths, chunk_size = 1024 * 1024):
+    def read_batch(self, paths, chunk_size=1024 * 1024):
         urls = []
         for path in paths:
             self._validate_path(path)
@@ -884,7 +889,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     page_index=page_index,
                 ),
                 headers={"Content-Type": "application/octet-stream"},
@@ -922,7 +927,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                 )
             )
             response.raise_for_status()
@@ -956,7 +961,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                 )
             )
             response.raise_for_status()
@@ -1105,7 +1110,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                 ),
                 params={"numOfBytes": num_of_bytes},
             )
@@ -1140,7 +1145,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                 ),
                 params={"numOfBytes": num_of_bytes},
             )
@@ -1168,7 +1173,7 @@ class AlluxioClient:
                         worker_host=worker_host,
                         http_port=worker_http_port,
                         path_id=path_id,
-                        file_path=file_path,
+                        file_path=urllib.parse.quote(file_path),
                         page_index=page_index,
                     )
                     read_urls.append(page_url)
@@ -1265,7 +1270,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     chunk_size=chunk_size,
                 ),
             )
@@ -1326,7 +1331,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     page_index=page_index,
                 )
             else:
@@ -1334,7 +1339,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     page_index=page_index,
                     page_offset=inpage_off,
                     page_length=inpage_read_len,
@@ -1404,7 +1409,7 @@ class AlluxioClient:
                 worker_host=worker_host,
                 http_port=worker_http_port,
                 path_id=path_id,
-                file_path=file_path,
+                file_path=urllib.parse.quote(file_path),
                 offset=offset,
                 length=length,
             )
@@ -1547,7 +1552,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     page_index=page_index,
                 )
                 self.logger.debug(f"Reading full page request {page_url}")
@@ -1556,7 +1561,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     page_index=page_index,
                     page_offset=offset,
                     page_length=length,
@@ -1597,7 +1602,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     path_id=path_id,
-                    file_path=file_path,
+                    file_path=urllib.parse.quote(file_path),
                     page_index=page_index,
                 ),
                 headers={"Content-Type": "application/octet-stream"},
@@ -1938,7 +1943,7 @@ class AlluxioAsyncFileSystem:
                 worker_host=worker_host,
                 http_port=self.http_port,
                 path_id=path_id,
-                file_path=file_path,
+                file_path=urllib.parse.quote(file_path),
                 page_index=page_index,
             ),
             headers={"Content-Type": "application/octet-stream"},
@@ -2077,7 +2082,7 @@ class AlluxioAsyncFileSystem:
                 worker_host=worker_host,
                 http_port=self.http_port,
                 path_id=path_id,
-                file_path=file_path,
+                file_path=urllib.parse.quote(file_path),
                 page_index=page_index,
             )
         else:
@@ -2085,7 +2090,7 @@ class AlluxioAsyncFileSystem:
                 worker_host=worker_host,
                 http_port=self.http_port,
                 path_id=path_id,
-                file_path=file_path,
+                file_path=urllib.parse.quote(file_path),
                 page_index=page_index,
                 page_offset=offset,
                 page_length=length,
