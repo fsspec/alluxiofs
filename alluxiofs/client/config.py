@@ -64,8 +64,8 @@ class AlluxioClientConfig:
             isinstance(concurrency, int) and concurrency > 0
         ), "'concurrency' should be a positive integer"
 
-        assert (
-            isinstance(use_mem_cache, bool)
+        assert isinstance(
+            use_mem_cache, bool
         ), "'use_mem_cache' should be a boolean"
 
         assert (
