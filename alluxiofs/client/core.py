@@ -674,6 +674,9 @@ class AlluxioClient:
 
         if self.use_mem_cache:
             self._store_to_mem_map(paths_to_read, sorted_files)
+        end_with_store = time.time()
+        self.logger.info(
+            f'[WITH STORING] number of images: {len(cached_files)} throughput: {read_bytes / (end_with_store - start) / 1024 / 1024:.2f} MB/s')
         return cached_files
 
     # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
