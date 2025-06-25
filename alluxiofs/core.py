@@ -9,6 +9,7 @@
 import inspect
 import io
 import logging
+import os
 import time
 from dataclasses import dataclass
 from functools import wraps
@@ -21,10 +22,7 @@ from fsspec.spec import AbstractBufferedFile
 from alluxiofs.client import AlluxioClient
 from alluxiofs.client.utils import set_log_level
 
-
-def setup_logger(file_path=None, level=logging.INFO):
-    import os
-
+def setup_logger(file_path=None, level=os.getenv("PYTHON_LOGLEVEL", logging.INFO)):
     # log dir
     file_name = "user.log"
     if file_path is None:

@@ -26,6 +26,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 
 from .utils import set_log_level
+from multiprocessing import Manager
+import threading
+
 
 try:
     from alluxiocommon import _DataManager
@@ -114,6 +117,43 @@ def open_source_adapter(data):
     return data
 
 
+class SharedCache:
+    def __init__(self):
+        self._manager = Manager()
+        self.data = self._manager.dict()
+        self.locks = self._manager.dict()
+        self._global_lock = threading.Lock()
+
+    def get_lock(self, key):
+        """get or create the lock of the key"""
+        with self._global_lock:
+            if key not in self.locks:
+                self.locks[key] = self._manager.Lock()
+            return self.locks[key]
+
+    def get(self, key):
+        lock = self.get_lock(key)
+        with lock:
+            return self.data.get(key)
+
+    def set(self, key, value):
+        lock = self.get_lock(key)
+        with lock:
+            self.data[key] = value
+
+    def evict(self, key):
+        lock = self.get_lock(key)
+        with lock:
+            if key in self.data:
+                del self.data[key]
+                del self.locks[key]
+
+    def size(self):
+        return len(self.data)
+
+    def __len__(self):
+        return self.size()
+
 class AlluxioClient:
     """
     Access Alluxio file system
@@ -182,9 +222,10 @@ class AlluxioClient:
         test_options = kwargs.get("test_options", {})
         set_log_level(self.logger, test_options)
         self.executor = None
-        self.mem_map = {}
+        self.mem_map = SharedCache()
         self.use_mem_cache = self.config.use_mem_cache
         self.mem_map_capacity = self.config.mem_map_capacity
+
 
     def listdir(self, path):
         """
@@ -565,6 +606,21 @@ class AlluxioClient:
         Returns:
             file content (str): The full file content
         """
+        paths = []
+        paths.append(file_path)
+        if self.use_mem_cache:
+            cached_files, paths_to_read = self._retrieve_from_mem_map(paths)
+        else:
+            cached_files = []
+            paths_to_read = paths
+
+        if len(paths_to_read) <= 0:
+            # there is only one single file here
+            self.logger.debug(f"hit cache. cache pool size: {self.mem_map.size()}")
+            return cached_files[0]
+        self.logger.debug(f"cache missed. cache pool size: {self.mem_map.size()}")
+
+
         self._validate_path(file_path)
         worker_host, worker_http_port = self._get_preferred_worker_address(
             file_path
@@ -572,7 +628,7 @@ class AlluxioClient:
         path_id = self._get_path_hash(file_path)
         try:
             if self.data_manager:
-                return self._all_chunk_generator_alluxiocommon(
+                file = self._all_chunk_generator_alluxiocommon(
                     worker_host,
                     worker_http_port,
                     path_id,
@@ -580,7 +636,7 @@ class AlluxioClient:
                     chunk_size,
                 )
             else:
-                return self._all_chunk_generator(
+                file = self._all_chunk_generator(
                     worker_host,
                     worker_http_port,
                     path_id,
@@ -589,6 +645,12 @@ class AlluxioClient:
                 )
         except Exception as e:
             raise Exception(e)
+
+        if self.use_mem_cache:
+            files = []
+            files.append(file)
+            self._store_to_mem_map(paths, files)
+        return file
 
 
     def _retrieve_from_mem_map(self, paths):
@@ -607,15 +669,15 @@ class AlluxioClient:
         for i in range(len(files)):
             if len(self.mem_map) >= self.mem_map_capacity:
                 self._evict(10)
-            self.mem_map[paths[i]] = files[i]
+            self.mem_map.set(paths[i], files[i])
 
 
     def _evict(self, num: int) -> None:
         for i in range(num):
             if self.mem_map:
-                random_key = random.choice(list(self.mem_map.keys()))
+                random_key = random.choice(list(self.mem_map.data.keys()))
                 try:
-                    del self.mem_map[random_key]
+                    self.mem_map.evict(random_key)
                 except KeyError:
                     pass
             else:
@@ -670,13 +732,10 @@ class AlluxioClient:
         read_bytes = 0
         for i in range(len(cached_files)):
             read_bytes += len(cached_files[i])
-        self.logger.info(f'number of images: {len(cached_files)} throughput: {read_bytes / (end - start) / 1024 / 1024:.2f} MB/s')
+        self.logger.info(f'cache pool size: {len(self.mem_map)} number of images: {len(cached_files)} number of images that need to read form worker {len(paths_to_read)} throughput: {read_bytes / (end - start) / 1024 / 1024:.2f} MB/s')
 
         if self.use_mem_cache:
             self._store_to_mem_map(paths_to_read, sorted_files)
-        end_with_store = time.time()
-        self.logger.info(
-            f'[WITH STORING] number of images: {len(cached_files)} throughput: {read_bytes / (end_with_store - start) / 1024 / 1024:.2f} MB/s')
         return cached_files
 
     # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
