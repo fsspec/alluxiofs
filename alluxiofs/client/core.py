@@ -567,6 +567,13 @@ class AlluxioClient:
                 )
             )
 
+    def _convert_to_bytesio(self, data):
+        self.logger.debug(f"_convert_to_bytesio is called. The type is: {type(data)}")
+        if isinstance(data, bytes):
+            self.logger.debug(f"bytes --> io.BytesIO")
+            return io.BytesIO(data)
+        return data
+
     def read_chunked(self, file_path, chunk_size=1024 * 1024):
         """
         Reads the full file.
@@ -585,7 +592,7 @@ class AlluxioClient:
             file = self._retrieve_single_file_from_mem_map(file_path)
         if file is not None:
             self.logger.debug(f"Hit memory cache. Memory cache pool size: {len(self.mem_map)}")
-            return file
+            return self._convert_to_bytesio(file)
         self.logger.debug(f"Cache missed. Memory cache pool size: {len(self.mem_map)}")
 
         if self.use_local_disk_cache:
@@ -593,7 +600,7 @@ class AlluxioClient:
             if file is not None:
                 self.logger.debug(f"Hit local disk cache. Memory cache pool size: {len(self.mem_map)}")
                 self._store_single_file_to_mem_map(file_path, file)
-                return file
+                return self._convert_to_bytesio(file)
 
         worker_host, worker_http_port = self._get_preferred_worker_address(
             file_path
@@ -620,7 +627,9 @@ class AlluxioClient:
             raise Exception(e)
 
         if self.use_mem_cache:
-            self._store_single_file_to_mem_map(file_path, file)
+            if file is not None:
+                self._store_single_file_to_mem_map(file_path, file)
+        self.logger.debug(f"file is None? {file is None}")
         return file
 
 
@@ -634,7 +643,10 @@ class AlluxioClient:
 
 
     def _retrieve_single_file_from_mem_map(self, path: str):
-        return self.mem_map.get(path)
+        file = self.mem_map.get(path)
+        if isinstance(file, io.BytesIO):
+            file.seek(0)
+        return file
 
 
     def _retrieve_multiple_files_from_mem_map(self, paths: List[str]):
@@ -643,6 +655,8 @@ class AlluxioClient:
         for path in paths:
             file = self.mem_map.get(path)
             if file is not None:
+                if isinstance(file, io.BytesIO):
+                    file.seek(0)
                 files.append(file)
             else:
                 paths_still_need_to_read.append(path)
