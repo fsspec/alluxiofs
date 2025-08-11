@@ -12,6 +12,7 @@ ALLUXIO_ETCD_USERNAME_KEY = "alluxio.etcd.username"
 ALLUXIO_ETCD_PASSWORD_KEY = "alluxio.etcd.password"
 ALLUXIO_PAGE_SIZE_KEY = "alluxio.worker.page.store.page.size"
 ALLUXIO_PAGE_SIZE_DEFAULT_VALUE = "1MB"
+ALLUXIO_REQUEST_MAX_RETRIES = 3
 ALLUXIO_HASH_NODE_PER_WORKER_KEY1 = (
     "alluxio.user.consistent.hash.virtual.node.count.per.worker"
 )
@@ -23,6 +24,7 @@ ALLUXIO_SUCCESS_IDENTIFIER = "success"
 ALLUXIO_COMMON_EXTENSION_ENABLE = "alluxio.common.extension.enable"
 ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE = "alluxio.common.ondemandpool.disable"
 LIST_URL_FORMAT = "http://{worker_host}:{http_port}/v1/files"
+GET_NODE_ADDRESS = "http://{worker_host}:{http_port}/v1/node?path={file_path}"
 FULL_PAGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}?ufsFullPath={file_path}"
 FULL_RANGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/range/{path_id}?ufsFullPath={file_path}&offset={offset}&length={length}"
 FULL_CHUNK_URL_FORMAT = "http://{worker_host}:{http_port}/v1/chunk/{path_id}?ufsFullPath={file_path}&chunkSize={chunk_size}"

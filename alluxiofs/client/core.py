@@ -20,11 +20,9 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Tuple
 
-import aiofiles
 import aiohttp
 import humanfriendly
 import requests
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 
@@ -51,12 +49,13 @@ from .const import (
     FULL_CHUNK_URL_FORMAT,
     WRITE_CHUNK_URL_FORMAT,
     FULL_RANGE_URL_FORMAT,
-    EXCEPTION_CONTENT,
+    EXCEPTION_CONTENT, GET_NODE_ADDRESS,
 )
 from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
 from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
+from .const import ALLUXIO_REQUEST_MAX_RETRIES
 from .const import ALLUXIO_SUCCESS_IDENTIFIER
 from .const import FULL_PAGE_URL_FORMAT
 from .const import GET_FILE_STATUS_URL_FORMAT
@@ -590,10 +589,10 @@ class AlluxioClient:
         file = None
         if self.use_mem_cache:
             file = self._retrieve_single_file_from_mem_map(file_path)
-        if file is not None:
-            self.logger.debug(f"Hit memory cache. Memory cache pool size: {len(self.mem_map)}")
-            return self._convert_to_bytesio(file)
-        self.logger.debug(f"Cache missed. Memory cache pool size: {len(self.mem_map)}")
+            if file is not None:
+                self.logger.debug(f"Hit memory cache. Memory cache pool size: {len(self.mem_map)}")
+                return self._convert_to_bytesio(file)
+            self.logger.debug(f"Cache missed. Memory cache pool size: {len(self.mem_map)}")
 
         if self.use_local_disk_cache:
             file = self._retrieve_single_file_from_disk(file_path)
@@ -772,7 +771,8 @@ class AlluxioClient:
         read_bytes = 0
         for i in range(len(cached_files)):
             read_bytes += len(cached_files[i])
-        self.logger.info(f'cache pool size: {len(self.mem_map)} number of images: {len(cached_files)} number of images that need to read form worker {len(paths_to_read)} throughput: {read_bytes / (end - start) / 1024 / 1024:.2f} MB/s')
+        self.logger.info(f'cache pool size: {len(self.mem_map)} number of images: {len(cached_files)} number of images that need to '
+                         f'read form worker {len(paths_to_read)} throughput: {read_bytes / (end - start) / 1024 / 1024:.2f} MB/s')
 
         if self.use_mem_cache:
             self._store_multiple_files_to_mem_map(paths_to_read, sorted_files)
@@ -794,46 +794,74 @@ class AlluxioClient:
             self, worker_host, worker_http_port, path_id, file_path, chunk_size
     ):
         """
-        Reads the full file.
+        Reads the full file with retry mechanism for connection reset errors.
 
         Args:
             worker_host (str): The worker host to read data from
             worker_http_port (int): The worker HTTP port to read data from
             path_id (int): The path id of the file
             file_path (str): The full ufs file path to read data from
+            chunk_size (int): The size of each chunk to read
 
         Returns:
-            file content (str): The full file content
+            file content (BytesIO): The full file content in a BytesIO object
         """
-        url_chunk = FULL_CHUNK_URL_FORMAT.format(
-            worker_host=worker_host,
-            http_port=worker_http_port,
-            path_id=path_id,
-            chunk_size=chunk_size,
-            file_path=file_path,
-            page_index=0,
-        )
-        out = io.BytesIO()
-        headers = {"transfer-type": "chunked"}
-        try:
-            with requests.get(
-                    url_chunk, headers=headers, stream=True
-            ) as response:
-                response.raise_for_status()
-                for chunk in response.iter_content(chunk_size=chunk_size):
-                    if chunk:
-                        out.write(chunk)
-            out.seek(0)
-            return out
-        except Exception:
-            raise Exception(
-                EXCEPTION_CONTENT.format(
-                    worker_host=worker_host,
-                    http_port=worker_http_port,
-                    error=f"Error when reading file {file_path}, "
-                          + response.content.decode("utf-8"),
-                )
+        max_retries = ALLUXIO_REQUEST_MAX_RETRIES  # Maximum number of retries for connection reset
+        retry_count = 0
+        last_exception = None
+
+        while retry_count < max_retries:
+            url_chunk = FULL_CHUNK_URL_FORMAT.format(
+                worker_host=worker_host,
+                http_port=worker_http_port,
+                path_id=path_id,
+                chunk_size=chunk_size,
+                file_path=file_path,
+                page_index=0,
             )
+            out = io.BytesIO()
+            headers = {"transfer-type": "chunked"}
+
+            try:
+                with requests.get(
+                        url_chunk, headers=headers, stream=True
+                ) as response:
+                    # Check for connection reset error (status code 104)
+                    if response.status_code == 104:
+                        raise ConnectionResetError("Connection reset by peer")
+
+                    response.raise_for_status()
+                    for chunk in response.iter_content(chunk_size=chunk_size):
+                        if chunk:
+                            out.write(chunk)
+                out.seek(0)
+                return out
+
+            except (ConnectionResetError, requests.exceptions.ConnectionError) as e:
+                retry_count += 1
+                last_exception = e
+                if retry_count < max_retries:
+                    time.sleep(1 * retry_count)  # Exponential backoff
+                continue
+            except Exception as e:
+                raise Exception(
+                    EXCEPTION_CONTENT.format(
+                        worker_host=worker_host,
+                        http_port=worker_http_port,
+                        error=f"Error when reading file {file_path}, "
+                              + str(e),
+                    )
+                )
+
+        # If we exhausted all retries
+        raise Exception(
+            EXCEPTION_CONTENT.format(
+                worker_host=worker_host,
+                http_port=worker_http_port,
+                error=f"Failed to read file {file_path} after {max_retries} retries. "
+                      + f"Last error: {str(last_exception)}",
+            )
+        )
 
     def read_batch(self, paths, chunk_size = 1024 * 1024):
         urls = []
@@ -1738,7 +1766,16 @@ class AlluxioClient:
                     len(workers), workers
                 )
             )
-        return workers[0].host, workers[0].http_server_port
+        url = GET_NODE_ADDRESS.format(
+                worker_host=workers[0].host,
+                http_port=workers[0].http_server_port,
+                file_path=full_ufs_path,
+            )
+        response = self.session.get(url)
+        response.raise_for_status()
+        data = json.loads(response.content)[0]
+        return (data['mBlockInfo']['mBlockInfo']['mLocations'][0]['mWorkerAddress']['Host'],
+                data['mBlockInfo']['mBlockInfo']['mLocations'][0]['mWorkerAddress']['HttpServerPort'])
 
     def _validate_path(self, path):
         if not isinstance(path, str):

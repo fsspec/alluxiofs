@@ -26,9 +26,9 @@ class AlluxioClientConfig:
         etcd_username: Optional[str] = None,
         etcd_password: Optional[str] = None,
         concurrency=64,
-        use_mem_cache=True,
+        use_mem_cache=False,
         mem_map_capacity=1024,
-        use_local_disk_cache=True,
+        use_local_disk_cache=False,
         local_disk_cache_dir="/tmp/local_cache/",
         **kwargs,
     ):
