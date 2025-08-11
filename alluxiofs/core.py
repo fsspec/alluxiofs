@@ -22,7 +22,10 @@ from fsspec.spec import AbstractBufferedFile
 from alluxiofs.client import AlluxioClient
 from alluxiofs.client.utils import set_log_level
 
-def setup_logger(file_path=None, level=os.getenv("PYTHON_LOGLEVEL", logging.INFO)):
+
+def setup_logger(
+    file_path=None, level=os.getenv("PYTHON_LOGLEVEL", logging.INFO)
+):
     # log dir
     file_name = "user.log"
     if file_path is None:
