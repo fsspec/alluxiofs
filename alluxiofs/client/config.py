@@ -26,9 +26,9 @@ class AlluxioClientConfig:
         etcd_username: Optional[str] = None,
         etcd_password: Optional[str] = None,
         concurrency=64,
-        use_mem_cache=True,
+        use_mem_cache=False,
         mem_map_capacity=1024,
-        use_local_disk_cache=True,
+        use_local_disk_cache=False,
         local_disk_cache_dir="/tmp/local_cache/",
         **kwargs,
     ):
@@ -66,22 +66,21 @@ class AlluxioClientConfig:
             isinstance(concurrency, int) and concurrency > 0
         ), "'concurrency' should be a positive integer"
 
-        assert (
-            isinstance(use_mem_cache, bool)
+        assert isinstance(
+            use_mem_cache, bool
         ), "'use_mem_cache' should be a boolean"
 
         assert (
             isinstance(mem_map_capacity, int) and mem_map_capacity > 0
         ), "'mem_map_capacity' should be a positive integer"
 
-        assert (
-            isinstance(use_local_disk_cache, bool)
+        assert isinstance(
+            use_local_disk_cache, bool
         ), "'use_local_disk_cache' should be a boolean"
 
-        assert (
-            isinstance(local_disk_cache_dir, str)
+        assert isinstance(
+            local_disk_cache_dir, str
         ), "'local_disk_cache_dir' should be a string"
-
 
         assert isinstance(
             etcd_refresh_workers_interval, int

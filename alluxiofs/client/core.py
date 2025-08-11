@@ -16,16 +16,17 @@ import random
 import re
 import time
 import weakref
+from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, List, Tuple
+from typing import Dict
+from typing import List
+from typing import Tuple
 
-import aiofiles
 import aiohttp
 import humanfriendly
 import requests
-import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 
 from .utils import set_log_level
@@ -52,11 +53,12 @@ from .const import (
     WRITE_CHUNK_URL_FORMAT,
     FULL_RANGE_URL_FORMAT,
     EXCEPTION_CONTENT,
+    GET_NODE_ADDRESS,
 )
-from .const import ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE
 from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
+from .const import ALLUXIO_REQUEST_MAX_RETRIES
 from .const import ALLUXIO_SUCCESS_IDENTIFIER
 from .const import FULL_PAGE_URL_FORMAT
 from .const import GET_FILE_STATUS_URL_FORMAT
@@ -117,6 +119,7 @@ class OpType(Enum):
 def open_source_adapter(data):
     return data
 
+
 class AlluxioClient:
     """
     Access Alluxio file system
@@ -146,9 +149,9 @@ class AlluxioClient:
     """
 
     def __init__(
-            self,
-            logger=logging.getLogger(__name__),
-            **kwargs,
+        self,
+        logger=logging.getLogger(__name__),
+        **kwargs,
     ):
         """
         Inits Alluxio file system.
@@ -191,7 +194,10 @@ class AlluxioClient:
 
         self.use_local_disk_cache = self.config.use_local_disk_cache
         self.local_disk_cache_dir = self.config.local_disk_cache_dir
-        if self.local_disk_cache_dir and not self.local_disk_cache_dir.endswith("/"):
+        if (
+            self.local_disk_cache_dir
+            and not self.local_disk_cache_dir.endswith("/")
+        ):
             self.local_disk_cache_dir = self.local_disk_cache_dir + "/"
         if self.use_local_disk_cache:
             if not os.path.exists(self.local_disk_cache_dir):
@@ -357,10 +363,10 @@ class AlluxioClient:
             )
 
     def load(
-            self,
-            path,
-            timeout=None,
-            verbose=True,
+        self,
+        path,
+        timeout=None,
+        verbose=True,
     ):
         """
         Loads a file.
@@ -382,9 +388,9 @@ class AlluxioClient:
         )
 
     def submit_load(
-            self,
-            path,
-            verbose=True,
+        self,
+        path,
+        verbose=True,
     ):
         """
         Submits a load job for a file.
@@ -422,13 +428,13 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     error=f"Error when submitting load job for path {path}, "
-                          + response.content.decode("utf-8"),
+                    + response.content.decode("utf-8"),
                 )
             )
 
     def stop_load(
-            self,
-            path,
+        self,
+        path,
     ):
         """
         Stops a load job for a file.
@@ -461,14 +467,14 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     error=f"Error when stopping load job for path {path}, "
-                          + response.content.decode("utf-8"),
+                    + response.content.decode("utf-8"),
                 )
             )
 
     def load_progress(
-            self,
-            path,
-            verbose=True,
+        self,
+        path,
+        verbose=True,
     ):
         """
         Gets the progress of the load job for a path.
@@ -568,9 +574,11 @@ class AlluxioClient:
             )
 
     def _convert_to_bytesio(self, data):
-        self.logger.debug(f"_convert_to_bytesio is called. The type is: {type(data)}")
+        self.logger.debug(
+            f"_convert_to_bytesio is called. The type is: {type(data)}"
+        )
         if isinstance(data, bytes):
-            self.logger.debug(f"bytes --> io.BytesIO")
+            self.logger.debug("bytes --> io.BytesIO")
             return io.BytesIO(data)
         return data
 
@@ -590,15 +598,21 @@ class AlluxioClient:
         file = None
         if self.use_mem_cache:
             file = self._retrieve_single_file_from_mem_map(file_path)
-        if file is not None:
-            self.logger.debug(f"Hit memory cache. Memory cache pool size: {len(self.mem_map)}")
-            return self._convert_to_bytesio(file)
-        self.logger.debug(f"Cache missed. Memory cache pool size: {len(self.mem_map)}")
+            if file is not None:
+                self.logger.debug(
+                    f"Hit memory cache. Memory cache pool size: {len(self.mem_map)}"
+                )
+                return self._convert_to_bytesio(file)
+            self.logger.debug(
+                f"Cache missed. Memory cache pool size: {len(self.mem_map)}"
+            )
 
         if self.use_local_disk_cache:
             file = self._retrieve_single_file_from_disk(file_path)
             if file is not None:
-                self.logger.debug(f"Hit local disk cache. Memory cache pool size: {len(self.mem_map)}")
+                self.logger.debug(
+                    f"Hit local disk cache. Memory cache pool size: {len(self.mem_map)}"
+                )
                 self._store_single_file_to_mem_map(file_path, file)
                 return self._convert_to_bytesio(file)
 
@@ -632,7 +646,6 @@ class AlluxioClient:
         self.logger.debug(f"file is None? {file is None}")
         return file
 
-
     def _persist_file_to_disk(self, file_path: str, file_data) -> None:
         cache_path = self._get_local_disk_cache_path(file_path)
         with open(cache_path, "wb") as f:
@@ -641,13 +654,11 @@ class AlluxioClient:
             else:
                 f.write(file_data)
 
-
     def _retrieve_single_file_from_mem_map(self, path: str):
         file = self.mem_map.get(path)
         if isinstance(file, io.BytesIO):
             file.seek(0)
         return file
-
 
     def _retrieve_multiple_files_from_mem_map(self, paths: List[str]):
         files = []
@@ -690,10 +701,10 @@ class AlluxioClient:
 
         return cached_files_paths, files, paths_still_need_to_read
 
-
     def _submit_put_task(self, file_path, file_data) -> None:
-        self.async_persisting_pool.submit(self._persist_file_to_disk, file_path, file_data)
-
+        self.async_persisting_pool.submit(
+            self._persist_file_to_disk, file_path, file_data
+        )
 
     def _store_single_file_to_mem_map(self, path: str, file) -> None:
         if len(self.mem_map) >= self.mem_map_capacity:
@@ -702,15 +713,15 @@ class AlluxioClient:
         if self.use_local_disk_cache:
             self._submit_put_task(path, file)
 
-
-    def _store_multiple_files_to_mem_map(self, paths: List[str], files) -> None:
+    def _store_multiple_files_to_mem_map(
+        self, paths: List[str], files
+    ) -> None:
         for i in range(len(files)):
             if len(self.mem_map) >= self.mem_map_capacity:
                 self._evict(10)
             self.mem_map[paths[i]] = files[i]
             if self.use_local_disk_cache:
                 self._submit_put_task(paths[i], files[i])
-
 
     def _evict(self, num: int) -> None:
         for i in range(num):
@@ -724,14 +735,18 @@ class AlluxioClient:
                 self.logger.info("Dictionary is empty!")
                 return
 
-
     def read_batch_threaded(self, paths: List[str]):
         start = time.time()
         if self.executor is None:
-            self.executor = ThreadPoolExecutor(max_workers=self.config.concurrency)
+            self.executor = ThreadPoolExecutor(
+                max_workers=self.config.concurrency
+            )
 
         if self.use_mem_cache:
-            cached_files, paths_to_read = self._retrieve_multiple_files_from_mem_map(paths)
+            (
+                cached_files,
+                paths_to_read,
+            ) = self._retrieve_multiple_files_from_mem_map(paths)
         else:
             cached_files = []
             paths_to_read = paths
@@ -751,7 +766,9 @@ class AlluxioClient:
                 content = future.result()
                 files.append((idx, content))
             except Exception as e:
-                self.logger.warning(f"Error processing file {paths_to_read[idx]}: {e}")
+                self.logger.warning(
+                    f"Error processing file {paths_to_read[idx]}: {e}"
+                )
 
         # sort the data according to the original order
         files.sort(key=lambda x: x[0])
@@ -772,7 +789,10 @@ class AlluxioClient:
         read_bytes = 0
         for i in range(len(cached_files)):
             read_bytes += len(cached_files[i])
-        self.logger.info(f'cache pool size: {len(self.mem_map)} number of images: {len(cached_files)} number of images that need to read form worker {len(paths_to_read)} throughput: {read_bytes / (end - start) / 1024 / 1024:.2f} MB/s')
+        self.logger.info(
+            f"cache pool size: {len(self.mem_map)} number of images: {len(cached_files)} number of images that need to "
+            f"read form worker {len(paths_to_read)} throughput: {read_bytes / (end - start) / 1024 / 1024:.2f} MB/s"
+        )
 
         if self.use_mem_cache:
             self._store_multiple_files_to_mem_map(paths_to_read, sorted_files)
@@ -780,7 +800,7 @@ class AlluxioClient:
 
     # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
     def _all_chunk_generator_alluxiocommon(
-            self, worker_host, worker_http_port, path_id, file_path, chunk_size
+        self, worker_host, worker_http_port, path_id, file_path, chunk_size
     ):
         return self._all_chunk_generator(
             worker_host,
@@ -791,51 +811,82 @@ class AlluxioClient:
         )
 
     def _all_chunk_generator(
-            self, worker_host, worker_http_port, path_id, file_path, chunk_size
+        self, worker_host, worker_http_port, path_id, file_path, chunk_size
     ):
         """
-        Reads the full file.
+        Reads the full file with retry mechanism for connection reset errors.
 
         Args:
             worker_host (str): The worker host to read data from
             worker_http_port (int): The worker HTTP port to read data from
             path_id (int): The path id of the file
             file_path (str): The full ufs file path to read data from
+            chunk_size (int): The size of each chunk to read
 
         Returns:
-            file content (str): The full file content
+            file content (BytesIO): The full file content in a BytesIO object
         """
-        url_chunk = FULL_CHUNK_URL_FORMAT.format(
-            worker_host=worker_host,
-            http_port=worker_http_port,
-            path_id=path_id,
-            chunk_size=chunk_size,
-            file_path=file_path,
-            page_index=0,
-        )
-        out = io.BytesIO()
-        headers = {"transfer-type": "chunked"}
-        try:
-            with requests.get(
-                    url_chunk, headers=headers, stream=True
-            ) as response:
-                response.raise_for_status()
-                for chunk in response.iter_content(chunk_size=chunk_size):
-                    if chunk:
-                        out.write(chunk)
-            out.seek(0)
-            return out
-        except Exception:
-            raise Exception(
-                EXCEPTION_CONTENT.format(
-                    worker_host=worker_host,
-                    http_port=worker_http_port,
-                    error=f"Error when reading file {file_path}, "
-                          + response.content.decode("utf-8"),
-                )
-            )
+        max_retries = ALLUXIO_REQUEST_MAX_RETRIES  # Maximum number of retries for connection reset
+        retry_count = 0
+        last_exception = None
 
-    def read_batch(self, paths, chunk_size = 1024 * 1024):
+        while retry_count < max_retries:
+            url_chunk = FULL_CHUNK_URL_FORMAT.format(
+                worker_host=worker_host,
+                http_port=worker_http_port,
+                path_id=path_id,
+                chunk_size=chunk_size,
+                file_path=file_path,
+                page_index=0,
+            )
+            out = io.BytesIO()
+            headers = {"transfer-type": "chunked"}
+
+            try:
+                with requests.get(
+                    url_chunk, headers=headers, stream=True
+                ) as response:
+                    # Check for connection reset error (status code 104)
+                    if response.status_code == 104:
+                        raise ConnectionResetError("Connection reset by peer")
+
+                    response.raise_for_status()
+                    for chunk in response.iter_content(chunk_size=chunk_size):
+                        if chunk:
+                            out.write(chunk)
+                out.seek(0)
+                return out
+
+            except (
+                ConnectionResetError,
+                requests.exceptions.ConnectionError,
+            ) as e:
+                retry_count += 1
+                last_exception = e
+                if retry_count < max_retries:
+                    time.sleep(1 * retry_count)  # Exponential backoff
+                continue
+            except Exception as e:
+                raise Exception(
+                    EXCEPTION_CONTENT.format(
+                        worker_host=worker_host,
+                        http_port=worker_http_port,
+                        error=f"Error when reading file {file_path}, "
+                        + str(e),
+                    )
+                )
+
+        # If we exhausted all retries
+        raise Exception(
+            EXCEPTION_CONTENT.format(
+                worker_host=worker_host,
+                http_port=worker_http_port,
+                error=f"Failed to read file {file_path} after {max_retries} retries. "
+                + f"Last error: {str(last_exception)}",
+            )
+        )
+
+    def read_batch(self, paths, chunk_size=1024 * 1024):
         urls = []
         for path in paths:
             self._validate_path(path)
@@ -1000,7 +1051,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     error=f"Error when write file {file_path}, "
-                          + response.content.decode("utf-8"),
+                    + response.content.decode("utf-8"),
                 )
             )
 
@@ -1258,7 +1309,7 @@ class AlluxioClient:
             )
 
     def _all_page_generator_alluxiocommon(
-            self, worker_host, worker_http_port, path_id, file_path
+        self, worker_host, worker_http_port, path_id, file_path
     ):
         page_index = 0
         fetching_pages_num_each_round = 4
@@ -1280,8 +1331,8 @@ class AlluxioClient:
                 )
                 yield pages_content
                 if (
-                        len(pages_content)
-                        < fetching_pages_num_each_round * self.config.page_size
+                    len(pages_content)
+                    < fetching_pages_num_each_round * self.config.page_size
                 ):
                     break
             except Exception as e:
@@ -1290,7 +1341,7 @@ class AlluxioClient:
                 raise Exception(e)
 
     def _all_page_generator(
-            self, worker_host, worker_http_port, path_id, file_path
+        self, worker_host, worker_http_port, path_id, file_path
     ):
         page_index = 0
         while True:
@@ -1318,7 +1369,7 @@ class AlluxioClient:
             page_index += 1
 
     def _all_page_generator_write(
-            self, worker_host, worker_http_port, path_id, file_path, file_bytes
+        self, worker_host, worker_http_port, path_id, file_path, file_bytes
     ):
         page_index = 0
         page_size = self.config.page_size
@@ -1353,13 +1404,13 @@ class AlluxioClient:
             yield chunk
 
     def _all_chunk_generator_write(
-            self,
-            worker_host,
-            worker_http_port,
-            path_id,
-            file_path,
-            file_bytes,
-            chunk_size,
+        self,
+        worker_host,
+        worker_http_port,
+        path_id,
+        file_path,
+        file_bytes,
+        chunk_size,
     ):
         try:
             url = (
@@ -1394,13 +1445,13 @@ class AlluxioClient:
 
     # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
     def _all_chunk_generator_write_alluxiocommon(
-            self,
-            worker_host,
-            worker_http_port,
-            path_id,
-            file_path,
-            file_bytes,
-            chunk_size,
+        self,
+        worker_host,
+        worker_http_port,
+        path_id,
+        file_path,
+        file_bytes,
+        chunk_size,
     ):
         return self._all_chunk_generator_write(
             worker_host,
@@ -1412,7 +1463,7 @@ class AlluxioClient:
         )
 
     def _range_page_generator_alluxiocommon(
-            self, worker_host, worker_http_port, path_id, file_path, offset, length
+        self, worker_host, worker_http_port, path_id, file_path, offset, length
     ):
         read_urls = []
         start = offset
@@ -1447,7 +1498,7 @@ class AlluxioClient:
         return data
 
     def _range_page_generator(
-            self, worker_host, worker_http_port, path_id, file_path, offset, length
+        self, worker_host, worker_http_port, path_id, file_path, offset, length
     ):
         start_page_index = offset // self.config.page_size
         start_page_offset = offset % self.config.page_size
@@ -1482,8 +1533,8 @@ class AlluxioClient:
 
                 # Check if it's the last page or the end of the file
                 if (
-                        page_index == end_page_index
-                        or len(page_content) < read_length
+                    page_index == end_page_index
+                    or len(page_content) < read_length
                 ):
                     break
 
@@ -1499,7 +1550,7 @@ class AlluxioClient:
                     break
 
     def _all_file_range_generator(
-            self, worker_host, worker_http_port, path_id, file_path, offset, length
+        self, worker_host, worker_http_port, path_id, file_path, offset, length
     ):
         try:
             url = FULL_RANGE_URL_FORMAT.format(
@@ -1519,13 +1570,13 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     error=f"Error when reading file {path_id} with offset {offset} and length {length},"
-                          f" error: {response.content.decode('utf-8')}",
+                    f" error: {response.content.decode('utf-8')}",
                 )
             )
 
     # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
     def _all_file_range_generator_alluxiocommon(
-            self, worker_host, worker_http_port, path_id, file_path, offset, length
+        self, worker_host, worker_http_port, path_id, file_path, offset, length
     ):
         return self._all_file_range_generator(
             worker_host,
@@ -1545,7 +1596,7 @@ class AlluxioClient:
         return session
 
     def _load_file(
-            self, worker_host, worker_http_port, path, timeout, verbose
+        self, worker_host, worker_http_port, path, timeout, verbose
     ):
         try:
             params = {
@@ -1609,7 +1660,7 @@ class AlluxioClient:
             raise Exception(response.content.decode("utf-8"))
 
     def _load_progress_internal(
-            self, load_url: str, params: Dict
+        self, load_url: str, params: Dict
     ) -> (LoadState, str):
         try:
             response = self.session.get(load_url, params=params)
@@ -1629,14 +1680,14 @@ class AlluxioClient:
             ) from e
 
     def _read_page(
-            self,
-            worker_host,
-            worker_http_port,
-            path_id,
-            file_path,
-            page_index,
-            offset=None,
-            length=None,
+        self,
+        worker_host,
+        worker_http_port,
+        path_id,
+        file_path,
+        page_index,
+        offset=None,
+        length=None,
     ):
         if (offset is None) != (length is None):
             raise ValueError(
@@ -1676,13 +1727,13 @@ class AlluxioClient:
             )
 
     def _write_page(
-            self,
-            worker_host,
-            worker_http_port,
-            path_id,
-            file_path,
-            page_index,
-            page_bytes,
+        self,
+        worker_host,
+        worker_http_port,
+        path_id,
+        file_path,
+        page_index,
+        page_bytes,
     ):
         """
         Writes a page.
@@ -1738,7 +1789,22 @@ class AlluxioClient:
                     len(workers), workers
                 )
             )
-        return workers[0].host, workers[0].http_server_port
+        url = GET_NODE_ADDRESS.format(
+            worker_host=workers[0].host,
+            http_port=workers[0].http_server_port,
+            file_path=full_ufs_path,
+        )
+        response = self.session.get(url)
+        response.raise_for_status()
+        data = json.loads(response.content)[0]
+        return (
+            data["mBlockInfo"]["mBlockInfo"]["mLocations"][0][
+                "mWorkerAddress"
+            ]["Host"],
+            data["mBlockInfo"]["mBlockInfo"]["mLocations"][0][
+                "mWorkerAddress"
+            ]["HttpServerPort"],
+        )
 
     def _validate_path(self, path):
         if not isinstance(path, str):
