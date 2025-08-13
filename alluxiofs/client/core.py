@@ -32,13 +32,6 @@ from requests.adapters import HTTPAdapter
 from .utils import set_log_level
 
 
-try:
-    from alluxiocommon import _DataManager
-except ModuleNotFoundError:
-    print(
-        "[WARNING]pkg 'alluxiocommon' not installed, relative modules unable to invoke."
-    )
-
 from .config import AlluxioClientConfig
 from .const import (
     ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE,
@@ -55,7 +48,6 @@ from .const import (
     EXCEPTION_CONTENT,
     GET_NODE_ADDRESS,
 )
-from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
 from .const import ALLUXIO_REQUEST_MAX_RETRIES
@@ -181,9 +173,6 @@ class AlluxioClient:
         self.hash_provider = ConsistentHashProvider(self.config)
         self.data_manager = None
         self.logger = logger
-        if kwargs.get(ALLUXIO_COMMON_EXTENSION_ENABLE, True):
-            self.logger.info("alluxiocommon extension enabled.")
-            self.data_manager = _DataManager(self.config.concurrency)
 
         test_options = kwargs.get("test_options", {})
         set_log_level(self.logger, test_options)
@@ -860,7 +849,9 @@ class AlluxioClient:
             except (
                 ConnectionResetError,
                 requests.exceptions.ConnectionError,
+                requests.exceptions.ChunkedEncodingError,
             ) as e:
+                self.logger.warning(f"{e}, retrying, the number of retry is {retry_count + 1}")
                 retry_count += 1
                 last_exception = e
                 if retry_count < max_retries:
