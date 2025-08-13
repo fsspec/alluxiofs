@@ -48,7 +48,6 @@ from .const import (
     EXCEPTION_CONTENT,
     GET_NODE_ADDRESS,
 )
-from .const import ALLUXIO_COMMON_EXTENSION_ENABLE
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
 from .const import ALLUXIO_REQUEST_MAX_RETRIES
