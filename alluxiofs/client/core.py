@@ -1785,7 +1785,7 @@ class AlluxioClient:
             http_port=workers[0].http_server_port,
             file_path=full_ufs_path,
         )
-        response = self.session.get(url)
+        response = requests.get(url)
         response.raise_for_status()
         data = json.loads(response.content)[0]
         return (
