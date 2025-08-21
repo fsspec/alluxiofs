@@ -29,37 +29,33 @@ import humanfriendly
 import requests
 from requests.adapters import HTTPAdapter
 
-from .utils import set_log_level
-
-
 from .config import AlluxioClientConfig
-from .const import (
-    ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE,
-    MKDIR_URL_FORMAT,
-    TOUCH_URL_FORMAT,
-    TAIL_URL_FORMAT,
-    HEAD_URL_FORMAT,
-    MV_URL_FORMAT,
-    RM_URL_FORMAT,
-    CP_URL_FORMAT,
-    FULL_CHUNK_URL_FORMAT,
-    WRITE_CHUNK_URL_FORMAT,
-    FULL_RANGE_URL_FORMAT,
-    EXCEPTION_CONTENT,
-    GET_NODE_ADDRESS,
-)
+from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
 from .const import ALLUXIO_REQUEST_MAX_RETRIES
 from .const import ALLUXIO_SUCCESS_IDENTIFIER
+from .const import CP_URL_FORMAT
+from .const import EXCEPTION_CONTENT
+from .const import FULL_CHUNK_URL_FORMAT
 from .const import FULL_PAGE_URL_FORMAT
+from .const import FULL_RANGE_URL_FORMAT
 from .const import GET_FILE_STATUS_URL_FORMAT
+from .const import GET_NODE_ADDRESS
+from .const import HEAD_URL_FORMAT
 from .const import LIST_URL_FORMAT
 from .const import LOAD_PROGRESS_URL_FORMAT
 from .const import LOAD_SUBMIT_URL_FORMAT
 from .const import LOAD_URL_FORMAT
+from .const import MKDIR_URL_FORMAT
+from .const import MV_URL_FORMAT
 from .const import PAGE_URL_FORMAT
+from .const import RM_URL_FORMAT
+from .const import TAIL_URL_FORMAT
+from .const import TOUCH_URL_FORMAT
+from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
+from .utils import set_log_level
 from .worker_ring import ConsistentHashProvider
 
 
@@ -851,7 +847,9 @@ class AlluxioClient:
                 requests.exceptions.ConnectionError,
                 requests.exceptions.ChunkedEncodingError,
             ) as e:
-                self.logger.warning(f"{e}, retrying, the number of retry is {retry_count + 1}")
+                self.logger.warning(
+                    f"{e}, retrying, the number of retry is {retry_count + 1}"
+                )
                 retry_count += 1
                 last_exception = e
                 if retry_count < max_retries:
@@ -1785,7 +1783,7 @@ class AlluxioClient:
             http_port=workers[0].http_server_port,
             file_path=full_ufs_path,
         )
-        response = self.session.get(url)
+        response = requests.get(url)
         response.raise_for_status()
         data = json.loads(response.content)[0]
         return (
