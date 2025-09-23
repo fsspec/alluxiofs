@@ -27,6 +27,7 @@ from typing import Tuple
 import aiohttp
 import humanfriendly
 import requests
+from requests import HTTPError
 from requests.adapters import HTTPAdapter
 
 from .config import AlluxioClientConfig
@@ -1778,22 +1779,21 @@ class AlluxioClient:
                     len(workers), workers
                 )
             )
-        url = GET_NODE_ADDRESS.format(
-            worker_host=workers[0].host,
-            http_port=workers[0].http_server_port,
-            file_path=full_ufs_path,
-        )
-        response = requests.get(url)
-        response.raise_for_status()
-        data = json.loads(response.content)[0]
-        return (
-            data["mBlockInfo"]["mBlockInfo"]["mLocations"][0][
-                "mWorkerAddress"
-            ]["Host"],
-            data["mBlockInfo"]["mBlockInfo"]["mLocations"][0][
-                "mWorkerAddress"
-            ]["HttpServerPort"],
-        )
+        try:
+            url = GET_NODE_ADDRESS.format(
+                worker_host=workers[0].host,
+                http_port=workers[0].http_server_port,
+                file_path=full_ufs_path,
+            )
+            response = self.session.get(url)
+            response.raise_for_status()
+            data = json.loads(response.content)
+            ip = data["Host"]
+            port = data["HttpServerPort"]
+        except HTTPError:
+            ip = workers[0].host
+            port = workers[0].http_server_port
+        return ip, port
 
     def _validate_path(self, path):
         if not isinstance(path, str):
