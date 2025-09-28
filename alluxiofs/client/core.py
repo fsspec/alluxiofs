@@ -56,6 +56,7 @@ from .const import TAIL_URL_FORMAT
 from .const import TOUCH_URL_FORMAT
 from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
+from .loadbalance import WorkerListLoadBalancer, DNSLoadBalancer
 from .utils import set_log_level
 from .worker_ring import ConsistentHashProvider
 
@@ -167,10 +168,16 @@ class AlluxioClient:
 
         self.config = AlluxioClientConfig(**kwargs)
         self.session = self._create_session(self.config.concurrency)
-        self.hash_provider = ConsistentHashProvider(self.config)
         self.data_manager = None
         self.logger = logger
-
+        if self.config.load_balance_domain:
+            self.loadbalancer = DNSLoadBalancer(self.config)
+        elif self.config.worker_hosts:
+            self.loadbalancer = WorkerListLoadBalancer(self.config)
+        else:
+            raise ValueError(
+                "Either 'worker_hosts' or 'load_balance_domain' must be provided."
+            )
         test_options = kwargs.get("test_options", {})
         set_log_level(self.logger, test_options)
         self.executor = None
@@ -1772,7 +1779,7 @@ class AlluxioClient:
                 continue
 
     def _get_preferred_worker_address(self, full_ufs_path):
-        workers = self.hash_provider.get_multiple_workers(full_ufs_path, 1)
+        workers = self.loadbalancer.get_multiple_worker(full_ufs_path, 1)
         if len(workers) != 1:
             raise ValueError(
                 "Expected exactly one worker from hash ring, but found {} workers {}.".format(

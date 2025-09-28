@@ -8,17 +8,14 @@ from alluxiofs import AlluxioFileSystem
 fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
 alluxio_fs = fsspec.filesystem(
     "alluxiofs",
-    etcd_hosts="localhost",
-    etcd_port=2379,
-    target_protocol="s3",
-    page_size="1MB",
+    worker_hosts="127.0.0.1:28080, 127.0.0.1:38080",
 )
 
 bucket_name = "yxd-fsspec"
-test_folder_name = "python_sdk_test"
+test_folder_name = "python-sdk-test"
 # the format of home_path: s3://{bucket_name}/{test_folder_name}
-home_path = "s3://" + bucket_name + "/" + test_folder_name
-
+# home_path = "s3://" + bucket_name + "/" + test_folder_name
+home_path = "file:///home/yxd/alluxio/ufs/" + test_folder_name
 
 def show_files(path):
     res = alluxio_fs.ls(path)
@@ -95,7 +92,7 @@ def other_option_test_disabled():
     with open("../assets/test.csv", "rb") as f:
         data = f.read()
         assert alluxio_fs.upload_data(
-            path="4564" + home_path + "/python_sdk_test_folder/file3",
+            path=home_path + "/python_sdk_test_folder/file3",
             data=data,
         )
 
@@ -139,7 +136,7 @@ def other_option_test_disabled():
     # # clear all
     alluxio_fs.rm(home_path, recursive=True)
     assert not alluxio_fs.exists(home_path)
-    show_files(home_path)
+    # show_files(home_path)
 
 
 # if __name__ == '__main__':
