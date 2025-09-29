@@ -56,7 +56,8 @@ from .const import TAIL_URL_FORMAT
 from .const import TOUCH_URL_FORMAT
 from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
-from .loadbalance import WorkerListLoadBalancer, DNSLoadBalancer
+from .loadbalance import DNSLoadBalancer
+from .loadbalance import WorkerListLoadBalancer
 from .utils import set_log_level
 from .worker_ring import ConsistentHashProvider
 

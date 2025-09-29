@@ -1,10 +1,11 @@
 import socket
+from dataclasses import dataclass
 from typing import List
 
 from alluxiofs.client.config import AlluxioClientConfig
-from dataclasses import dataclass
-
-from alluxiofs.client.const import ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE
+from alluxiofs.client.const import (
+    ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
+)
 
 
 @dataclass(frozen=True)
@@ -18,19 +19,23 @@ class WorkerNetAddress:
 
     @staticmethod
     def from_host(worker_host):
-        return WorkerNetAddress(worker_host, ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE)
+        return WorkerNetAddress(
+            worker_host, ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE
+        )
 
     @staticmethod
     def from_dict(d):
         return WorkerNetAddress(d["host"], d["http_server_port"])
 
     @staticmethod
-    def to_dict(worker: 'WorkerNetAddress'):
-        return {"host": worker.host, "http_server_port": worker.http_server_port}
+    def to_dict(worker: "WorkerNetAddress"):
+        return {
+            "host": worker.host,
+            "http_server_port": worker.http_server_port,
+        }
 
 
 class WorkerListLoadBalancer:
-
     def __init__(self, config: AlluxioClientConfig):
         self.workers, self.ports = self._param_worker_addr(config)
 
@@ -38,8 +43,7 @@ class WorkerListLoadBalancer:
         # Simple hash-based load balancing
         index = hash(path) % len(self.workers)
         return WorkerNetAddress.from_host_and_port(
-                    self.workers[index],
-                    self.ports[index]
+            self.workers[index], self.ports[index]
         )
 
     def get_multiple_worker(self, path, worker_num):
@@ -50,7 +54,7 @@ class WorkerListLoadBalancer:
             selected_workers.append(
                 WorkerNetAddress.from_host_and_port(
                     self.workers[(index + i) % len(self.workers)],
-                    self.ports[(index + i) % len(self.workers)]
+                    self.ports[(index + i) % len(self.workers)],
                 )
             )
         return selected_workers
@@ -106,7 +110,9 @@ class DNSLoadBalancer:
         try:
             # Request address information for the domain, filtering for IPv4 sockets.
             # socket.getaddrinfo returns a list of tuples.
-            addr_info = socket.getaddrinfo(self.domain, None, family=socket.AF_INET)
+            addr_info = socket.getaddrinfo(
+                self.domain, None, family=socket.AF_INET
+            )
 
             # Check if the result list is not empty.
             if addr_info:
@@ -134,11 +140,12 @@ class DNSLoadBalancer:
         """
         host = self.resolve_address()
         return WorkerNetAddress.from_host_and_port(
-            host,
-            self.config.worker_http_port
+            host, self.config.worker_http_port
         )
 
-    def get_multiple_worker(self, path: str, worker_num: int) -> List[WorkerNetAddress]:
+    def get_multiple_worker(
+        self, path: str, worker_num: int
+    ) -> List[WorkerNetAddress]:
         """
         Selects multiple workers based on the path domain.
 
@@ -154,30 +161,38 @@ class DNSLoadBalancer:
             host = self.resolve_address()
             selected_workers.append(
                 WorkerNetAddress.from_host_and_port(
-                    host,
-                    self.config.worker_http_port
+                    host, self.config.worker_http_port
                 )
             )
         return selected_workers
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # Example 1: Successfully resolve a domain
     try:
-        google_ip = DNSLoadBalancer(AlluxioClientConfig(load_balance_domain="www.google.com")).resolve_address()
+        google_ip = DNSLoadBalancer(
+            AlluxioClientConfig(load_balance_domain="www.google.com")
+        ).resolve_address()
         print(f"The IP address for www.google.com is: {google_ip}")
     except ValueError as e:
         print(e)
 
     # Example 2: Attempt to resolve a non-existent domain
     try:
-        invalid_ip = DNSLoadBalancer(AlluxioClientConfig(load_balance_domain="non-existent-domain-12345.com")).resolve_address()
+        invalid_ip = DNSLoadBalancer(
+            AlluxioClientConfig(
+                load_balance_domain="non-existent-domain-12345.com"
+            )
+        ).resolve_address()
         print(f"The IP address is: {invalid_ip}")
     except ValueError as e:
         print(f"Error resolving domain: {e}")
 
     # Example 3: Resolve another valid domain
     try:
-        github_ip = DNSLoadBalancer(AlluxioClientConfig(load_balance_domain="github.com")).resolve_address()
+        github_ip = DNSLoadBalancer(
+            AlluxioClientConfig(load_balance_domain="github.com")
+        ).resolve_address()
         print(f"The IP address for github.com is: {github_ip}")
     except ValueError as e:
         print(e)

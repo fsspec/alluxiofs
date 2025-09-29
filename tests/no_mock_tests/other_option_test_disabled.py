@@ -17,6 +17,7 @@ test_folder_name = "python-sdk-test"
 # home_path = "s3://" + bucket_name + "/" + test_folder_name
 home_path = "file:///home/yxd/alluxio/ufs/" + test_folder_name
 
+
 def show_files(path):
     res = alluxio_fs.ls(path)
     formatted_res = json.dumps(res, indent=4, ensure_ascii=False)
