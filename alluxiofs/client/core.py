@@ -42,7 +42,8 @@ from .const import FULL_CHUNK_URL_FORMAT
 from .const import FULL_PAGE_URL_FORMAT
 from .const import FULL_RANGE_URL_FORMAT
 from .const import GET_FILE_STATUS_URL_FORMAT
-from .const import GET_NODE_ADDRESS
+from .const import GET_NODE_ADDRESS_DOMAIN
+from .const import GET_NODE_ADDRESS_IP
 from .const import HEAD_URL_FORMAT
 from .const import LIST_URL_FORMAT
 from .const import LOAD_PROGRESS_URL_FORMAT
@@ -56,6 +57,7 @@ from .const import TAIL_URL_FORMAT
 from .const import TOUCH_URL_FORMAT
 from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
+from .loadbalance import WorkerListLoadBalancer
 from .utils import set_log_level
 from .worker_ring import ConsistentHashProvider
 
@@ -167,10 +169,16 @@ class AlluxioClient:
 
         self.config = AlluxioClientConfig(**kwargs)
         self.session = self._create_session(self.config.concurrency)
-        self.hash_provider = ConsistentHashProvider(self.config)
         self.data_manager = None
         self.logger = logger
-
+        if self.config.load_balance_domain:
+            self.loadbalancer = None
+        elif self.config.worker_hosts:
+            self.loadbalancer = WorkerListLoadBalancer(self.config)
+        else:
+            raise ValueError(
+                "Either 'worker_hosts' or 'load_balance_domain' must be provided."
+            )
         test_options = kwargs.get("test_options", {})
         set_log_level(self.logger, test_options)
         self.executor = None
@@ -1772,19 +1780,26 @@ class AlluxioClient:
                 continue
 
     def _get_preferred_worker_address(self, full_ufs_path):
-        workers = self.hash_provider.get_multiple_workers(full_ufs_path, 1)
-        if len(workers) != 1:
-            raise ValueError(
-                "Expected exactly one worker from hash ring, but found {} workers {}.".format(
-                    len(workers), workers
+        if self.loadbalancer is not None:
+            workers = self.loadbalancer.get_multiple_worker(full_ufs_path, 1)
+            if len(workers) != 1:
+                raise ValueError(
+                    "Expected exactly one worker from hash ring, but found {} workers {}.".format(
+                        len(workers), workers
+                    )
                 )
-            )
-        try:
-            url = GET_NODE_ADDRESS.format(
+            url = GET_NODE_ADDRESS_IP.format(
                 worker_host=workers[0].host,
                 http_port=workers[0].http_server_port,
                 file_path=full_ufs_path,
             )
+        else:
+            url = GET_NODE_ADDRESS_DOMAIN.format(
+                domain=self.config.load_balance_domain,
+                http_port=self.config.worker_http_port,
+                file_path=full_ufs_path,
+            )
+        try:
             response = self.session.get(url)
             response.raise_for_status()
             data = json.loads(response.content)
