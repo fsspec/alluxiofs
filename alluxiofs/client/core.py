@@ -31,7 +31,7 @@ from requests import HTTPError
 from requests.adapters import HTTPAdapter
 
 from .config import AlluxioClientConfig
-from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE, GET_NODE_ADDRESS_DOMAIN
+from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
 from .const import ALLUXIO_REQUEST_MAX_RETRIES
@@ -42,6 +42,7 @@ from .const import FULL_CHUNK_URL_FORMAT
 from .const import FULL_PAGE_URL_FORMAT
 from .const import FULL_RANGE_URL_FORMAT
 from .const import GET_FILE_STATUS_URL_FORMAT
+from .const import GET_NODE_ADDRESS_DOMAIN
 from .const import GET_NODE_ADDRESS_IP
 from .const import HEAD_URL_FORMAT
 from .const import LIST_URL_FORMAT
@@ -56,7 +57,6 @@ from .const import TAIL_URL_FORMAT
 from .const import TOUCH_URL_FORMAT
 from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
-from .loadbalance import DNSLoadBalancer
 from .loadbalance import WorkerListLoadBalancer
 from .utils import set_log_level
 from .worker_ring import ConsistentHashProvider

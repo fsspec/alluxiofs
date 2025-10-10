@@ -27,9 +27,9 @@ class AlluxioClientConfig:
             concurrency (int, optional): The maximum number of concurrent operations for HTTP requests, default to 64.
             worker_http_port (int, optional): The port of the HTTP server on each Alluxio worker node.
         """
-        assert isinstance(
-            load_balance_domain, str
-        ) or load_balance_domain is None, "'load_balance_domain' should be string"
+        assert (
+            isinstance(load_balance_domain, str) or load_balance_domain is None
+        ), "'load_balance_domain' should be string"
 
         assert isinstance(worker_http_port, int) and (
             1 <= worker_http_port <= 65535

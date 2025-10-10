@@ -26,6 +26,7 @@ file_names = [
 ]
 CHUNK_SIZE = 8 * 1024 * 1024
 
+
 @pytest.mark.skip(reason="no-mock test")
 def write_test_disabled(file_name="test.csv"):
     file_path_ufs = home_path + "/" + file_name

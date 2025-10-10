@@ -24,8 +24,12 @@ ALLUXIO_SUCCESS_IDENTIFIER = "success"
 ALLUXIO_COMMON_EXTENSION_ENABLE = "alluxio.common.extension.enable"
 ALLUXIO_COMMON_ONDEMANDPOOL_DISABLE = "alluxio.common.ondemandpool.disable"
 LIST_URL_FORMAT = "http://{worker_host}:{http_port}/v1/files"
-GET_NODE_ADDRESS_IP = "http://{worker_host}:{http_port}/v1/node?path={file_path}"
-GET_NODE_ADDRESS_DOMAIN = "http://{domain}:{http_port}/v1/node?path={file_path}"
+GET_NODE_ADDRESS_IP = (
+    "http://{worker_host}:{http_port}/v1/node?path={file_path}"
+)
+GET_NODE_ADDRESS_DOMAIN = (
+    "http://{domain}:{http_port}/v1/node?path={file_path}"
+)
 FULL_PAGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}?ufsFullPath={file_path}"
 FULL_RANGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/range/{path_id}?ufsFullPath={file_path}&offset={offset}&length={length}"
 FULL_CHUNK_URL_FORMAT = "http://{worker_host}:{http_port}/v1/chunk/{path_id}?ufsFullPath={file_path}&chunkSize={chunk_size}"
