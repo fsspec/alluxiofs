@@ -10,7 +10,7 @@ class AlluxioClientConfig:
 
     def __init__(
         self,
-        load_balance_domain: str,
+        load_balance_domain: str = None,
         worker_hosts: Optional[str] = None,
         worker_http_port=ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
         concurrency=64,
@@ -29,7 +29,7 @@ class AlluxioClientConfig:
         """
         assert isinstance(
             load_balance_domain, str
-        ), "'load_balance_domain' should be either 'worker' or 'master'"
+        ) or load_balance_domain is None, "'load_balance_domain' should be string"
 
         assert isinstance(worker_http_port, int) and (
             1 <= worker_http_port <= 65535

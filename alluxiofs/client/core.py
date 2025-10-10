@@ -31,7 +31,7 @@ from requests import HTTPError
 from requests.adapters import HTTPAdapter
 
 from .config import AlluxioClientConfig
-from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
+from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE, GET_NODE_ADDRESS_DOMAIN
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
 from .const import ALLUXIO_REQUEST_MAX_RETRIES
@@ -42,7 +42,7 @@ from .const import FULL_CHUNK_URL_FORMAT
 from .const import FULL_PAGE_URL_FORMAT
 from .const import FULL_RANGE_URL_FORMAT
 from .const import GET_FILE_STATUS_URL_FORMAT
-from .const import GET_NODE_ADDRESS
+from .const import GET_NODE_ADDRESS_IP
 from .const import HEAD_URL_FORMAT
 from .const import LIST_URL_FORMAT
 from .const import LOAD_PROGRESS_URL_FORMAT
@@ -172,7 +172,7 @@ class AlluxioClient:
         self.data_manager = None
         self.logger = logger
         if self.config.load_balance_domain:
-            self.loadbalancer = DNSLoadBalancer(self.config)
+            self.loadbalancer = None
         elif self.config.worker_hosts:
             self.loadbalancer = WorkerListLoadBalancer(self.config)
         else:
@@ -1780,19 +1780,26 @@ class AlluxioClient:
                 continue
 
     def _get_preferred_worker_address(self, full_ufs_path):
-        workers = self.loadbalancer.get_multiple_worker(full_ufs_path, 1)
-        if len(workers) != 1:
-            raise ValueError(
-                "Expected exactly one worker from hash ring, but found {} workers {}.".format(
-                    len(workers), workers
+        if self.loadbalancer is not None:
+            workers = self.loadbalancer.get_multiple_worker(full_ufs_path, 1)
+            if len(workers) != 1:
+                raise ValueError(
+                    "Expected exactly one worker from hash ring, but found {} workers {}.".format(
+                        len(workers), workers
+                    )
                 )
-            )
-        try:
-            url = GET_NODE_ADDRESS.format(
+            url = GET_NODE_ADDRESS_IP.format(
                 worker_host=workers[0].host,
                 http_port=workers[0].http_server_port,
                 file_path=full_ufs_path,
             )
+        else:
+            url = GET_NODE_ADDRESS_DOMAIN.format(
+                domain=self.config.load_balance_domain,
+                http_port=self.config.worker_http_port,
+                file_path=full_ufs_path,
+            )
+        try:
             response = self.session.get(url)
             response.raise_for_status()
             data = json.loads(response.content)
