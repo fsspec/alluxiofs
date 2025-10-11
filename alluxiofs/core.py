@@ -120,17 +120,11 @@ class AlluxioFileSystem(AbstractFileSystem):
         to leveraging the data caching and management features of Alluxio.
 
         The Alluxio args:
-            etcd_hosts (str, optional): A comma-separated list of ETCD server hosts in the format "host1:port1,host2:port2,...".
-                ETCD is used for dynamic discovery of Alluxio workers.
-                Either `etcd_hosts` or `worker_hosts` must be specified, not both.
             worker_hosts (str, optional): A comma-separated list of Alluxio worker hosts in the format "host1:port1,host2:port2,...".
-                Directly specifies workers without using ETCD.
-                Either `etcd_hosts` or `worker_hosts` must be specified, not both.
+                Directly specifies workers without using service discovery.
             options (dict, optional): A dictionary of Alluxio configuration options where keys are property names and values are property values.
                 These options configure the Alluxio client behavior.
             concurrency (int, optional): The maximum number of concurrent operations (e.g., reads, writes) that the file system interface will allow. Defaults to 64.
-            etcd_port (int, optional): The port number used by each etcd server.
-                Relevant only if `etcd_hosts` is specified.
             worker_http_port (int, optional): The port number used by the HTTP server on each Alluxio worker.
                 This is used for accessing Alluxio's HTTP-based APIs.
             preload_path (str, optional): Specifies a path to preload into the Alluxio file system cache at initialization.
