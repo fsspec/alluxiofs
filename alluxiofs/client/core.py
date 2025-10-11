@@ -117,8 +117,6 @@ class AlluxioClient:
 
     Examples
     --------
-    >>> # Launch Alluxio with ETCD as service discovery
-    >>> alluxio = AlluxioClient(etcd_hosts="localhost")
     >>> # Or launch Alluxio with user provided worker list
     >>> alluxio = AlluxioClient(worker_hosts="host1,host2,host3")
 
@@ -148,23 +146,16 @@ class AlluxioClient:
         Inits Alluxio file system.
 
         Args:
-            etcd_hosts (str, optional):
-                The hostnames of ETCD to get worker addresses from
-                The hostnames in host1,host2,host3 format. Either etcd_hosts or worker_hosts should be provided, not both.
             worker_hosts (str, optional):
-                The worker hostnames in host1,host2,host3 format. Either etcd_hosts or worker_hosts should be provided, not both.
+                The worker hostnames in host1,host2,host3 format. Either load_balance_domain or worker_hosts should be provided, not both.
             options (dict, optional):
                 A dictionary of Alluxio property key and values.
                 Note that Alluxio Python API only support a limited set of Alluxio properties.
             concurrency (int, optional):
                 The maximum number of concurrent operations for HTTP requests. Default to 64.
-            etcd_port (int, optional):
-                The port of each etcd server.
+
             worker_http_port (int, optional):
                 The port of the HTTP server on each Alluxio worker node.
-            etcd_refresh_workers_interval(int, optional):
-                The interval to refresh worker list from ETCD membership service periodically. All negative values mean the service is disabled.
-
         """
 
         self.config = AlluxioClientConfig(**kwargs)
