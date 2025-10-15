@@ -338,6 +338,11 @@ class AlluxioClient:
                 data.get("mInAlluxioPercentage", 0),
                 data.get("mContentHash", ""),
             )
+        except requests.exceptions.HTTPError as e:
+            if e.response is not None and e.response.status_code == 500:
+                raise FileNotFoundError(f"File not found: {path}")
+            else:
+                raise
         except Exception:
             raise Exception(
                 EXCEPTION_CONTENT.format(
