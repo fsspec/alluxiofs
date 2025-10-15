@@ -550,19 +550,12 @@ class AlluxioFileSystem(AbstractFileSystem):
     def get_file(self, rpath, lpath, *args, **kwargs):
         raise NotImplementedError
 
+    @fallback_handler
     def read_block(self, *args, **kwargs):
         if self.fs:
             return self.fs.read_block(*args, **kwargs)
         else:
             raise NotImplementedError
-
-    def load_file_from_ufs_to_alluxio(self, path, **kwargs):
-        path = self.unstrip_protocol(path)
-        return self.alluxio.load(path, **kwargs)
-
-    def download_batch_data(self, path, *args, **kwargs):
-        path = self.unstrip_protocol(path)
-        return self.alluxio.read_batch(path)
 
 
 class AlluxioFile(AbstractBufferedFile):
