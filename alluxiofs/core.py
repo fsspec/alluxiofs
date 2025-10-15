@@ -355,7 +355,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             path = self.unstrip_protocol(path)
             self.alluxio.get_file_status(path)
             return True
-        except Exception:
+        except FileNotFoundError:
             return False
 
     @fallback_handler
@@ -514,7 +514,7 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def put_file(self, lpath, rpath, *args, **kwargs):
-        raise NotImplementedError
+        return self.upload(lpath, rpath, *args, **kwargs)
 
     @fallback_handler
     def put(self, lpath, rpath, *args, **kwargs):
@@ -522,43 +522,25 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def write(self, path, value, **kwargs):
-        return self.upload_data(path, value, **kwargs)
+        path = self.unstrip_protocol(path)
+        return self.alluxio.write_chunked(path, value)
 
     @fallback_handler
     def read(self, path, *args, **kwargs):
-        return self.cat_file(path)
-
-    @fallback_handler
-    def load_file_from_ufs_to_alluxio(self, path, **kwargs):
         path = self.unstrip_protocol(path)
-        return self.alluxio.load(path, **kwargs)
+        return self.alluxio.read_chunked(path)
 
     @fallback_handler
     def upload(self, lpath: str, rpath: str, *args, **kwargs) -> bool:
-        lpath = self.unstrip_protocol(lpath)
-        with open(rpath, "rb") as f:
-            return self.alluxio.write_chunked(lpath, f.read())
-
-    @fallback_handler
-    def upload_data(self, path: str, data: b"", *args, **kwargs) -> bool:
-        path = self.unstrip_protocol(path)
-        return self.alluxio.write_chunked(path, data)
+        rpath = self.unstrip_protocol(rpath)
+        with open(lpath, "rb") as f:
+            return self.alluxio.write_chunked(rpath, f.read())
 
     @fallback_handler
     def download(self, lpath, rpath, *args, **kwargs):
-        lpath = self.unstrip_protocol(lpath)
-        with open(rpath, "wb") as f:
-            return f.write(self.alluxio.read_chunked(lpath).read())
-
-    @fallback_handler
-    def download_data(self, lpath, *args, **kwargs):
-        lpath = self.unstrip_protocol(lpath)
-        return self.alluxio.read_chunked(lpath)
-
-    @fallback_handler
-    def download_batch_data(self, lpath, *args, **kwargs):
-        lpath = self.unstrip_protocol(lpath)
-        return self.alluxio.read_batch(lpath)
+        rpath = self.unstrip_protocol(rpath)
+        with open(lpath, "wb") as f:
+            return f.write(self.alluxio.read_chunked(rpath).read())
 
     @fallback_handler
     def get(self, rpath, lpath, *args, **kwargs):
@@ -573,6 +555,14 @@ class AlluxioFileSystem(AbstractFileSystem):
             return self.fs.read_block(*args, **kwargs)
         else:
             raise NotImplementedError
+
+    def load_file_from_ufs_to_alluxio(self, path, **kwargs):
+        path = self.unstrip_protocol(path)
+        return self.alluxio.load(path, **kwargs)
+
+    def download_batch_data(self, path, *args, **kwargs):
+        path = self.unstrip_protocol(path)
+        return self.alluxio.read_batch(path)
 
 
 class AlluxioFile(AbstractBufferedFile):
