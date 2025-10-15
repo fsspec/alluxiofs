@@ -1,7 +1,9 @@
 import json
-import pytest
-import fsspec
+
 import bosfs
+import fsspec
+import pytest
+
 from alluxiofs import AlluxioFileSystem
 
 fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
@@ -24,7 +26,6 @@ res = alluxio_fs.ls(path)
 home_path = path + "python-sdk-test"
 
 
-
 def show_files(path):
     res = alluxio_fs.ls(path)
     formatted_res = json.dumps(res, indent=4, ensure_ascii=False)
@@ -33,7 +34,7 @@ def show_files(path):
 
 
 def verify_result(num):
-    res = alluxio_fs.ls(home_path)
+    alluxio_fs.ls(home_path)
 
 
 @pytest.mark.skip(reason="no-mock test")

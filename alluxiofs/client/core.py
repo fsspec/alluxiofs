@@ -343,7 +343,7 @@ class AlluxioClient:
                 raise FileNotFoundError(f"File not found: {path}")
             else:
                 raise
-        except Exception as e:
+        except Exception:
             raise Exception(
                 EXCEPTION_CONTENT.format(
                     worker_host=worker_host,
