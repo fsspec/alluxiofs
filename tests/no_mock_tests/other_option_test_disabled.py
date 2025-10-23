@@ -1,29 +1,25 @@
 import json
 
-import bosfs
 import fsspec
 import pytest
 
 from alluxiofs import AlluxioFileSystem
 
 fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
-fsspec.register_implementation("bos", bosfs.BOSFileSystem)
-bos_fs = bosfs.BOSFileSystem()
 
 alluxio_fs = fsspec.filesystem(
     "alluxiofs",
     load_balance_domain="localhost",
     # or worker_hosts="127.0.0.1:28080, 127.0.0.1:38080",
-    target_protocol="bos",
 )
-path = "bos://your-bucket"
-res = alluxio_fs.ls(path)
+# path = "bos://your-bucket"
+# res = alluxio_fs.ls(path)
 # bucket_name = "yxd-fsspec"
-# test_folder_name = "python-sdk-test"
+test_folder_name = "python-sdk-test"
 # # the format of home_path: s3://{bucket_name}/{test_folder_name}
 # # home_path = "s3://" + bucket_name + "/" + test_folder_name
-# home_path = "file:///home/yxd/alluxio/ufs/" + test_folder_name
-home_path = path + "python-sdk-test"
+home_path = "file:///home/yxd/alluxio/ufs/" + test_folder_name
+# home_path = path + "python-sdk-test"
 
 
 def show_files(path):
@@ -96,9 +92,9 @@ def other_option_test_disabled():
     print("upload file for test")
     with open("../assets/test.csv", "rb") as f:
         data = f.read()
-        alluxio_fs.upload_data(
+        alluxio_fs.write(
             path=home_path + "/python_sdk_test_folder/file3",
-            data=data,
+            value=data,
         )
 
     # # move
