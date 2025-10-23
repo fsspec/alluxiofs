@@ -31,7 +31,6 @@ from requests import HTTPError
 from requests.adapters import HTTPAdapter
 
 from .config import AlluxioClientConfig
-from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
 from .const import ALLUXIO_REQUEST_MAX_RETRIES
@@ -59,7 +58,6 @@ from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
 from .loadbalance import WorkerListLoadBalancer
 from .utils import set_log_level
-from .worker_ring import ConsistentHashProvider
 
 
 @dataclass
@@ -1822,8 +1820,8 @@ class AlluxioAsyncFileSystem:
 
     Examples
     --------
-    >>> # Launch Alluxio with ETCD as service discovery
-    >>> alluxio = AlluxioAsyncFileSystem(etcd_hosts="localhost")
+    >>> # Launch Alluxio with load_balance_domain as service discovery
+    >>> alluxio = AlluxioAsyncFileSystem(load_balance_domain="localhost")
     >>> # Or launch Alluxio with user provided worker list
     >>> alluxio = AlluxioAsyncFileSystem(worker_hosts="host1,host2,host3")
 
@@ -1842,37 +1840,34 @@ class AlluxioAsyncFileSystem:
 
     def __init__(
         self,
-        etcd_hosts=None,
+        load_balance_domain="localhost",
         worker_hosts=None,
         options=None,
         http_port="28080",
-        etcd_port="2379",
         loop=None,
     ):
         """
         Inits Alluxio file system.
 
         Args:
-            etcd_hosts (str, optional):
-                The hostnames of ETCD to get worker addresses from
-                The hostnames in host1,host2,host3 format. Either etcd_hosts or worker_hosts should be provided, not both.
+            load_balance_domain (str, optional):
+                The hostnames of load_balance_domain to get worker addresses from
+                The hostnames in host1,host2,host3 format. Either load_balance_domain or worker_hosts should be provided, not both.
             worker_hosts (str, optional):
-                The worker hostnames in host1,host2,host3 format. Either etcd_hosts or worker_hosts should be provided, not both.
+                The worker hostnames in host1,host2,host3 format. Either load_balance_domain or worker_hosts should be provided, not both.
             options (dict, optional):
                 A dictionary of Alluxio property key and values.
                 Note that Alluxio Python API only support a limited set of Alluxio properties.
-            etcd_port (str, optional):
-                The port of each etcd server.
             http_port (string, optional):
                 The port of the HTTP server on each Alluxio worker node.
         """
-        if etcd_hosts is None and worker_hosts is None:
+        if load_balance_domain is None and worker_hosts is None:
             raise ValueError(
-                "Must supply either 'etcd_hosts' or 'worker_hosts'"
+                "Must supply either 'load_balance_domain' or 'worker_hosts'"
             )
-        if etcd_hosts and worker_hosts:
+        if load_balance_domain and worker_hosts:
             raise ValueError(
-                "Supply either 'etcd_hosts' or 'worker_hosts', not both"
+                "Supply either 'load_balance_domain' or 'worker_hosts', not both"
             )
         self._session = None
 
@@ -1883,16 +1878,6 @@ class AlluxioAsyncFileSystem:
                 page_size = options[ALLUXIO_PAGE_SIZE_KEY]
                 self.logger.debug(f"Page size is set to {page_size}")
         self.page_size = humanfriendly.parse_size(page_size, binary=True)
-        self.hash_provider = ConsistentHashProvider(
-            AlluxioClientConfig(
-                etcd_hosts=etcd_hosts,
-                etcd_port=int(etcd_port),
-                worker_hosts=worker_hosts,
-                worker_http_port=int(http_port),
-                hash_node_per_worker=ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE,
-                etcd_refresh_workers_interval=120,
-            )
-        )
         self.http_port = http_port
         self._loop = loop or asyncio.get_event_loop()
 
@@ -2276,15 +2261,36 @@ class AlluxioAsyncFileSystem:
             except AttributeError:
                 continue
 
-    def _get_preferred_worker_host(self, full_ufs_path: str):
-        workers = self.hash_provider.get_multiple_workers(full_ufs_path, 1)
-        if len(workers) != 1:
-            raise ValueError(
-                "Expected exactly one worker from hash ring, but found {} workers {}.".format(
-                    len(workers), workers
+    def _get_preferred_worker_host(self, full_ufs_path):
+        if self.loadbalancer is not None:
+            workers = self.loadbalancer.get_multiple_worker(full_ufs_path, 1)
+            if len(workers) != 1:
+                raise ValueError(
+                    "Expected exactly one worker from hash ring, but found {} workers {}.".format(
+                        len(workers), workers
+                    )
                 )
+            url = GET_NODE_ADDRESS_IP.format(
+                worker_host=workers[0].host,
+                http_port=workers[0].http_server_port,
+                file_path=full_ufs_path,
             )
-        return workers[0].host
+        else:
+            url = GET_NODE_ADDRESS_DOMAIN.format(
+                domain=self.config.load_balance_domain,
+                http_port=self.config.worker_http_port,
+                file_path=full_ufs_path,
+            )
+        try:
+            response = self.session.get(url)
+            response.raise_for_status()
+            data = json.loads(response.content)
+            ip = data["Host"]
+            port = data["HttpServerPort"]
+        except HTTPError:
+            ip = workers[0].host
+            port = workers[0].http_server_port
+        return ip, port
 
     def _validate_path(self, path: str):
         if not isinstance(path, str):
