@@ -2286,11 +2286,9 @@ class AlluxioAsyncFileSystem:
             response.raise_for_status()
             data = json.loads(response.content)
             ip = data["Host"]
-            port = data["HttpServerPort"]
         except HTTPError:
             ip = workers[0].host
-            port = workers[0].http_server_port
-        return ip, port
+        return ip
 
     def _validate_path(self, path: str):
         if not isinstance(path, str):
