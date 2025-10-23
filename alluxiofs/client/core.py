@@ -31,7 +31,6 @@ from requests import HTTPError
 from requests.adapters import HTTPAdapter
 
 from .config import AlluxioClientConfig
-from .const import ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
 from .const import ALLUXIO_REQUEST_MAX_RETRIES
@@ -2292,7 +2291,6 @@ class AlluxioAsyncFileSystem:
             ip = workers[0].host
             port = workers[0].http_server_port
         return ip, port
-
 
     def _validate_path(self, path: str):
         if not isinstance(path, str):
