@@ -58,6 +58,7 @@ from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
 from .loadbalance import WorkerListLoadBalancer
 from .utils import set_log_level
+from .cache import CachedFileReader, LocalCacheManager
 
 
 @dataclass
@@ -177,6 +178,7 @@ class AlluxioClient:
 
         self.use_local_disk_cache = self.config.use_local_disk_cache
         self.local_disk_cache_dir = self.config.local_disk_cache_dir
+        self.mcap_enabled = self.config.mcap_enabled
         if (
             self.local_disk_cache_dir
             and not self.local_disk_cache_dir.endswith("/")
@@ -187,6 +189,9 @@ class AlluxioClient:
                 os.makedirs(self.local_disk_cache_dir)
 
         self.async_persisting_pool = ThreadPoolExecutor(max_workers=8)
+        if self.mcap_enabled:
+            data_manager = LocalCacheManager(self.config.local_cache_dir,2048, logger=self.logger)
+            self.data_manager = CachedFileReader(self, data_manager, logger=self.logger)
 
     def listdir(self, path):
         """
@@ -517,6 +522,18 @@ class AlluxioClient:
             raise Exception(e)
 
     def read_file_range(self, file_path, offset=0, length=-1):
+        if self.mcap_enabled:
+            if length == -1:
+                file_status = self.get_file_status(file_path)
+                if file_status is None:
+                    raise FileNotFoundError(f"File {file_path} not found")
+                length = file_status.length - offset
+                return self.data_manager.read_file_range(file_path, offset, length, file_status.length)
+            else:
+                return self.data_manager.read_file_range(file_path, offset, length)
+        else:
+            return self.read_file_range_normal(file_path, offset, length)
+    def read_file_range_normal(self, file_path, offset=0, length=-1):
         """
         Reads the full file.
 
@@ -557,7 +574,7 @@ class AlluxioClient:
                 EXCEPTION_CONTENT.format(
                     worker_host=worker_host,
                     http_port=worker_http_port,
-                    error=f"Error when reading file {file_path}, " + e,
+                    error=f"Error when reading file {file_path}, {e}",
                 )
             )
 
@@ -1544,7 +1561,9 @@ class AlluxioClient:
     def _all_file_range_generator(
         self, worker_host, worker_http_port, path_id, file_path, offset, length
     ):
+        start_time = time.time()
         try:
+            headers = {"transfer-type": "chunked"}
             url = FULL_RANGE_URL_FORMAT.format(
                 worker_host=worker_host,
                 http_port=worker_http_port,
@@ -1553,9 +1572,21 @@ class AlluxioClient:
                 offset=offset,
                 length=length,
             )
-            response = requests.get(url)
-            response.raise_for_status()
-            return response.content
+            data = b''
+            with requests.get(
+                    url, headers=headers, stream=True
+            ) as response:
+                # Check for connection reset error (status code 104)
+                if response.status_code == 104:
+                    raise ConnectionResetError("Connection reset by peer")
+
+                response.raise_for_status()
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        data += chunk
+            end_time = time.time()
+            print("Read range took {:.2f} seconds".format(end_time - start_time))
+            return data
         except Exception:
             raise Exception(
                 EXCEPTION_CONTENT.format(

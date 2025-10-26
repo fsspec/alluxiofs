@@ -18,6 +18,8 @@ class AlluxioClientConfig:
         mem_map_capacity=1024,
         use_local_disk_cache=False,
         local_disk_cache_dir="/tmp/local_cache/",
+        local_cache_dir="/tmp/local_cache/",
+        mcap_enabled=False,
         **kwargs,
     ):
         """
@@ -55,6 +57,10 @@ class AlluxioClientConfig:
             local_disk_cache_dir, str
         ), "'local_disk_cache_dir' should be a string"
 
+        assert isinstance(
+            mcap_enabled, bool
+        ), "'mcap_enabled' should be a boolean"
+
         self.load_balance_domain = load_balance_domain
         self.worker_hosts = worker_hosts
         self.worker_http_port = worker_http_port
@@ -63,3 +69,5 @@ class AlluxioClientConfig:
         self.mem_map_capacity = mem_map_capacity
         self.use_local_disk_cache = use_local_disk_cache
         self.local_disk_cache_dir = local_disk_cache_dir
+        self.mcap_enabled = mcap_enabled
+        self.local_cache_dir = local_cache_dir
