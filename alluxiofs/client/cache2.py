@@ -96,10 +96,6 @@ class LocalCacheManager:
             self.logger.debug(f"[CACHE] Write failed for {file_path_hashed}: {e}")
             return False
 
-    def get_file_status(self, file_path, part_index):
-        file_path_hashed = self._get_local_path(file_path, part_index)
-        return self._get_block_status(file_path_hashed)
-
     def _get_block_status(self, file_path_hashed):
         """Get or create AtomicBlockStatus for a file path."""
         with self.lock:
@@ -198,7 +194,7 @@ class LocalCacheManager:
 # CachedFileReader: Handles remote fetch + cache coordination
 # =========================================================
 class CachedFileReader:
-    def __init__(self, alluxio=None, data_manager=None, max_workers=32, block_size=DEFAULT_BLOCK_SIZE, logger=None):
+    def __init__(self, alluxio=None, data_manager=None, max_workers=1, block_size=DEFAULT_BLOCK_SIZE, logger=None):
         self.cache = data_manager
         self.block_size = block_size
         self.logger = logger if logger is not None else None
@@ -225,11 +221,6 @@ class CachedFileReader:
         Download a specific file block and write it to cache atomically.
         """
         file_path, worker_host, worker_http_port, path_id, block_index, start, end, cache_dir = args
-        states = self.cache.get_file_status(file_path, block_index)  # Ensure status is initialized
-        if states == BlockStatus.CACHED or states == BlockStatus.LOADING:
-            return
-        headers = {"transfer-type": "chunked"}
-
         url = FULL_RANGE_URL_FORMAT.format(
             worker_host=worker_host,
             http_port=worker_http_port,
@@ -240,22 +231,9 @@ class CachedFileReader:
         )
         try:
             self.cache.set_file_loading(file_path, block_index)
-            start_time = time.time()
-            data = b''
-            with requests.get(
-                    url, headers=headers, stream=True
-            ) as response:
-                end_time = time.time()
-                print(
-                    f"[BLOCK] Downloaded block: {file_path}_{block_index}, size={end - start}B, time={end_time - start_time:.5f}s")
-                # Check for connection reset error (status code 104)
-                if response.status_code == 104:
-                    raise ConnectionResetError("Connection reset by peer")
-
-                response.raise_for_status()
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        data += chunk
+            resp = requests.get(url)
+            resp.raise_for_status()
+            data = resp.content
             self.cache.add_to_cache(file_path, block_index, data)
             self.logger.debug(f"[BLOCK] Block download complete: {file_path}_{block_index}, size={len(data)}B")
         except Exception as e:

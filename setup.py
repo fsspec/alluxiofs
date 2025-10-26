@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name="alluxiofs",
-    version="1.1.3",
+    version="1.0.22",
     description="Alluxio Fsspec provides Alluxio filesystem spec implementation.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
@@ -19,11 +19,8 @@ setup(
         "decorator",
         "humanfriendly",
         "requests",
-        "etcd3",
         "mmh3",
         "sortedcontainers",
-        "pycurl",
-        "cachetools",
     ],
     extras_require={
         "tests": [
@@ -33,7 +30,7 @@ setup(
             "pyarrow",
         ]
     },
-    python_requires=">=3.10",
+    python_requires=">=3.8",
     maintainer="Jiaming Mai, Xiaodong Yang, Lu Qiu",
     maintainer_email="jiamingmai@163.com, xiaodong163831@gmail.com, luqiujob@gmail.com",
     entry_points={
