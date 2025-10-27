@@ -349,15 +349,8 @@ class AlluxioFileSystem(AbstractFileSystem):
     @fallback_handler
     def info(self, path, **kwargs):
         path = self.unstrip_protocol(path)
-        if path in self.file_info_cache:
-            return self.file_info_cache[path]
-        else:
-            file_status = self.alluxio.get_file_status(path)
-            fsspec_info = self._translate_alluxio_info_to_fsspec_info(
-                file_status, True
-            )
-            self.file_info_cache[path] = fsspec_info
-            return fsspec_info
+        file_status = self.alluxio.get_file_status(path)
+        return self._translate_alluxio_info_to_fsspec_info(file_status, True)
 
     @fallback_handler
     def exists(self, path, **kwargs):

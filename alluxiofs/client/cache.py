@@ -1,11 +1,4 @@
-import os
-import queue
-
-import requests
-import tempfile
 from concurrent.futures import ThreadPoolExecutor
-from collections import OrderedDict
-from alluxiofs.client.const import FULL_RANGE_URL_FORMAT
 import hashlib
 import os
 import time
@@ -78,7 +71,7 @@ class LocalCacheManager:
             temp_file = tempfile.NamedTemporaryFile(dir=self.cache_dir, delete=False)
             temp_file.write(data)
             temp_file.flush()
-            os.fsync(temp_file.fileno())
+            # os.fsync(temp_file.fileno())
             temp_file.close()
 
             # Step 3: Atomic rename
@@ -155,7 +148,8 @@ class LocalCacheManager:
 
     def add_to_cache(self, file_path, part_index, data):
         path_hashed = self._get_local_path(file_path, part_index)
-        return self._atomic_write(path_hashed, data)
+        self.write_executor = ThreadPoolExecutor(max_workers=3)
+        return self.write_executor.submit(self._atomic_write, path_hashed, data)
 
     def read_from_cache(self, file_path, part_index, offset, length):
         """
@@ -219,57 +213,86 @@ class CachedFileReader:
         """Generate a stable hash for the given file path."""
         return hex(hash(file_path))
 
+
+
+    def fetch_range_via_shell(self, worker_host, worker_http_port, file_path, start, end,
+                              use_local_prefix=True, extra_headers=None, curl_timeout=60):
+        """
+        使用 curl 发起 Range 请求并返回完整 bytes。
+        如果 curl 失败，会回退到 requests（如果安装并可用）。
+        - worker_host, worker_http_port, file_path: 构造 URL
+        - start, end: range [start, end) （注意 end 不包含）
+        - extra_headers: dict of additional headers (e.g. {"transfer-type": "chunked"})
+        """
+        # 构造 URL（保留你的本地映射逻辑）
+        import subprocess
+        import time
+        url = f"http://{worker_host}:{worker_http_port}{file_path}"
+
+        range_header = f"bytes={start}-{end - 1}"
+        headers = [f"Range: {range_header}", "Accept: */*"]
+        if extra_headers:
+            for k, v in extra_headers.items():
+                headers.append(f"{k}: {v}")
+
+        cmd = ["curl", "-sS", "-L", "--fail", "--http1.1",
+               "--max-time", str(curl_timeout),
+               "--retry", "2", "--retry-delay", "1", url]
+        # 把 header 插入到命令中
+        for h in headers:
+            cmd[4:4] = ["-H", h]  # 插入 header 参数在 -L 之后（位置无严格要求）
+        try:
+            proc = subprocess.run(cmd, capture_output=True, check=True)
+            data = proc.stdout  # bytes
+            return data
+
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr.decode('utf-8', errors='ignore') if e.stderr else ''
+            rc = e.returncode
+            # 常见诊断建议（特别处理 curl 52）
+            diag = []
+            if rc == 52:
+                diag.append(
+                    "curl exit 52: 'Empty reply from server' — 可能是服务器在接收请求后直接断开（HTTP 协议/代理/负载均衡/防火墙问题或需要特殊 header）。")
+                diag.append("尝试：使用 --http1.1（已启用）、检查服务器日志、或用 -v 手动调试。")
+            diag_msg = " ".join(diag)
+
+            # 提示性的错误信息
+            err_msg = (f"curl command failed: returncode={rc}. stderr:\n{stderr}\n{diag_msg}")
+            # 回退到 requests（如果可用）
+            try:
+                import requests
+                req_headers = {"Range": range_header}
+                if extra_headers:
+                    req_headers.update(extra_headers)
+                r = requests.get(url, headers=req_headers, stream=False, timeout=curl_timeout)
+                r.raise_for_status()
+                data = r.content
+                return data
+            except Exception as req_e:
+                # 两者都失败，抛出带详细信息的异常
+                raise RuntimeError(f"{err_msg}\nFallback using requests also failed: {req_e!r}")
+
     def _fetch_block(self, args):
         """
         Function executed by each process:
         Download a specific file block and write it to cache atomically.
         """
-        file_path, worker_host, worker_http_port, path_id, block_index, start, end, cache_dir = args
+        file_path, alluxio_path, worker_host, worker_http_port, path_id, block_index, start, end, cache_dir = args
         states = self.cache.get_file_status(file_path, block_index)  # Ensure status is initialized
         if states == BlockStatus.CACHED or states == BlockStatus.LOADING:
             return
-        # headers = {"transfer-type": "chunked"}
-        #
-        # url = FULL_RANGE_URL_FORMAT.format(
-        #     worker_host=worker_host,
-        #     http_port=worker_http_port,
-        #     path_id=path_id,
-        #     file_path=file_path,
-        #     offset=start,
-        #     length=end - start,
-        # )
-        headers = {"Range": f"bytes={start}-{end - 1}"}
-        S3_RANGE_URL_FORMAT = "http://{worker_host}:{http_port}/{alluxio_path}"
-        url = S3_RANGE_URL_FORMAT.format(
-            worker_host=worker_host,
-            http_port=29998,
-            alluxio_path=file_path.replace("file:///home/yxd/alluxio/ufs", "/local"),
-        )
         try:
             self.cache.set_file_loading(file_path, block_index)
-            start_time = time.time()
-            data = b''
-            with requests.get(
-                    url, headers=headers, stream=True
-            ) as response:
-
-                # Check for connection reset error (status code 104)
-                if response.status_code == 104:
-                    raise ConnectionResetError("Connection reset by peer")
-
-                response.raise_for_status()
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        data += chunk
-            end_time = time.time()
-            print(
-                f"[BLOCK] Downloaded block: {file_path}_{block_index}, size={end - start}B, time={end_time - start_time:.5f}s")
+            data = self.fetch_range_via_shell(
+                worker_host, 29998, alluxio_path, start, end, path_id
+            )
             self.cache.add_to_cache(file_path, block_index, data)
             self.logger.debug(f"[BLOCK] Block download complete: {file_path}_{block_index}, size={len(data)}B")
         except Exception as e:
             self.logger.debug(f"[ERROR] Failed to download block ({block_index}): {e}")
 
-    def _parallel_download_file(self, file_path, offset=0, length=-1, file_size=None):
+    def _parallel_download_file(self, file_path, alluxio_path, offset=0, length=-1, file_size=None):
         """Use multiprocessing to download the entire file in parallel (per block)."""
         worker_host, worker_http_port = self._get_preferred_worker_address(file_path)
         path_id = self._get_path_hash(file_path)
@@ -280,8 +303,9 @@ class CachedFileReader:
         for i in range(start_block, end_block + 1):
             start = i * self.block_size
             end = (i + 1) * self.block_size
+            end = min(end, file_size)
             args_list.append((
-                file_path, worker_host, worker_http_port, path_id, i, start, end, self.cache.cache_dir
+                file_path, alluxio_path, worker_host, worker_http_port, path_id, i, start, end, self.cache.cache_dir
             ))
 
         self.logger.debug(f"[DOWNLOAD] Launching {end_block-start_block} processes to download {file_path}")
@@ -289,7 +313,7 @@ class CachedFileReader:
         for arg in args_list:
             self.pool.submit(self._fetch_block, arg)
 
-    def read_file_range(self, file_path, offset=0, length=-1, file_size=None):
+    def read_file_range(self, file_path, alluxio_path, offset=0, length=-1, file_size=None):
         """
         Read the requested file range.
         1. Try reading from the local cache.
@@ -307,12 +331,12 @@ class CachedFileReader:
             if chunk is None:
                 self.logger.debug(f"[MISS] Cache miss, triggering background download: {file_path}")
                 if state == BlockStatus.ABSENT:
-                    self._parallel_download_file(file_path, offset, length, file_size)
+                    self._parallel_download_file(file_path, alluxio_path, offset, length, file_size)
                 start_time = time.time()
                 chunk, state = self.cache.read_from_cache(file_path, blk, part_offset, part_length)
                 end_time = time.time()
                 if state != BlockStatus.CACHED:
-                    chunk = self.alluxio_client.read_file_range_normal(file_path, offset, length)
+                    chunk = self.alluxio_client.read_file_range_normal(file_path,alluxio_path, offset, length)
                     return chunk
                 self.logger.debug(f"[WAIT] 2 {end_time - start_time:.5f}")
 
@@ -330,7 +354,7 @@ class CachedFileReader:
         )
 
         # Expand the prefetch range by 16 blocks beyond the current end block
-        prefetch_ahead = 32
+        prefetch_ahead = self.alluxio_client.config.mcap_prefetch_ahead_blocks
         end_block = min(end_block + prefetch_ahead, (file_size - 1) // self.block_size)
         return start_block, end_block
 
