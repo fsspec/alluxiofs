@@ -561,16 +561,19 @@ class AlluxioFileSystem(AbstractFileSystem):
 class AlluxioFile(AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
         super().__init__(fs, path, mode, **kwargs)
+        self.alluxio_path = fs.info(path)["path"]
 
     def _fetch_range(self, start, end):
         """Get the specified set of bytes from remote"""
         import traceback
         try:
             res = self.fs.alluxio.read_file_range(
-                file_path=self.path, offset=start, length=end - start
+                file_path=self.path,
+                alluxio_path=self.alluxio_path,
+                offset=start, length=end - start
             )
         except Exception as e:
-            raise IOError(f"Failed to fetch range {start}-{end} of {self.path}: {e} {traceback.print_exc()}")
+            raise IOError(f"Failed to fetch range {start}-{end} of {self.alluxio_path}: {e} {traceback.print_exc()}")
         return res
 
     def read(self, length=-1):
