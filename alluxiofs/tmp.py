@@ -13,8 +13,10 @@ alluxio_fs = fsspec.filesystem(
 )
 
 
-parser = argparse.ArgumentParser(description="Alluxio MCAP sequential read performance tester.")
-parser.add_argument("--file-path", help="Unique ID for this process.")
-args = parser.parse_args()
+# parser = argparse.ArgumentParser(description="Alluxio MCAP sequential read performance tester.")
+# parser.add_argument("--file-path", help="Unique ID for this process.")
+# args = parser.parse_args()
 
-alluxio_fs.alluxio.read_file_range_normal(args.file_path)
+# alluxio_fs.alluxio.read_file_range_normal(args.file_path)
+
+alluxio_fs.alluxio.read_file_range_normal("file:///home/yxd/alluxio/ufs/large_test.mcap", offset=0, length=16*1024*1024)

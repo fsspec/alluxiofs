@@ -14,10 +14,10 @@ alluxio_fs = fsspec.filesystem(
 )
 # path = "bos://your-bucket"
 # res = alluxio_fs.ls(path)
-bucket_name = "yxd-fsspec"
+# bucket_name = "yxd-fsspec"
 test_folder_name = "python-sdk-test"
 # # the format of home_path: s3://{bucket_name}/{test_folder_name}
-home_path = "s3://" + bucket_name + "/" + test_folder_name
+# # home_path = "s3://" + bucket_name + "/" + test_folder_name
 # home_path = path + "python-sdk-test"
 
 
