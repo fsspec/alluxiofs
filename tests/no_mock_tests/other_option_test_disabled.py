@@ -18,7 +18,6 @@ alluxio_fs = fsspec.filesystem(
 test_folder_name = "python-sdk-test"
 # # the format of home_path: s3://{bucket_name}/{test_folder_name}
 # # home_path = "s3://" + bucket_name + "/" + test_folder_name
-home_path = "file:///home/yxd/alluxio/ufs/" + test_folder_name
 # home_path = path + "python-sdk-test"
 
 

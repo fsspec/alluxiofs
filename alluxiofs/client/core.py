@@ -1563,14 +1563,13 @@ class AlluxioClient:
     ):
         start_time = time.time()
         try:
-            headers = {"transfer-type": "chunked"}
-            url = FULL_RANGE_URL_FORMAT.format(
+
+            headers = {"Range": f"bytes={offset}-{offset + length - 1}"}
+            S3_RANGE_URL_FORMAT = "http://{worker_host}:{http_port}/{alluxio_path}"
+            url = S3_RANGE_URL_FORMAT.format(
                 worker_host=worker_host,
-                http_port=worker_http_port,
-                path_id=path_id,
-                file_path=file_path,
-                offset=offset,
-                length=length,
+                http_port=29998,
+                alluxio_path=file_path.replace("file:///home/yxd/alluxio/ufs", "/local"),
             )
             data = b''
             with requests.get(

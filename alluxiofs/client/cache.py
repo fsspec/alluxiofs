@@ -228,15 +228,22 @@ class CachedFileReader:
         states = self.cache.get_file_status(file_path, block_index)  # Ensure status is initialized
         if states == BlockStatus.CACHED or states == BlockStatus.LOADING:
             return
-        headers = {"transfer-type": "chunked"}
-
-        url = FULL_RANGE_URL_FORMAT.format(
+        # headers = {"transfer-type": "chunked"}
+        #
+        # url = FULL_RANGE_URL_FORMAT.format(
+        #     worker_host=worker_host,
+        #     http_port=worker_http_port,
+        #     path_id=path_id,
+        #     file_path=file_path,
+        #     offset=start,
+        #     length=end - start,
+        # )
+        headers = {"Range": f"bytes={start}-{end - 1}"}
+        S3_RANGE_URL_FORMAT = "http://{worker_host}:{http_port}/{alluxio_path}"
+        url = S3_RANGE_URL_FORMAT.format(
             worker_host=worker_host,
-            http_port=worker_http_port,
-            path_id=path_id,
-            file_path=file_path,
-            offset=start,
-            length=end - start,
+            http_port=29998,
+            alluxio_path=file_path.replace("file:///home/yxd/alluxio/ufs", "/local"),
         )
         try:
             self.cache.set_file_loading(file_path, block_index)
@@ -245,9 +252,7 @@ class CachedFileReader:
             with requests.get(
                     url, headers=headers, stream=True
             ) as response:
-                end_time = time.time()
-                print(
-                    f"[BLOCK] Downloaded block: {file_path}_{block_index}, size={end - start}B, time={end_time - start_time:.5f}s")
+
                 # Check for connection reset error (status code 104)
                 if response.status_code == 104:
                     raise ConnectionResetError("Connection reset by peer")
@@ -256,6 +261,9 @@ class CachedFileReader:
                 for chunk in response.iter_content(chunk_size=1024 * 1024):
                     if chunk:
                         data += chunk
+            end_time = time.time()
+            print(
+                f"[BLOCK] Downloaded block: {file_path}_{block_index}, size={end - start}B, time={end_time - start_time:.5f}s")
             self.cache.add_to_cache(file_path, block_index, data)
             self.logger.debug(f"[BLOCK] Block download complete: {file_path}_{block_index}, size={len(data)}B")
         except Exception as e:
