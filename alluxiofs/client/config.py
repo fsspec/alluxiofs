@@ -70,22 +70,28 @@ class AlluxioClientConfig:
         ), "'local_cache_dir' should be a string"
 
         assert (
-            isinstance(mcap_prefetch_ahead_blocks, int) and mcap_prefetch_ahead_blocks >= 0
+            isinstance(mcap_prefetch_ahead_blocks, int)
+            and mcap_prefetch_ahead_blocks >= 0
         ), "'mcap_prefetch_ahead_blocks' should be a non-negative integer"
 
         assert (
-            isinstance(mcap_prefetch_concurrency, int) and mcap_prefetch_concurrency > 0
+            isinstance(mcap_prefetch_concurrency, int)
+            and mcap_prefetch_concurrency > 0
         ), "'mcap_prefetch_concurrency' should be a positive integer"
 
         assert (
-                (isinstance(local_cache_size_gb, int) or isinstance(local_cache_size_gb, float))
-                and local_cache_size_gb > 0
-        ), "'local_cache_size_gb' should be a positive integer or float"
+            isinstance(local_cache_size_gb, int)
+            or isinstance(local_cache_size_gb, float)
+        ) and local_cache_size_gb > 0, (
+            "'local_cache_size_gb' should be a positive integer or float"
+        )
 
         assert (
-            (isinstance(local_cache_block_size_mb, int) or isinstance(local_cache_block_size_mb, float))
-            and local_cache_block_size_mb > 0
-        ), "'local_cache_block_size_mb' should be a positive integer or float"
+            isinstance(local_cache_block_size_mb, int)
+            or isinstance(local_cache_block_size_mb, float)
+        ) and local_cache_block_size_mb > 0, (
+            "'local_cache_block_size_mb' should be a positive integer or float"
+        )
 
         self.load_balance_domain = load_balance_domain
         self.worker_hosts = worker_hosts

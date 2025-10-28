@@ -1,15 +1,16 @@
-from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import os
-import time
 import tempfile
-from collections import OrderedDict
-from enum import Enum, auto
 import threading
+import time
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from enum import auto
+from enum import Enum
 
-from alluxiofs.client.const import (LOCAL_CACHE_DIR_DEFAULT,
-                                    DEFAULT_LOCAL_CACHE_SIZE_GB,
-                                    DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB)
+from alluxiofs.client.const import DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB
+from alluxiofs.client.const import DEFAULT_LOCAL_CACHE_SIZE_GB
+from alluxiofs.client.const import LOCAL_CACHE_DIR_DEFAULT
 
 # =========================================================
 # LocalCacheManager: Handles local cache operations, LRU eviction, and atomic writes
@@ -47,11 +48,13 @@ class AtomicInt:
 
 
 class LocalCacheManager:
-    def __init__(self, cache_dir=LOCAL_CACHE_DIR_DEFAULT,
-                 max_cache_size=DEFAULT_LOCAL_CACHE_SIZE_GB,
-                 block_size=DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB,
-                 thread_pool=ThreadPoolExecutor(max_workers=4),
-                 logger=None
+    def __init__(
+        self,
+        cache_dir=LOCAL_CACHE_DIR_DEFAULT,
+        max_cache_size=DEFAULT_LOCAL_CACHE_SIZE_GB,
+        block_size=DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB,
+        thread_pool=ThreadPoolExecutor(max_workers=4),
+        logger=None,
     ):
         self.cache_dir = cache_dir
         self.max_cache_size = int(max_cache_size * 1024 * 1024 * 1024)
@@ -96,7 +99,9 @@ class LocalCacheManager:
         temp_file = None
         try:
             # Step 2: Write to temporary file
-            temp_file = tempfile.NamedTemporaryFile(dir=self.cache_dir, delete=False)
+            temp_file = tempfile.NamedTemporaryFile(
+                dir=self.cache_dir, delete=False
+            )
             temp_file.write(data)
             temp_file.flush()
             # os.fsync(temp_file.fileno())
@@ -107,7 +112,9 @@ class LocalCacheManager:
             self._set_file_cached(file_path_hashed)
             self._update_cache_index(file_path_hashed)
             self.current_cache_size.add(len(data))
-            self.logger.debug(f"[CACHE] Atomic write completed: {file_path_hashed}")
+            self.logger.debug(
+                f"[CACHE] Atomic write completed: {file_path_hashed}"
+            )
             return True
 
         except Exception as e:
@@ -116,7 +123,9 @@ class LocalCacheManager:
                 os.remove(temp_file.name)
             with self.lock:
                 self.current_cache_size.sub(len(data))
-            self.logger.debug(f"[CACHE] Write failed for {file_path_hashed}: {e}")
+            self.logger.debug(
+                f"[CACHE] Write failed for {file_path_hashed}: {e}"
+            )
             return False
 
     def get_file_status(self, file_path, part_index):
@@ -167,9 +176,15 @@ class LocalCacheManager:
 
     def _evict_if_needed(self, data):
         """Perform LRU eviction when total cache size exceeds the limit."""
-        if self.current_cache_size.get() + len(data) <= self.max_cache_size * self.evcit_rate:
+        if (
+            self.current_cache_size.get() + len(data)
+            <= self.max_cache_size * self.evcit_rate
+        ):
             return
-        while self.current_cache_size.get() + len(data) > self.max_cache_size / 2 and self.cache_fd:
+        while (
+            self.current_cache_size.get() + len(data) > self.max_cache_size / 2
+            and self.cache_fd
+        ):
             old_path, _ = self.cache_fd.popitem(last=False)
             try:
                 size = os.path.getsize(old_path)
@@ -180,11 +195,14 @@ class LocalCacheManager:
                     os.remove(old_path)
                 if size:
                     self.current_cache_size.sub(size)
-                self.logger.debug(f"[LRU] Evicted old cache: {old_path} ({size} bytes)")
+                self.logger.debug(
+                    f"[LRU] Evicted old cache: {old_path} ({size} bytes)"
+                )
             except Exception as e:
                 print("Evict failed", e)
-                self.logger.debug(f"[LRU] Failed to evict cache {old_path}: {e}")
-
+                self.logger.debug(
+                    f"[LRU] Failed to evict cache {old_path}: {e}"
+                )
 
     def add_to_cache(self, file_path, part_index, data):
         path_hashed = self._get_local_path(file_path, part_index)
@@ -203,7 +221,9 @@ class LocalCacheManager:
         if status == BlockStatus.ABSENT:
             return None, BlockStatus.ABSENT
         elif status == BlockStatus.LOADING:
-            self.logger.debug(f"[CACHE] Block is currently loading: {file_path_hashed}")
+            self.logger.debug(
+                f"[CACHE] Block is currently loading: {file_path_hashed}"
+            )
             return None, BlockStatus.LOADING
         # If cached, read data
         if not os.path.exists(file_path_hashed):
@@ -240,10 +260,17 @@ class CachedFileReader:
         """Generate a stable hash for the given file path."""
         return hex(hash(file_path))
 
-
-
-    def fetch_range_via_shell(self, worker_host, worker_http_port, file_path, start, end,
-                              use_local_prefix=True, extra_headers=None, curl_timeout=60):
+    def fetch_range_via_shell(
+        self,
+        worker_host,
+        worker_http_port,
+        file_path,
+        start,
+        end,
+        use_local_prefix=True,
+        extra_headers=None,
+        curl_timeout=60,
+    ):
         """
         使用 curl 发起 Range 请求并返回完整 bytes。
         如果 curl 失败，会回退到 requests（如果安装并可用）。
@@ -252,6 +279,7 @@ class CachedFileReader:
         - extra_headers: dict of additional headers (e.g. {"transfer-type": "chunked"})
         """
         import subprocess
+
         url = f"http://{worker_host}:{worker_http_port}{file_path}"
 
         range_header = f"bytes={start}-{end - 1}"
@@ -260,9 +288,20 @@ class CachedFileReader:
             for k, v in extra_headers.items():
                 headers.append(f"{k}: {v}")
 
-        cmd = ["curl", "-sS", "-L", "--fail", "--http1.1",
-               "--max-time", str(curl_timeout),
-               "--retry", "2", "--retry-delay", "1", url]
+        cmd = [
+            "curl",
+            "-sS",
+            "-L",
+            "--fail",
+            "--http1.1",
+            "--max-time",
+            str(curl_timeout),
+            "--retry",
+            "2",
+            "--retry-delay",
+            "1",
+            url,
+        ]
         for h in headers:
             cmd[4:4] = ["-H", h]
         try:
@@ -271,35 +310,58 @@ class CachedFileReader:
             return data
 
         except subprocess.CalledProcessError as e:
-            stderr = e.stderr.decode('utf-8', errors='ignore') if e.stderr else ''
+            stderr = (
+                e.stderr.decode("utf-8", errors="ignore") if e.stderr else ""
+            )
             rc = e.returncode
             diag = []
             if rc == 52:
                 diag.append(
-                    "curl exit 52: 'Empty reply from server' — 可能是服务器在接收请求后直接断开（HTTP 协议/代理/负载均衡/防火墙问题或需要特殊 header）。")
+                    "curl exit 52: 'Empty reply from server' — 可能是服务器在接收请求后直接断开（HTTP 协议/代理/负载均衡/防火墙问题或需要特殊 header）。"
+                )
                 diag.append("尝试：使用 --http1.1（已启用）、检查服务器日志、或用 -v 手动调试。")
             diag_msg = " ".join(diag)
 
-            err_msg = (f"curl command failed: returncode={rc}. stderr:\n{stderr}\n{diag_msg}")
+            err_msg = f"curl command failed: returncode={rc}. stderr:\n{stderr}\n{diag_msg}"
             try:
                 import requests
+
                 req_headers = {"Range": range_header}
                 if extra_headers:
                     req_headers.update(extra_headers)
-                r = requests.get(url, headers=req_headers, stream=False, timeout=curl_timeout)
+                r = requests.get(
+                    url,
+                    headers=req_headers,
+                    stream=False,
+                    timeout=curl_timeout,
+                )
                 r.raise_for_status()
                 data = r.content
                 return data
             except Exception as req_e:
-                raise RuntimeError(f"{err_msg}\nFallback using requests also failed: {req_e!r}")
+                raise RuntimeError(
+                    f"{err_msg}\nFallback using requests also failed: {req_e!r}"
+                )
 
     def _fetch_block(self, args):
         """
         Function executed by each process:
         Download a specific file block and write it to cache atomically.
         """
-        file_path, alluxio_path, worker_host, worker_http_port, path_id, block_index, start, end, cache_dir = args
-        states = self.cache.get_file_status(file_path, block_index)  # Ensure status is initialized
+        (
+            file_path,
+            alluxio_path,
+            worker_host,
+            worker_http_port,
+            path_id,
+            block_index,
+            start,
+            end,
+            cache_dir,
+        ) = args
+        states = self.cache.get_file_status(
+            file_path, block_index
+        )  # Ensure status is initialized
         if states == BlockStatus.CACHED or states == BlockStatus.LOADING:
             return
         try:
@@ -308,32 +370,56 @@ class CachedFileReader:
                 worker_host, 29998, alluxio_path, start, end, path_id
             )
             self.cache.add_to_cache(file_path, block_index, data)
-            self.logger.debug(f"[BLOCK] Block download complete: {file_path}_{block_index}, size={len(data)}B")
+            self.logger.debug(
+                f"[BLOCK] Block download complete: {file_path}_{block_index}, size={len(data)}B"
+            )
         except Exception as e:
-            self.logger.debug(f"[ERROR] Failed to download block ({block_index}): {e}")
+            self.logger.debug(
+                f"[ERROR] Failed to download block ({block_index}): {e}"
+            )
 
-    def _parallel_download_file(self, file_path, alluxio_path, offset=0, length=-1, file_size=None):
+    def _parallel_download_file(
+        self, file_path, alluxio_path, offset=0, length=-1, file_size=None
+    ):
         """Use multiprocessing to download the entire file in parallel (per block)."""
-        worker_host, worker_http_port = self._get_preferred_worker_address(file_path)
+        worker_host, worker_http_port = self._get_preferred_worker_address(
+            file_path
+        )
         path_id = self._get_path_hash(file_path)
         if file_size is None:
             file_size = self.get_file_length(file_path)
-        start_block, end_block = self.get_blocks_prefetch(offset, length, file_size)
+        start_block, end_block = self.get_blocks_prefetch(
+            offset, length, file_size
+        )
         args_list = []
         for i in range(start_block, end_block + 1):
             start = i * self.block_size
             end = (i + 1) * self.block_size
             end = min(end, file_size)
-            args_list.append((
-                file_path, alluxio_path, worker_host, worker_http_port, path_id, i, start, end, self.cache.cache_dir
-            ))
+            args_list.append(
+                (
+                    file_path,
+                    alluxio_path,
+                    worker_host,
+                    worker_http_port,
+                    path_id,
+                    i,
+                    start,
+                    end,
+                    self.cache.cache_dir,
+                )
+            )
 
-        self.logger.debug(f"[DOWNLOAD] Launching {end_block-start_block} processes to download {file_path}")
+        self.logger.debug(
+            f"[DOWNLOAD] Launching {end_block - start_block} processes to download {file_path}"
+        )
         # self.pool.map_async(self._fetch_block, args_list)
         for arg in args_list:
             self.pool.submit(self._fetch_block, arg)
 
-    def read_file_range(self, file_path, alluxio_path, offset=0, length=-1, file_size=None):
+    def read_file_range(
+        self, file_path, alluxio_path, offset=0, length=-1, file_size=None
+    ):
         """
         Read the requested file range.
         1. Try reading from the local cache.
@@ -342,21 +428,37 @@ class CachedFileReader:
         start_block, end_block = self.get_blocks(offset, length, file_size)
         data = b""
         for blk in range(start_block, end_block + 1):
-            part_offset = offset - blk * self.block_size if blk == start_block else 0
-            part_length = min(length, self.block_size - part_offset) if length != -1 else -1
+            part_offset = (
+                offset - blk * self.block_size if blk == start_block else 0
+            )
+            part_length = (
+                min(length, self.block_size - part_offset)
+                if length != -1
+                else -1
+            )
             s1 = time.time()
-            chunk, state = self.cache.read_from_cache(file_path, blk, part_offset, part_length)
+            chunk, state = self.cache.read_from_cache(
+                file_path, blk, part_offset, part_length
+            )
             s2 = time.time()
             self.logger.debug(f"[WAIT] 1 {s2 - s1:.5f}")
             if chunk is None:
-                self.logger.debug(f"[MISS] Cache miss, triggering background download: {file_path}")
+                self.logger.debug(
+                    f"[MISS] Cache miss, triggering background download: {file_path}"
+                )
                 if state == BlockStatus.ABSENT:
-                    self._parallel_download_file(file_path, alluxio_path, offset, length, file_size)
+                    self._parallel_download_file(
+                        file_path, alluxio_path, offset, length, file_size
+                    )
                 start_time = time.time()
-                chunk, state = self.cache.read_from_cache(file_path, blk, part_offset, part_length)
+                chunk, state = self.cache.read_from_cache(
+                    file_path, blk, part_offset, part_length
+                )
                 end_time = time.time()
                 if state != BlockStatus.CACHED:
-                    chunk = self.alluxio_client.read_file_range_normal(file_path,alluxio_path, offset, length)
+                    chunk = self.alluxio_client.read_file_range_normal(
+                        file_path, alluxio_path, offset, length
+                    )
                     return chunk
                 self.logger.debug(f"[WAIT] 2 {end_time - start_time:.5f}")
 
@@ -365,7 +467,9 @@ class CachedFileReader:
 
     def get_blocks_prefetch(self, offset=0, length=-1, file_size=None):
         if length == -1 and file_size is None:
-            raise ValueError("file_size or length must be provided to determine block boundaries.")
+            raise ValueError(
+                "file_size or length must be provided to determine block boundaries."
+            )
         start_block = offset // self.block_size
         end_block = (
             (offset + length - 1) // self.block_size
@@ -374,7 +478,9 @@ class CachedFileReader:
         )
         # Expand the prefetch range by 16 blocks beyond the current end block
         prefetch_ahead = self.alluxio_client.config.mcap_prefetch_ahead_blocks
-        end_block = min(end_block + prefetch_ahead, (file_size - 1) // self.block_size)
+        end_block = min(
+            end_block + prefetch_ahead, (file_size - 1) // self.block_size
+        )
         return start_block, end_block
 
     def get_file_length(self, file_path):
@@ -387,10 +493,14 @@ class CachedFileReader:
 
     def get_blocks(self, offset=0, length=-1, file_size=None):
         if length == -1 and file_size is None:
-            raise ValueError("file_size or length must be provided to determine block boundaries.")
+            raise ValueError(
+                "file_size or length must be provided to determine block boundaries."
+            )
 
         start_block = offset // self.block_size
-        end_block = (offset + length - 1) // self.block_size if length != -1 else (file_size - 1) // self.block_size
+        end_block = (
+            (offset + length - 1) // self.block_size
+            if length != -1
+            else (file_size - 1) // self.block_size
+        )
         return start_block, end_block
-
-
