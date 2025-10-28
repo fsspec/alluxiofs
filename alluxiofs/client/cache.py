@@ -272,10 +272,9 @@ class CachedFileReader:
         curl_timeout=60,
     ):
         """
-        使用 curl 发起 Range 请求并返回完整 bytes。
-        如果 curl 失败，会回退到 requests（如果安装并可用）。
-        - worker_host, worker_http_port, file_path: 构造 URL
-        - start, end: range [start, end) （注意 end 不包含）
+        Fetch a byte range from the Alluxio worker using curl via subprocess.
+        - worker_host, worker_http_port, file_path: worker address and file path
+        - start, end: range [start, end) to fetch
         - extra_headers: dict of additional headers (e.g. {"transfer-type": "chunked"})
         """
         import subprocess
@@ -317,9 +316,9 @@ class CachedFileReader:
             diag = []
             if rc == 52:
                 diag.append(
-                    "curl exit 52: 'Empty reply from server' — 可能是服务器在接收请求后直接断开（HTTP 协议/代理/负载均衡/防火墙问题或需要特殊 header）。"
+                    "curl exit 52: 'Empty reply from server' - possibly the server disconnected immediately after receiving the request (HTTP protocol/proxy/load balancer/firewall issue or special header required)."
                 )
-                diag.append("尝试：使用 --http1.1（已启用）、检查服务器日志、或用 -v 手动调试。")
+                diag.append("Try: using --http1.1 (already enabled), checking server logs, or debugging manually with -v.")
             diag_msg = " ".join(diag)
 
             err_msg = f"curl command failed: returncode={rc}. stderr:\n{stderr}\n{diag_msg}"
