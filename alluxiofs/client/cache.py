@@ -318,7 +318,9 @@ class CachedFileReader:
                 diag.append(
                     "curl exit 52: 'Empty reply from server' - possibly the server disconnected immediately after receiving the request (HTTP protocol/proxy/load balancer/firewall issue or special header required)."
                 )
-                diag.append("Try: using --http1.1 (already enabled), checking server logs, or debugging manually with -v.")
+                diag.append(
+                    "Try: using --http1.1 (already enabled), checking server logs, or debugging manually with -v."
+                )
             diag_msg = " ".join(diag)
 
             err_msg = f"curl command failed: returncode={rc}. stderr:\n{stderr}\n{diag_msg}"
