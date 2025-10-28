@@ -3,20 +3,17 @@ import hashlib
 import os
 import time
 import tempfile
-import threading
 from collections import OrderedDict
 from enum import Enum, auto
+import threading
 
-# === Configuration ===
-DEFAULT_BLOCK_SIZE = 16 * 1024 * 1024  # 16 MB per block
-DEFAULT_CACHE_SIZE_MB = 1024  # Local cache capacity: 1 GB
-
+from alluxiofs.client.const import (LOCAL_CACHE_DIR_DEFAULT,
+                                    DEFAULT_LOCAL_CACHE_SIZE_GB,
+                                    DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB)
 
 # =========================================================
 # LocalCacheManager: Handles local cache operations, LRU eviction, and atomic writes
 # =========================================================
-LOCAL_CACHE_DIR = "/tmp/mcap_local_cache"
-DEFAULT_CACHE_SIZE_MB = 512
 
 
 class BlockStatus(Enum):
@@ -24,30 +21,61 @@ class BlockStatus(Enum):
     LOADING = auto()
     CACHED = auto()
 
+
+class AtomicInt:
+    def __init__(self, value=0):
+        self._value = value
+        self._lock = threading.Lock()
+
+    def get(self):
+        with self._lock:
+            return self._value
+
+    def set(self, value):
+        with self._lock:
+            self._value = value
+
+    def add(self, delta):
+        with self._lock:
+            self._value += delta
+            return self._value
+
+    def sub(self, delta):
+        with self._lock:
+            self._value -= delta
+            return self._value
+
+
 class LocalCacheManager:
-    def __init__(self, cache_dir=LOCAL_CACHE_DIR,
-                 block_size=16 * 1024 * 1024,
-                 max_cache_size_mb=DEFAULT_CACHE_SIZE_MB,
+    def __init__(self, cache_dir=LOCAL_CACHE_DIR_DEFAULT,
+                 max_cache_size=DEFAULT_LOCAL_CACHE_SIZE_GB,
+                 block_size=DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB,
+                 thread_pool=ThreadPoolExecutor(max_workers=4),
                  logger=None
     ):
         self.cache_dir = cache_dir
-        self.max_cache_size = max_cache_size_mb * 1024 * 1024  # Convert MB to bytes
-        self.block_size = block_size
-        self.logger = logger if logger is not None else self.logger.debug
+        self.max_cache_size = int(max_cache_size * 1024 * 1024 * 1024)
+        self.block_size = int(block_size * 1024 * 1024)
+        self.evcit_rate = 0.8
+        self.logger = logger
+        self.pool = thread_pool
         self.cache_fd = OrderedDict()
         self.Loading = set()
+        self.current_cache_size = AtomicInt(0)
 
         # Thread lock for concurrent safety of cache operations
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         os.makedirs(self.cache_dir, exist_ok=True)
         self._load_existing_cache()
 
     def _load_existing_cache(self):
         """Scan existing cache files and rebuild cache index at startup."""
+        self.current_cache_size.set(0)
         for f in os.listdir(self.cache_dir):
             fp = os.path.join(self.cache_dir, f)
             if os.path.isfile(fp):
                 self._set_file_cached(fp)
+                self.current_cache_size.add(os.path.getsize(fp))
 
     def _get_local_path(self, file_path, part_index):
         """Generate local cache file path for a given block."""
@@ -63,8 +91,8 @@ class LocalCacheManager:
         3. Rename to the final target file (atomic operation on the same filesystem)
         4. Atomically transition status from LOADING to CACHED
         """
-        status = self._get_block_status(file_path_hashed)
-
+        with self.lock:
+            self._evict_if_needed(data)
         temp_file = None
         try:
             # Step 2: Write to temporary file
@@ -78,7 +106,7 @@ class LocalCacheManager:
             os.rename(temp_file.name, file_path_hashed)
             self._set_file_cached(file_path_hashed)
             self._update_cache_index(file_path_hashed)
-
+            self.current_cache_size.add(len(data))
             self.logger.debug(f"[CACHE] Atomic write completed: {file_path_hashed}")
             return True
 
@@ -86,6 +114,8 @@ class LocalCacheManager:
             # On failure, reset status to ABSENT and clean up
             if temp_file and os.path.exists(temp_file.name):
                 os.remove(temp_file.name)
+            with self.lock:
+                self.current_cache_size.sub(len(data))
             self.logger.debug(f"[CACHE] Write failed for {file_path_hashed}: {e}")
             return False
 
@@ -130,26 +160,35 @@ class LocalCacheManager:
 
     def _update_cache_index(self, file_path_hashed):
         """Update access time and perform LRU eviction if needed."""
-        self.cache_fd.move_to_end(file_path_hashed)
-        self._evict_if_needed()
-
-    def _evict_if_needed(self):
-        """Perform LRU eviction when total cache size exceeds the limit."""
         with self.lock:
-            total_size = len(self.cache_fd) * self.block_size
-            while total_size > self.max_cache_size and self.cache_fd:
-                old_path = self.cache_fd.popitem(last=False)
-                try:
+            if file_path_hashed in self.cache_fd:
+                self.cache_fd[file_path_hashed] = time.time()
+                self.cache_fd.move_to_end(file_path_hashed)
+
+    def _evict_if_needed(self, data):
+        """Perform LRU eviction when total cache size exceeds the limit."""
+        if self.current_cache_size.get() + len(data) <= self.max_cache_size * self.evcit_rate:
+            return
+        while self.current_cache_size.get() + len(data) > self.max_cache_size / 2 and self.cache_fd:
+            old_path, _ = self.cache_fd.popitem(last=False)
+            try:
+                size = os.path.getsize(old_path)
+            except FileNotFoundError:
+                size = 0
+            try:
+                if os.path.exists(old_path):
                     os.remove(old_path)
-                    self.logger.debug(f"[LRU] Evicted old cache: {old_path}")
-                except FileNotFoundError:
-                    pass
-                total_size -= self.block_size
+                if size:
+                    self.current_cache_size.sub(size)
+                self.logger.debug(f"[LRU] Evicted old cache: {old_path} ({size} bytes)")
+            except Exception as e:
+                print("Evict failed", e)
+                self.logger.debug(f"[LRU] Failed to evict cache {old_path}: {e}")
+
 
     def add_to_cache(self, file_path, part_index, data):
         path_hashed = self._get_local_path(file_path, part_index)
-        self.write_executor = ThreadPoolExecutor(max_workers=3)
-        return self.write_executor.submit(self._atomic_write, path_hashed, data)
+        return self.pool.submit(self._atomic_write, path_hashed, data)
 
     def read_from_cache(self, file_path, part_index, offset, length):
         """
@@ -159,16 +198,13 @@ class LocalCacheManager:
         - If block is being written: (None, BlockStatus.LOADING)
         - If block is ready: (data, BlockStatus.CACHED)
         """
-        s1 = time.time()
         file_path_hashed = self._get_local_path(file_path, part_index)
         status = self._get_block_status(file_path_hashed)
-        s2 = time.time()
         if status == BlockStatus.ABSENT:
             return None, BlockStatus.ABSENT
         elif status == BlockStatus.LOADING:
             self.logger.debug(f"[CACHE] Block is currently loading: {file_path_hashed}")
             return None, BlockStatus.LOADING
-        s3 = time.time()
         # If cached, read data
         if not os.path.exists(file_path_hashed):
             self._set_file_absent(file_path_hashed)
@@ -176,15 +212,7 @@ class LocalCacheManager:
         with open(file_path_hashed, "rb") as f:
             f.seek(offset)
             data = f.read(length if length != -1 else None)
-        s4 = time.time()
         self._update_cache_index(file_path_hashed)
-        s5 = time.time()
-        self.logger.debug(f"1 {s2-s1:.5f}")
-        self.logger.debug(f"2 {s3 - s2:.5f}")
-        self.logger.debug(f"3 {s4 - s3:.5f}")
-        self.logger.debug(f"4 {s5 - s4:.5f}")
-        self.logger.debug(f"5 {s5 - s1:.5f}")
-        self.logger.debug(f"[CACHE] Read cache block: {file_path_hashed}")
         return data, BlockStatus.CACHED
 
 
@@ -192,13 +220,12 @@ class LocalCacheManager:
 # CachedFileReader: Handles remote fetch + cache coordination
 # =========================================================
 class CachedFileReader:
-    def __init__(self, alluxio=None, data_manager=None, max_workers=32, block_size=DEFAULT_BLOCK_SIZE, logger=None):
+    def __init__(self, alluxio=None, data_manager=None, logger=None):
         self.cache = data_manager
-        self.block_size = block_size
+        self.block_size = data_manager.block_size
         self.logger = logger if logger is not None else None
-        self.max_workers = max_workers
         self.alluxio_client = alluxio
-        self.pool = ThreadPoolExecutor(max_workers=self.max_workers)
+        self.pool = data_manager.pool
 
     def close(self):
         self.logger.debug("[FileReader] Closing worker pool...")
@@ -224,9 +251,7 @@ class CachedFileReader:
         - start, end: range [start, end) （注意 end 不包含）
         - extra_headers: dict of additional headers (e.g. {"transfer-type": "chunked"})
         """
-        # 构造 URL（保留你的本地映射逻辑）
         import subprocess
-        import time
         url = f"http://{worker_host}:{worker_http_port}{file_path}"
 
         range_header = f"bytes={start}-{end - 1}"
@@ -238,9 +263,8 @@ class CachedFileReader:
         cmd = ["curl", "-sS", "-L", "--fail", "--http1.1",
                "--max-time", str(curl_timeout),
                "--retry", "2", "--retry-delay", "1", url]
-        # 把 header 插入到命令中
         for h in headers:
-            cmd[4:4] = ["-H", h]  # 插入 header 参数在 -L 之后（位置无严格要求）
+            cmd[4:4] = ["-H", h]
         try:
             proc = subprocess.run(cmd, capture_output=True, check=True)
             data = proc.stdout  # bytes
@@ -249,7 +273,6 @@ class CachedFileReader:
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode('utf-8', errors='ignore') if e.stderr else ''
             rc = e.returncode
-            # 常见诊断建议（特别处理 curl 52）
             diag = []
             if rc == 52:
                 diag.append(
@@ -257,9 +280,7 @@ class CachedFileReader:
                 diag.append("尝试：使用 --http1.1（已启用）、检查服务器日志、或用 -v 手动调试。")
             diag_msg = " ".join(diag)
 
-            # 提示性的错误信息
             err_msg = (f"curl command failed: returncode={rc}. stderr:\n{stderr}\n{diag_msg}")
-            # 回退到 requests（如果可用）
             try:
                 import requests
                 req_headers = {"Range": range_header}
@@ -270,7 +291,6 @@ class CachedFileReader:
                 data = r.content
                 return data
             except Exception as req_e:
-                # 两者都失败，抛出带详细信息的异常
                 raise RuntimeError(f"{err_msg}\nFallback using requests also failed: {req_e!r}")
 
     def _fetch_block(self, args):
@@ -352,7 +372,6 @@ class CachedFileReader:
             if length != -1
             else (file_size - 1) // self.block_size
         )
-
         # Expand the prefetch range by 16 blocks beyond the current end block
         prefetch_ahead = self.alluxio_client.config.mcap_prefetch_ahead_blocks
         end_block = min(end_block + prefetch_ahead, (file_size - 1) // self.block_size)

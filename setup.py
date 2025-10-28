@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name="alluxiofs",
-    version="1.0.22",
+    version="1.1.1",
     description="Alluxio Fsspec provides Alluxio filesystem spec implementation.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
