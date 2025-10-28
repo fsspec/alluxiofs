@@ -11,6 +11,9 @@ ALLUXIO_CLUSTER_NAME_DEFAULT_VALUE = "DefaultAlluxioCluster"
 ALLUXIO_PAGE_SIZE_KEY = "alluxio.worker.page.store.page.size"
 ALLUXIO_PAGE_SIZE_DEFAULT_VALUE = "1MB"
 ALLUXIO_REQUEST_MAX_RETRIES = 3
+LOCAL_CACHE_DIR_DEFAULT = "/tmp/mcap_local_cache"
+DEFAULT_LOCAL_CACHE_SIZE_GB = 64
+DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB = 16
 ALLUXIO_HASH_NODE_PER_WORKER_KEY1 = (
     "alluxio.user.consistent.hash.virtual.node.count.per.worker"
 )

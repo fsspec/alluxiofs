@@ -189,11 +189,19 @@ class AlluxioClient:
 
         self.async_persisting_pool = ThreadPoolExecutor(max_workers=8)
         if self.mcap_enabled:
-            data_manager = LocalCacheManager(self.config.local_cache_dir, 2048, logger=self.logger)
-            self.data_manager = CachedFileReader(self, data_manager,
-                                                 max_workers=self.config.mcap_prefetch_concurrency,
-                                                 logger=self.logger
-                                                 )
+            self.mcap_async_prefetch_thread_pool = ThreadPoolExecutor(self.config.mcap_prefetch_concurrency)
+            data_manager = LocalCacheManager(
+                cache_dir=self.config.local_cache_dir,
+                max_cache_size=self.config.local_cache_size_gb,
+                block_size=self.config.local_cache_block_size_mb,
+                thread_pool=self.mcap_async_prefetch_thread_pool,
+                logger=self.logger
+            )
+            self.data_manager = CachedFileReader(
+                self,
+                data_manager,
+                logger=self.logger
+            )
 
     def listdir(self, path):
         """
@@ -1591,7 +1599,7 @@ class AlluxioClient:
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     error=f"Error when reading file {path_id} with offset {offset} and length {length},"
-                          f" error: {response.content.decode('utf-8')} {e}",
+                          f" error: {e}",
                 )
             )
 
