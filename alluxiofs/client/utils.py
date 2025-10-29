@@ -7,6 +7,9 @@
 #
 # See the NOTICE file distributed with this work for information regarding copyright ownership.
 import logging
+from io import BytesIO
+
+import pycurl
 
 
 def set_log_level(logger, test_options):
@@ -20,3 +23,25 @@ def set_log_level(logger, test_options):
             logger.setLevel(logging.WARN)
         else:
             logger.warning(f"Unsupported log level: {log_level}")
+
+
+def _c_send_request(url, headers):
+    buffer = BytesIO()
+    c = pycurl.Curl()
+    headers = [f"{k}: {v}".encode("utf-8") for k, v in headers.items()]
+    c.setopt(c.URL, url.encode("utf-8"))
+    c.setopt(c.HTTPHEADER, headers)
+    c.setopt(c.WRITEDATA, buffer)
+    c.setopt(c.FOLLOWLOCATION, True)
+    c.setopt(c.CONNECTTIMEOUT, 10)
+    c.setopt(c.TIMEOUT, 60)
+    c.perform()
+    status = c.getinfo(c.RESPONSE_CODE)
+    c.close()
+
+    if status == 104:
+        raise ConnectionResetError("Connection reset by peer")
+    elif status >= 400:
+        raise RuntimeError(f"HTTP error: {status}")
+
+    return buffer.getvalue()

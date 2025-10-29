@@ -58,6 +58,7 @@ from .const import TOUCH_URL_FORMAT
 from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
 from .loadbalance import WorkerListLoadBalancer
+from .utils import _c_send_request
 from .utils import set_log_level
 
 
@@ -1584,23 +1585,14 @@ class AlluxioClient:
         try:
             headers = {"Range": f"bytes={offset}-{offset + length - 1}"}
             S3_RANGE_URL_FORMAT = (
-                "http://{worker_host}:{http_port}/{alluxio_path}"
+                "http://{worker_host}:{http_port}{alluxio_path}"
             )
             url = S3_RANGE_URL_FORMAT.format(
                 worker_host=worker_host,
                 http_port=29998,
                 alluxio_path=file_path,
             )
-            data = b""
-            with requests.get(url, headers=headers, stream=True) as response:
-                # Check for connection reset error (status code 104)
-                if response.status_code == 104:
-                    raise ConnectionResetError("Connection reset by peer")
-
-                response.raise_for_status()
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        data += chunk
+            data = _c_send_request(url, headers)
             return data
         except Exception as e:
             raise Exception(

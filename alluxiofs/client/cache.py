@@ -11,12 +11,12 @@ from enum import Enum
 from alluxiofs.client.const import DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB
 from alluxiofs.client.const import DEFAULT_LOCAL_CACHE_SIZE_GB
 from alluxiofs.client.const import LOCAL_CACHE_DIR_DEFAULT
+from alluxiofs.client.utils import _c_send_request
+
 
 # =========================================================
 # LocalCacheManager: Handles local cache operations, LRU eviction, and atomic writes
 # =========================================================
-
-
 class BlockStatus(Enum):
     ABSENT = auto()
     LOADING = auto()
@@ -261,88 +261,22 @@ class CachedFileReader:
         return hex(hash(file_path))
 
     def fetch_range_via_shell(
-        self,
-        worker_host,
-        worker_http_port,
-        file_path,
-        start,
-        end,
-        use_local_prefix=True,
-        extra_headers=None,
-        curl_timeout=60,
+        self, worker_host, worker_http_port, file_path, start, end
     ):
         """
         Fetch a byte range from the Alluxio worker using curl via subprocess.
         - worker_host, worker_http_port, file_path: worker address and file path
         - start, end: range [start, end) to fetch
-        - extra_headers: dict of additional headers (e.g. {"transfer-type": "chunked"})
         """
-        import subprocess
-
-        url = f"http://{worker_host}:{worker_http_port}{file_path}"
-
-        range_header = f"bytes={start}-{end - 1}"
-        headers = [f"Range: {range_header}", "Accept: */*"]
-        if extra_headers:
-            for k, v in extra_headers.items():
-                headers.append(f"{k}: {v}")
-
-        cmd = [
-            "curl",
-            "-sS",
-            "-L",
-            "--fail",
-            "--http1.1",
-            "--max-time",
-            str(curl_timeout),
-            "--retry",
-            "2",
-            "--retry-delay",
-            "1",
-            url,
-        ]
-        for h in headers:
-            cmd[4:4] = ["-H", h]
-        try:
-            proc = subprocess.run(cmd, capture_output=True, check=True)
-            data = proc.stdout  # bytes
-            return data
-
-        except subprocess.CalledProcessError as e:
-            stderr = (
-                e.stderr.decode("utf-8", errors="ignore") if e.stderr else ""
-            )
-            rc = e.returncode
-            diag = []
-            if rc == 52:
-                diag.append(
-                    "curl exit 52: 'Empty reply from server' - possibly the server disconnected immediately after receiving the request (HTTP protocol/proxy/load balancer/firewall issue or special header required)."
-                )
-                diag.append(
-                    "Try: using --http1.1 (already enabled), checking server logs, or debugging manually with -v."
-                )
-            diag_msg = " ".join(diag)
-
-            err_msg = f"curl command failed: returncode={rc}. stderr:\n{stderr}\n{diag_msg}"
-            try:
-                import requests
-
-                req_headers = {"Range": range_header}
-                if extra_headers:
-                    req_headers.update(extra_headers)
-                r = requests.get(
-                    url,
-                    headers=req_headers,
-                    stream=False,
-                    timeout=curl_timeout,
-                )
-                r.raise_for_status()
-                data = r.content
-                return data
-            except Exception as req_e:
-                raise RuntimeError(
-                    f"{err_msg}\nFallback using requests also failed: {req_e!r}"
-                )
+        headers = {"Range": f"bytes={start}-{end - 1}"}
+        S3_RANGE_URL_FORMAT = "http://{worker_host}:{http_port}{alluxio_path}"
+        url = S3_RANGE_URL_FORMAT.format(
+            worker_host=worker_host,
+            http_port=29998,
+            alluxio_path=file_path,
+        )
+        data = _c_send_request(url, headers)
+        return data
 
     def _fetch_block(self, args):
         """
@@ -368,7 +302,7 @@ class CachedFileReader:
         try:
             self.cache.set_file_loading(file_path, block_index)
             data = self.fetch_range_via_shell(
-                worker_host, 29998, alluxio_path, start, end, path_id
+                worker_host, 29998, alluxio_path, start, end
             )
             self.cache.add_to_cache(file_path, block_index, data)
             self.logger.debug(
