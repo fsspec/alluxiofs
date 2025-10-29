@@ -25,7 +25,7 @@ def set_log_level(logger, test_options):
             logger.warning(f"Unsupported log level: {log_level}")
 
 
-def _c_send_get_request(url, headers):
+def _c_send_request(url, headers):
     buffer = BytesIO()
     c = pycurl.Curl()
     headers = [f"{k}: {v}".encode("utf-8") for k, v in headers.items()]
@@ -45,25 +45,3 @@ def _c_send_get_request(url, headers):
         raise RuntimeError(f"HTTP error: {status}")
 
     return buffer.getvalue()
-
-
-def _c_send_get_request_stream(url, headers={}):
-    buffer = BytesIO()
-    c = pycurl.Curl()
-    headers = [f"{k}: {v}".encode("utf-8") for k, v in headers.items()]
-    c.setopt(c.URL, url.encode("utf-8"))
-    c.setopt(c.HTTPHEADER, headers)
-    c.setopt(c.WRITEDATA, buffer)
-    c.setopt(c.FOLLOWLOCATION, True)
-    c.setopt(c.CONNECTTIMEOUT, 10)
-    c.setopt(c.TIMEOUT, 60)
-    c.perform()
-    status = c.getinfo(c.RESPONSE_CODE)
-    c.close()
-
-    if status == 104:
-        raise ConnectionResetError("Connection reset by peer")
-    elif status >= 400:
-        raise RuntimeError(f"HTTP error: {status}")
-
-    return buffer
