@@ -373,6 +373,8 @@ class AlluxioFileSystem(AbstractFileSystem):
         **kwargs,
     ):
         path = self.unstrip_protocol(path)
+        if self.alluxio.config.mcap_enabled:
+            kwargs["cache_type"] = "mcap"
         return AlluxioFile(
             fs=self,
             path=path,
@@ -568,6 +570,7 @@ class AlluxioFile(AbstractBufferedFile):
         import traceback
 
         try:
+            # print(f"Fetching range {start}-{end} of {self.alluxio_path}")
             res = self.fs.alluxio.read_file_range(
                 file_path=self.path,
                 alluxio_path=self.alluxio_path,

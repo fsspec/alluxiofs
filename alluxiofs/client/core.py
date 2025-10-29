@@ -49,6 +49,7 @@ from .const import LIST_URL_FORMAT
 from .const import LOAD_PROGRESS_URL_FORMAT
 from .const import LOAD_SUBMIT_URL_FORMAT
 from .const import LOAD_URL_FORMAT
+from .const import MAGIC_SIZE
 from .const import MKDIR_URL_FORMAT
 from .const import MV_URL_FORMAT
 from .const import PAGE_URL_FORMAT
@@ -535,6 +536,10 @@ class AlluxioClient:
 
     def read_file_range(self, file_path, alluxio_path, offset=0, length=-1):
         if self.mcap_enabled:
+            if offset == 0 and length == MAGIC_SIZE:
+                return self.data_manager.read_magic_bytes(
+                    file_path, alluxio_path
+                )
             if length == -1:
                 file_status = self.get_file_status(file_path)
                 if file_status is None:
