@@ -58,7 +58,7 @@ from .const import TOUCH_URL_FORMAT
 from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
 from .loadbalance import WorkerListLoadBalancer
-from .utils import _c_send_request
+from .utils import _c_send_get_request
 from .utils import set_log_level
 
 
@@ -1592,7 +1592,7 @@ class AlluxioClient:
                 http_port=29998,
                 alluxio_path=file_path,
             )
-            data = _c_send_request(url, headers)
+            data = _c_send_get_request(url, headers)
             return data
         except Exception as e:
             raise Exception(

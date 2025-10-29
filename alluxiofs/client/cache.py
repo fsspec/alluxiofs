@@ -11,7 +11,7 @@ from enum import Enum
 from alluxiofs.client.const import DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB
 from alluxiofs.client.const import DEFAULT_LOCAL_CACHE_SIZE_GB
 from alluxiofs.client.const import LOCAL_CACHE_DIR_DEFAULT
-from alluxiofs.client.utils import _c_send_request
+from alluxiofs.client.utils import _c_send_get_request
 
 
 # =========================================================
@@ -275,7 +275,7 @@ class CachedFileReader:
             http_port=29998,
             alluxio_path=file_path,
         )
-        data = _c_send_request(url, headers)
+        data = _c_send_get_request(url, headers)
         return data
 
     def _fetch_block(self, args):
