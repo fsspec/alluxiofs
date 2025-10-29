@@ -8,15 +8,21 @@ from concurrent.futures import ThreadPoolExecutor
 from enum import auto
 from enum import Enum
 
-from alluxiofs.client.const import DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB
-from alluxiofs.client.const import DEFAULT_LOCAL_CACHE_SIZE_GB
-from alluxiofs.client.const import LOCAL_CACHE_DIR_DEFAULT
-from alluxiofs.client.utils import _c_send_get_request
+from fsspec.caching import BaseCache
+from fsspec.caching import Fetcher
+from fsspec.caching import ReadAheadCache
 
+from .const import DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB
+from .const import DEFAULT_LOCAL_CACHE_SIZE_GB
+from .const import LOCAL_CACHE_DIR_DEFAULT
+from .const import MAGIC_SIZE
+from .utils import _c_send_get_request
 
 # =========================================================
 # LocalCacheManager: Handles local cache operations, LRU eviction, and atomic writes
 # =========================================================
+
+
 class BlockStatus(Enum):
     ABSENT = auto()
     LOADING = auto()
@@ -439,3 +445,34 @@ class CachedFileReader:
             else (file_size - 1) // self.block_size
         )
         return start_block, end_block
+
+    def read_magic_bytes(self, file_path, alluxio_path):
+        """Read the magic bytes from the beginning of the file."""
+        file_path_hashed = self.cache._get_local_path(file_path, 0)
+        if os.path.exists(file_path_hashed):
+            with open(file_path_hashed, "rb") as f:
+                data = f.read(MAGIC_SIZE)
+        else:
+            self.alluxio_client.read_file_range_normal(
+                file_path, alluxio_path, 0, MAGIC_SIZE
+            )
+        return data
+
+
+class McapMemoryCache(BaseCache):
+    name = "mcap"
+
+    def __init__(self, blocksize: int, fetcher: Fetcher, size: int) -> None:
+        super().__init__(blocksize, fetcher, size)
+        self.magic_bytes = None
+        self.cache = ReadAheadCache(blocksize, fetcher, size)
+
+    def _fetch(self, start: int | None, stop: int | None) -> bytes:
+        if start == 0 and stop == MAGIC_SIZE:
+            if self.magic_bytes is not None:
+                return self.magic_bytes
+            else:
+                self.magic_bytes = self.cache._fetch(start, stop)
+                return self.magic_bytes
+        else:
+            return self.cache._fetch(start, stop)
