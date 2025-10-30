@@ -15,13 +15,13 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Callable
 
+from cachetools import LRUCache
 from fsspec import AbstractFileSystem
 from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
 
 from alluxiofs.client import AlluxioClient
 from alluxiofs.client.utils import set_log_level
-from cachetools import LRUCache
 
 
 def setup_logger(
