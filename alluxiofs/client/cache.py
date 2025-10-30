@@ -453,7 +453,7 @@ class CachedFileReader:
             with open(file_path_hashed, "rb") as f:
                 data = f.read(MAGIC_SIZE)
         else:
-            self.alluxio_client.read_file_range_normal(
+            data = self.alluxio_client.read_file_range_normal(
                 file_path, alluxio_path, 0, MAGIC_SIZE
             )
         return data
@@ -472,7 +472,7 @@ class McapMemoryCache(BaseCache):
             if self.magic_bytes is not None:
                 return self.magic_bytes
             else:
-                self.magic_bytes = self.cache._fetch(start, stop)
+                self.magic_bytes = self.fetcher(start, stop)
                 return self.magic_bytes
         else:
             return self.cache._fetch(start, stop)

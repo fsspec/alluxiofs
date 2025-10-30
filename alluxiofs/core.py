@@ -21,6 +21,7 @@ from fsspec.spec import AbstractBufferedFile
 
 from alluxiofs.client import AlluxioClient
 from alluxiofs.client.utils import set_log_level
+from cachetools import LRUCache
 
 
 def setup_logger(
@@ -185,6 +186,8 @@ class AlluxioFileSystem(AbstractFileSystem):
             if preload_path is not None:
                 self.alluxio.load(preload_path)
 
+        self.file_info_cache = LRUCache(maxsize=1000)
+
         def _strip_alluxiofs_protocol(path):
             def _strip_individual_path(p):
                 if p.startswith(self.protocol_prefix):
@@ -346,8 +349,15 @@ class AlluxioFileSystem(AbstractFileSystem):
     @fallback_handler
     def info(self, path, **kwargs):
         path = self.unstrip_protocol(path)
-        file_status = self.alluxio.get_file_status(path)
-        return self._translate_alluxio_info_to_fsspec_info(file_status, True)
+        if path in self.file_info_cache:
+            return self.file_info_cache[path]
+        else:
+            file_status = self.alluxio.get_file_status(path)
+            fsspec_info = self._translate_alluxio_info_to_fsspec_info(
+                file_status, True
+            )
+            self.file_info_cache[path] = fsspec_info
+            return fsspec_info
 
     @fallback_handler
     def exists(self, path, **kwargs):
@@ -562,7 +572,10 @@ class AlluxioFileSystem(AbstractFileSystem):
 
 class AlluxioFile(AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
+        s2 = time.time()
         super().__init__(fs, path, mode, **kwargs)
+        e2 = time.time()
+        print(f"AlluxioFile init time: {e2 - s2:.2f}s")
         self.alluxio_path = fs.info(path)["path"]
 
     def _fetch_range(self, start, end):

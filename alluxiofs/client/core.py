@@ -27,6 +27,7 @@ from typing import Tuple
 import aiohttp
 import humanfriendly
 import requests
+from cachetools import LRUCache
 from requests import HTTPError
 from requests.adapters import HTTPAdapter
 
@@ -192,6 +193,7 @@ class AlluxioClient:
 
         self.async_persisting_pool = ThreadPoolExecutor(max_workers=8)
         if self.mcap_enabled:
+            self.magic_bytes_cache = LRUCache(maxsize=10000)
             self.mcap_async_prefetch_thread_pool = ThreadPoolExecutor(
                 self.config.mcap_prefetch_concurrency
             )
@@ -537,9 +539,13 @@ class AlluxioClient:
     def read_file_range(self, file_path, alluxio_path, offset=0, length=-1):
         if self.mcap_enabled:
             if offset == 0 and length == MAGIC_SIZE:
-                return self.data_manager.read_magic_bytes(
+                if file_path in self.magic_bytes_cache:
+                    return self.magic_bytes_cache[file_path]
+                magic_bytes = self.data_manager.read_magic_bytes(
                     file_path, alluxio_path
                 )
+                self.magic_bytes_cache[file_path] = magic_bytes
+                return magic_bytes
             if length == -1:
                 file_status = self.get_file_status(file_path)
                 if file_status is None:
