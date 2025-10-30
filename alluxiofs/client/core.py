@@ -27,9 +27,12 @@ from typing import Tuple
 import aiohttp
 import humanfriendly
 import requests
+from cachetools import LRUCache
 from requests import HTTPError
 from requests.adapters import HTTPAdapter
 
+from .cache import CachedFileReader
+from .cache import LocalCacheManager
 from .config import AlluxioClientConfig
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
@@ -39,7 +42,6 @@ from .const import CP_URL_FORMAT
 from .const import EXCEPTION_CONTENT
 from .const import FULL_CHUNK_URL_FORMAT
 from .const import FULL_PAGE_URL_FORMAT
-from .const import FULL_RANGE_URL_FORMAT
 from .const import GET_FILE_STATUS_URL_FORMAT
 from .const import GET_NODE_ADDRESS_DOMAIN
 from .const import GET_NODE_ADDRESS_IP
@@ -48,6 +50,7 @@ from .const import LIST_URL_FORMAT
 from .const import LOAD_PROGRESS_URL_FORMAT
 from .const import LOAD_SUBMIT_URL_FORMAT
 from .const import LOAD_URL_FORMAT
+from .const import MAGIC_SIZE
 from .const import MKDIR_URL_FORMAT
 from .const import MV_URL_FORMAT
 from .const import PAGE_URL_FORMAT
@@ -57,6 +60,7 @@ from .const import TOUCH_URL_FORMAT
 from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
 from .loadbalance import WorkerListLoadBalancer
+from .utils import _c_send_get_request
 from .utils import set_log_level
 
 
@@ -177,6 +181,7 @@ class AlluxioClient:
 
         self.use_local_disk_cache = self.config.use_local_disk_cache
         self.local_disk_cache_dir = self.config.local_disk_cache_dir
+        self.mcap_enabled = self.config.mcap_enabled
         if (
             self.local_disk_cache_dir
             and not self.local_disk_cache_dir.endswith("/")
@@ -187,6 +192,21 @@ class AlluxioClient:
                 os.makedirs(self.local_disk_cache_dir)
 
         self.async_persisting_pool = ThreadPoolExecutor(max_workers=8)
+        if self.mcap_enabled:
+            self.magic_bytes_cache = LRUCache(maxsize=10000)
+            self.mcap_async_prefetch_thread_pool = ThreadPoolExecutor(
+                self.config.mcap_prefetch_concurrency
+            )
+            data_manager = LocalCacheManager(
+                cache_dir=self.config.local_cache_dir,
+                max_cache_size=self.config.local_cache_size_gb,
+                block_size=self.config.local_cache_block_size_mb,
+                thread_pool=self.mcap_async_prefetch_thread_pool,
+                logger=self.logger,
+            )
+            self.data_manager = CachedFileReader(
+                self, data_manager, logger=self.logger
+            )
 
     def listdir(self, path):
         """
@@ -516,7 +536,36 @@ class AlluxioClient:
         except Exception as e:
             raise Exception(e)
 
-    def read_file_range(self, file_path, offset=0, length=-1):
+    def read_file_range(self, file_path, alluxio_path, offset=0, length=-1):
+        if self.mcap_enabled:
+            if offset == 0 and length == MAGIC_SIZE:
+                if file_path in self.magic_bytes_cache:
+                    return self.magic_bytes_cache[file_path]
+                magic_bytes = self.data_manager.read_magic_bytes(
+                    file_path, alluxio_path
+                )
+                self.magic_bytes_cache[file_path] = magic_bytes
+                return magic_bytes
+            if length == -1:
+                file_status = self.get_file_status(file_path)
+                if file_status is None:
+                    raise FileNotFoundError(f"File {file_path} not found")
+                length = file_status.length - offset
+                return self.data_manager.read_file_range(
+                    file_path, alluxio_path, offset, length, file_status.length
+                )
+            else:
+                return self.data_manager.read_file_range(
+                    file_path, alluxio_path, offset, length
+                )
+        else:
+            return self.read_file_range_normal(
+                file_path, alluxio_path, offset, length
+            )
+
+    def read_file_range_normal(
+        self, file_path, alluxio_path, offset=0, length=-1
+    ):
         """
         Reads the full file.
 
@@ -539,7 +588,7 @@ class AlluxioClient:
                     worker_host,
                     worker_http_port,
                     path_id,
-                    file_path,
+                    alluxio_path,
                     offset,
                     length,
                 )
@@ -548,7 +597,7 @@ class AlluxioClient:
                     worker_host,
                     worker_http_port,
                     path_id,
-                    file_path,
+                    alluxio_path,
                     offset,
                     length,
                 )
@@ -557,7 +606,7 @@ class AlluxioClient:
                 EXCEPTION_CONTENT.format(
                     worker_host=worker_host,
                     http_port=worker_http_port,
-                    error=f"Error when reading file {file_path}, " + e,
+                    error=f"Error when reading file {file_path}, {e}",
                 )
             )
 
@@ -1545,24 +1594,24 @@ class AlluxioClient:
         self, worker_host, worker_http_port, path_id, file_path, offset, length
     ):
         try:
-            url = FULL_RANGE_URL_FORMAT.format(
-                worker_host=worker_host,
-                http_port=worker_http_port,
-                path_id=path_id,
-                file_path=file_path,
-                offset=offset,
-                length=length,
+            headers = {"Range": f"bytes={offset}-{offset + length - 1}"}
+            S3_RANGE_URL_FORMAT = (
+                "http://{worker_host}:{http_port}{alluxio_path}"
             )
-            response = requests.get(url)
-            response.raise_for_status()
-            return response.content
-        except Exception:
+            url = S3_RANGE_URL_FORMAT.format(
+                worker_host=worker_host,
+                http_port=29998,
+                alluxio_path=file_path,
+            )
+            data = _c_send_get_request(url, headers)
+            return data
+        except Exception as e:
             raise Exception(
                 EXCEPTION_CONTENT.format(
                     worker_host=worker_host,
                     http_port=worker_http_port,
                     error=f"Error when reading file {path_id} with offset {offset} and length {length},"
-                    f" error: {response.content.decode('utf-8')}",
+                    f" error: {e}",
                 )
             )
 
@@ -1812,6 +1861,9 @@ class AlluxioClient:
             raise ValueError(
                 "path must be a full path with a protocol (e.g., 'protocol://path')"
             )
+
+    def convert_ufs_path_to_alluxio_path(self, ufs_path):
+        return ufs_path.replace("file:///home/yxd/alluxio/ufs", "/local")
 
 
 class AlluxioAsyncFileSystem:

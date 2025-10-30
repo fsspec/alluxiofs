@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from functools import wraps
 from typing import Callable
 
+from cachetools import LRUCache
 from fsspec import AbstractFileSystem
 from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
@@ -185,6 +186,8 @@ class AlluxioFileSystem(AbstractFileSystem):
             if preload_path is not None:
                 self.alluxio.load(preload_path)
 
+        self.file_info_cache = LRUCache(maxsize=1000)
+
         def _strip_alluxiofs_protocol(path):
             def _strip_individual_path(p):
                 if p.startswith(self.protocol_prefix):
@@ -346,8 +349,15 @@ class AlluxioFileSystem(AbstractFileSystem):
     @fallback_handler
     def info(self, path, **kwargs):
         path = self.unstrip_protocol(path)
-        file_status = self.alluxio.get_file_status(path)
-        return self._translate_alluxio_info_to_fsspec_info(file_status, True)
+        if path in self.file_info_cache:
+            return self.file_info_cache[path]
+        else:
+            file_status = self.alluxio.get_file_status(path)
+            fsspec_info = self._translate_alluxio_info_to_fsspec_info(
+                file_status, True
+            )
+            self.file_info_cache[path] = fsspec_info
+            return fsspec_info
 
     @fallback_handler
     def exists(self, path, **kwargs):
@@ -373,6 +383,8 @@ class AlluxioFileSystem(AbstractFileSystem):
         **kwargs,
     ):
         path = self.unstrip_protocol(path)
+        if self.alluxio.config.mcap_enabled:
+            kwargs["cache_type"] = "mcap"
         return AlluxioFile(
             fs=self,
             path=path,
@@ -560,13 +572,29 @@ class AlluxioFileSystem(AbstractFileSystem):
 
 class AlluxioFile(AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
+        s2 = time.time()
         super().__init__(fs, path, mode, **kwargs)
+        e2 = time.time()
+        print(f"AlluxioFile init time: {e2 - s2:.2f}s")
+        self.alluxio_path = fs.info(path)["path"]
 
     def _fetch_range(self, start, end):
         """Get the specified set of bytes from remote"""
-        return self.fs.alluxio.read_file_range(
-            file_path=self.path, offset=start, length=end - start
-        )
+        import traceback
+
+        try:
+            # print(f"Fetching range {start}-{end} of {self.alluxio_path}")
+            res = self.fs.alluxio.read_file_range(
+                file_path=self.path,
+                alluxio_path=self.alluxio_path,
+                offset=start,
+                length=end - start,
+            )
+        except Exception as e:
+            raise IOError(
+                f"Failed to fetch range {start}-{end} of {self.alluxio_path}: {e} {traceback.print_exc()}"
+            )
+        return res
 
     def read(self, length=-1):
         length = -1 if length is None else int(length)
