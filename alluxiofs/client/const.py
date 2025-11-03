@@ -11,12 +11,17 @@ ALLUXIO_CLUSTER_NAME_DEFAULT_VALUE = "DefaultAlluxioCluster"
 ALLUXIO_PAGE_SIZE_KEY = "alluxio.worker.page.store.page.size"
 ALLUXIO_PAGE_SIZE_DEFAULT_VALUE = "1MB"
 ALLUXIO_REQUEST_MAX_RETRIES = 3
+LOCAL_CACHE_DIR_DEFAULT = "/tmp/mcap_local_cache"
+DEFAULT_LOCAL_CACHE_SIZE_GB = 64
+DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB = 16
+MAGIC_SIZE = 8
 ALLUXIO_HASH_NODE_PER_WORKER_KEY1 = (
     "alluxio.user.consistent.hash.virtual.node.count.per.worker"
 )
 ALLUXIO_HASH_NODE_PER_WORKER_KEY2 = "alluxio.user.worker.selection.policy.consistent.hash.virtual.node.count.per.worker"
 ALLUXIO_WORKER_HTTP_SERVER_PORT_KEY = "alluxio.worker.http.server.port"
 ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE = 28080
+
 ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE = 5
 ALLUXIO_SUCCESS_IDENTIFIER = "success"
 ALLUXIO_COMMON_EXTENSION_ENABLE = "alluxio.common.extension.enable"
