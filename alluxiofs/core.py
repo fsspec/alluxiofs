@@ -33,7 +33,7 @@ def setup_logger(
         project_dir = os.getcwd()
         logs_dir = os.path.join(project_dir, "logs")
         if not os.path.exists(logs_dir):
-            os.makedirs(logs_dir)
+            os.makedirs(logs_dir, exist_ok=True)
         log_file = os.path.join(logs_dir, file_name)
     else:
         log_file = file_path + "/" + file_name
