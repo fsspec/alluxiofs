@@ -31,7 +31,7 @@ from cachetools import LRUCache
 from requests import HTTPError
 from requests.adapters import HTTPAdapter
 
-from .cache import CachedFileReader
+from .cache import CachedFileReader, MemoryReadAHeadCachePool
 from .cache import LocalCacheManager
 from .config import AlluxioClientConfig
 from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
@@ -206,6 +206,13 @@ class AlluxioClient:
             )
             self.data_manager = CachedFileReader(
                 self, data_manager, logger=self.logger
+            )
+            self.mem_cache = MemoryReadAHeadCachePool(
+                max_size_bytes=(
+                    int(self.config.memory_cache_size_mb * 1024 * 1024)
+                ),
+                num_shards=self.config.mcap_prefetch_concurrency,
+                logger=self.logger,
             )
 
     def listdir(self, path):
@@ -537,6 +544,7 @@ class AlluxioClient:
             raise Exception(e)
 
     def read_file_range(self, file_path, alluxio_path, offset=0, length=-1):
+        # Handle magic bytes cache for mcap
         if self.mcap_enabled:
             if offset == 0 and length == MAGIC_SIZE:
                 if file_path in self.magic_bytes_cache:

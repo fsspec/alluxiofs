@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from enum import auto
 from enum import Enum
 
-from fsspec.caching import BaseCache
+from fsspec.caching import BaseCache, BlockCache
 from fsspec.caching import Fetcher
 from fsspec.caching import ReadAheadCache
 
@@ -462,10 +462,11 @@ class CachedFileReader:
 class McapMemoryCache(BaseCache):
     name = "mcap"
 
-    def __init__(self, blocksize: int, fetcher: Fetcher, size: int) -> None:
+    def __init__(self, blocksize: int, fetcher: Fetcher, size: int, **cache_options) -> None:
         super().__init__(blocksize, fetcher, size)
         self.magic_bytes = None
-        self.cache = ReadAheadCache(blocksize, fetcher, size)
+        self.cache = cache_options.get("cache", None)
+        self.file_path = cache_options.get("file_path", "")
 
     def _fetch(self, start: int | None, stop: int | None) -> bytes:
         if start == 0 and stop == MAGIC_SIZE:
@@ -475,4 +476,90 @@ class McapMemoryCache(BaseCache):
                 self.magic_bytes = self.fetcher(start, stop)
                 return self.magic_bytes
         else:
+            if isinstance(self.cache, MemoryReadAHeadCachePool):
+                return self.cache.fetch(self.file_path, self.size, self.fetcher, start, stop)
             return self.cache._fetch(start, stop)
+
+
+class MemoryReadAHeadCachePool:
+    """
+    Block-based in-memory cache with file-level LRU eviction.
+    Each cache key is file_path, containing a ReadAheadCache instance.
+    """
+
+    def __init__(self, block_size=8 * 1024 * 1024, max_size_bytes=1024 * 1024 * 1024, num_shards=16, logger=None):
+        self.block_size = block_size
+        self.max_size_bytes = max_size_bytes
+        self.num_shards = num_shards
+        self.logger = logger
+
+        # Initialize shards as OrderedDict for LRU
+        self.cache_shards = OrderedDict()  # file_path -> ReadAheadCache
+        self.global_lock = threading.RLock()
+        self.current_size_bytes = 0
+
+    def _update_access_time(self, file_path):
+        """Update LRU order by moving accessed file to end"""
+        if file_path in self.cache_shards:
+            # Move to end (most recently used)
+            cache = self.cache_shards.pop(file_path)
+            self.cache_shards[file_path] = cache
+
+    def _evict_if_needed(self, additional_size=0):
+        """Evict least recently used files if cache exceeds max size"""
+        with self.global_lock:
+            if self.current_size_bytes + additional_size <= self.max_size_bytes:
+                return
+
+            if self.logger:
+                self.logger.info(
+                    f"Cache full ({self.current_size_bytes}/{self.max_size_bytes} bytes), starting eviction...")
+
+            target_size = self.max_size_bytes * 0.8  # Evict to 80% capacity
+            bytes_evicted = 0
+
+            # Evict files in LRU order (oldest first)
+            while self.cache_shards and (self.current_size_bytes - bytes_evicted) > target_size:
+                # Get least recently used file
+                file_path, cache = next(iter(self.cache_shards.items()))
+                if self.logger:
+                    self.logger.info(f"Evicting file: {file_path} (size: {self.block_size} bytes)")
+                # Remove from cache
+                del self.cache_shards[file_path]
+                self.current_size_bytes -= self.block_size
+
+            if self.logger:
+                self.logger.info(
+                    f"Eviction completed: freed {bytes_evicted} bytes, new size: {self.current_size_bytes} bytes")
+
+    def fetch(self, file_path, size, fetcher, start, stop):
+        with self.global_lock:
+            # Update LRU order
+            self._update_access_time(file_path)
+
+            if file_path not in self.cache_shards:
+                if self.logger:
+                    self.logger.debug(f"Cache miss for file: {file_path}")
+                # Evict if needed
+                self._evict_if_needed(self.block_size)
+                # Create new cache with size tracking
+                cache = ReadAheadCache(
+                    blocksize=self.block_size,
+                    fetcher=fetcher,
+                    size=size,
+                )
+                self.current_size_bytes += self.block_size
+                # Add to cache
+                self.cache_shards[file_path] = cache
+                result = cache._fetch(start, stop)
+            else:
+                cache = self.cache_shards[file_path]
+                result = cache._fetch(start, stop)
+            return result
+
+    def clear(self):
+        """Clear all cache contents"""
+        with self.global_lock:
+            self.cache_shards.clear()
+            self.current_size_bytes = 0
+

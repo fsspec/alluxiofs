@@ -383,6 +383,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         **kwargs,
     ):
         path = self.unstrip_protocol(path)
+
         if self.alluxio.config.mcap_enabled:
             kwargs["cache_type"] = "mcap"
         return AlluxioFile(
@@ -392,6 +393,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             block_size=block_size,
             autocommit=autocommit,
             cache_options=cache_options,
+            cache=self.alluxio.mem_cache,
             **kwargs,
         )
 
@@ -572,10 +574,11 @@ class AlluxioFileSystem(AbstractFileSystem):
 
 class AlluxioFile(AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
-        s2 = time.time()
+        cache_options = {}
+        cache_options["file_path"] = path
+        cache_options["cache"] = kwargs.get("cache", None)
+        kwargs["cache_options"] = cache_options
         super().__init__(fs, path, mode, **kwargs)
-        e2 = time.time()
-        print(f"AlluxioFile init time: {e2 - s2:.2f}s")
         self.alluxio_path = fs.info(path)["path"]
 
     def _fetch_range(self, start, end):
@@ -583,7 +586,6 @@ class AlluxioFile(AbstractBufferedFile):
         import traceback
 
         try:
-            # print(f"Fetching range {start}-{end} of {self.alluxio_path}")
             res = self.fs.alluxio.read_file_range(
                 file_path=self.path,
                 alluxio_path=self.alluxio_path,
@@ -597,20 +599,7 @@ class AlluxioFile(AbstractBufferedFile):
         return res
 
     def read(self, length=-1):
-        length = -1 if length is None else int(length)
-        if self.mode != "rb":
-            raise ValueError("File not in read mode")
-        if self.closed:
-            raise ValueError("I/O operation on closed file.")
-        if length < 0:
-            length = self.size - self.loc
-        if length == 0:
-            # don't even bother calling fetch
-            return b""
-        if length == self.size:
-            out = self.fs.alluxio.read_chunked(self.path).read()
-        else:
-            out = self.cache._fetch(self.loc, self.loc + length)
+        out = self.cache._fetch(self.loc, self.loc + length)
         self.loc += len(out)
         return out
 

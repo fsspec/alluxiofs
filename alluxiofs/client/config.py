@@ -24,6 +24,8 @@ class AlluxioClientConfig:
         mcap_prefetch_concurrency=32,
         local_cache_size_gb=64,
         local_cache_block_size_mb=16,
+        use_memory_cache=False,
+        memory_cache_size_mb=256,
         **kwargs,
     ):
         """
@@ -93,6 +95,17 @@ class AlluxioClientConfig:
             "'local_cache_block_size_mb' should be a positive integer or float"
         )
 
+        assert isinstance(
+            use_memory_cache, bool
+        ), "'use_memory_range_cache' should be a boolean"
+
+        assert (
+            isinstance(memory_cache_size_mb, int)
+            or isinstance(memory_cache_size_mb, float)
+        ) and memory_cache_size_mb > 0, (
+            "'memory_range_cache_size_mb' should be a positive integer or float"
+        )
+
         self.load_balance_domain = load_balance_domain
         self.worker_hosts = worker_hosts
         self.worker_http_port = worker_http_port
@@ -107,3 +120,5 @@ class AlluxioClientConfig:
         self.mcap_prefetch_concurrency = mcap_prefetch_concurrency
         self.local_cache_size_gb = local_cache_size_gb
         self.local_cache_block_size_mb = local_cache_block_size_mb
+        self.use_memory_cache = use_memory_cache
+        self.memory_cache_size_mb = memory_cache_size_mb
