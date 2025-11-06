@@ -393,7 +393,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             block_size=block_size,
             autocommit=autocommit,
             cache_options=cache_options,
-            cache=self.alluxio.mem_cache,
+            # cache=self.alluxio.mem_cache,
             **kwargs,
         )
 
@@ -574,17 +574,23 @@ class AlluxioFileSystem(AbstractFileSystem):
 
 class AlluxioFile(AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
-        cache_options = {}
-        cache_options["file_path"] = path
-        cache_options["cache"] = kwargs.get("cache", None)
-        kwargs["cache_options"] = cache_options
+        # cache_options = {}
+        # cache_options["file_path"] = path
+        # cache_options["cache"] = kwargs.get("cache", None)
+        # kwargs["cache_options"] = cache_options
         super().__init__(fs, path, mode, **kwargs)
         self.alluxio_path = fs.info(path)["path"]
+        
+        # Local read buffer for optimizing frequent small byte reads
+        self._read_buffer_size = 256
+        self._read_buffer_data = b""
+        self._read_buffer_start = 0
+        self._read_buffer_end = 0
+        self._file_size = getattr(self, 'size', None)
 
     def _fetch_range(self, start, end):
         """Get the specified set of bytes from remote"""
         import traceback
-
         try:
             res = self.fs.alluxio.read_file_range(
                 file_path=self.path,
@@ -598,9 +604,74 @@ class AlluxioFile(AbstractBufferedFile):
             )
         return res
 
+    def _fill_read_buffer(self, start_pos):
+        """Fill read buffer from cache starting at start_pos"""
+        end_pos = start_pos + self._read_buffer_size
+        if self._file_size is not None and self._file_size > 0:
+            end_pos = min(end_pos, self._file_size)
+        
+        data = self.cache._fetch(start_pos, end_pos)
+        
+        # Clear old buffer reference before assigning new one to help GC
+        old_data = self._read_buffer_data
+        self._read_buffer_data = data
+        self._read_buffer_start = start_pos
+        self._read_buffer_end = start_pos + len(data)
+        # Explicitly clear old reference to help garbage collection
+        del old_data
+        
+        return len(data)
+
     def read(self, length=-1):
-        out = self.cache._fetch(self.loc, self.loc + length)
-        self.loc += len(out)
+        """Read data, prioritizing local buffer for frequent small reads"""
+        loc = self.loc
+        
+        if length == -1:
+            if self._file_size is not None and self._file_size > 0:
+                length = self._file_size - loc
+            else:
+                length = self._read_buffer_size
+        
+        # Fast path: buffer hit - most common case for small reads
+        if self._read_buffer_start <= loc < self._read_buffer_end:
+            buffer_offset = loc - self._read_buffer_start
+            available = self._read_buffer_end - loc
+            if available >= length:
+                # All data available in buffer
+                out = self._read_buffer_data[buffer_offset:buffer_offset + length]
+                self.loc = loc + length
+                return out
+            
+            # Partial buffer hit
+            out = self._read_buffer_data[buffer_offset:]
+            self.loc = loc + available
+            remaining = length - available
+            
+            # Handle remaining data
+            remaining_loc = self.loc
+            if remaining > self._read_buffer_size // 2:
+                # Large remaining: fetch directly
+                remaining_data = self.cache._fetch(remaining_loc, remaining_loc + remaining)
+                self.loc = remaining_loc + remaining
+                return out + remaining_data
+            
+            # Small remaining: refill buffer
+            self._fill_read_buffer(remaining_loc)
+            remaining_data = self._read_buffer_data[:remaining]
+            self.loc = remaining_loc + remaining
+            return out + remaining_data
+        
+        # Buffer miss: fill buffer for small reads to optimize subsequent reads
+        if length < self._read_buffer_size // 4:
+            self._fill_read_buffer(loc)
+            buffer_offset = loc - self._read_buffer_start
+            out = self._read_buffer_data[buffer_offset:buffer_offset + length]
+            self.loc = loc + length
+            return out
+        
+        # Large read: bypass buffer
+        out = self.cache._fetch(loc, loc + length)
+        self.loc = loc + len(out)
         return out
 
     def _upload_chunk(self, final=False):
@@ -613,6 +684,17 @@ class AlluxioFile(AbstractBufferedFile):
 
     def _initiate_upload(self):
         pass
+
+    def close(self):
+        """Close file and clean up resources to prevent memory leaks"""
+        if not self.closed:
+            # Clear read buffer to help GC
+            self._read_buffer_data = b""
+            self._read_buffer_start = 0
+            self._read_buffer_end = 0
+            # Clear file size reference
+            self._file_size = None
+        super().close()
 
     def flush(self, force=False):
         if self.closed:
