@@ -385,7 +385,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         path = self.unstrip_protocol(path)
 
         if self.alluxio.config.mcap_enabled:
-            kwargs["cache_type"] = "mcap"
+            kwargs["cache_type"] = "none"
         return AlluxioFile(
             fs=self,
             path=path,
@@ -535,14 +535,14 @@ class AlluxioFileSystem(AbstractFileSystem):
         raise NotImplementedError
 
     @fallback_handler
-    def write(self, path, value, **kwargs):
+    def write_bytes(self, path, value, **kwargs):
         path = self.unstrip_protocol(path)
         return self.alluxio.write_chunked(path, value)
 
     @fallback_handler
-    def read(self, path, *args, **kwargs):
+    def read_bytes(self, path, *args, **kwargs):
         path = self.unstrip_protocol(path)
-        return self.alluxio.read_chunked(path)
+        return self.alluxio.read_chunked(path).read()
 
     @fallback_handler
     def upload(self, lpath: str, rpath: str, *args, **kwargs) -> bool:
@@ -574,15 +574,11 @@ class AlluxioFileSystem(AbstractFileSystem):
 
 class AlluxioFile(AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
-        # cache_options = {}
-        # cache_options["file_path"] = path
-        # cache_options["cache"] = kwargs.get("cache", None)
-        # kwargs["cache_options"] = cache_options
         super().__init__(fs, path, mode, **kwargs)
         self.alluxio_path = fs.info(path)["path"]
         
         # Local read buffer for optimizing frequent small byte reads
-        self._read_buffer_size = 256
+        self._read_buffer_size = 1024*64
         self._read_buffer_data = b""
         self._read_buffer_start = 0
         self._read_buffer_end = 0
@@ -625,13 +621,13 @@ class AlluxioFile(AbstractBufferedFile):
     def read(self, length=-1):
         """Read data, prioritizing local buffer for frequent small reads"""
         loc = self.loc
-        
+
         if length == -1:
             if self._file_size is not None and self._file_size > 0:
                 length = self._file_size - loc
             else:
                 length = self._read_buffer_size
-        
+
         # Fast path: buffer hit - most common case for small reads
         if self._read_buffer_start <= loc < self._read_buffer_end:
             buffer_offset = loc - self._read_buffer_start
@@ -641,12 +637,12 @@ class AlluxioFile(AbstractBufferedFile):
                 out = self._read_buffer_data[buffer_offset:buffer_offset + length]
                 self.loc = loc + length
                 return out
-            
+
             # Partial buffer hit
             out = self._read_buffer_data[buffer_offset:]
             self.loc = loc + available
             remaining = length - available
-            
+
             # Handle remaining data
             remaining_loc = self.loc
             if remaining > self._read_buffer_size // 2:
@@ -654,13 +650,13 @@ class AlluxioFile(AbstractBufferedFile):
                 remaining_data = self.cache._fetch(remaining_loc, remaining_loc + remaining)
                 self.loc = remaining_loc + remaining
                 return out + remaining_data
-            
+
             # Small remaining: refill buffer
             self._fill_read_buffer(remaining_loc)
             remaining_data = self._read_buffer_data[:remaining]
             self.loc = remaining_loc + remaining
             return out + remaining_data
-        
+
         # Buffer miss: fill buffer for small reads to optimize subsequent reads
         if length < self._read_buffer_size // 4:
             self._fill_read_buffer(loc)
@@ -668,8 +664,7 @@ class AlluxioFile(AbstractBufferedFile):
             out = self._read_buffer_data[buffer_offset:buffer_offset + length]
             self.loc = loc + length
             return out
-        
-        # Large read: bypass buffer
+
         out = self.cache._fetch(loc, loc + length)
         self.loc = loc + len(out)
         return out

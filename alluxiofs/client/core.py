@@ -60,7 +60,7 @@ from .const import TOUCH_URL_FORMAT
 from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
 from .loadbalance import WorkerListLoadBalancer
-from .utils import _c_send_get_request
+from .utils import _c_send_get_request_write_bytes
 from .utils import set_log_level
 
 
@@ -546,26 +546,9 @@ class AlluxioClient:
     def read_file_range(self, file_path, alluxio_path, offset=0, length=-1):
         # Handle magic bytes cache for mcap
         if self.mcap_enabled:
-            if offset == 0 and length == MAGIC_SIZE:
-                if file_path in self.magic_bytes_cache:
-                    return self.magic_bytes_cache[file_path]
-                magic_bytes = self.data_manager.read_magic_bytes(
-                    file_path, alluxio_path
-                )
-                self.magic_bytes_cache[file_path] = magic_bytes
-                return magic_bytes
-            if length == -1:
-                file_status = self.get_file_status(file_path)
-                if file_status is None:
-                    raise FileNotFoundError(f"File {file_path} not found")
-                length = file_status.length - offset
-                return self.data_manager.read_file_range(
-                    file_path, alluxio_path, offset, length, file_status.length
-                )
-            else:
-                return self.data_manager.read_file_range(
-                    file_path, alluxio_path, offset, length
-                )
+            return self.data_manager.read_file_range(
+                file_path, alluxio_path, offset, length
+            )
         else:
             return self.read_file_range_normal(
                 file_path, alluxio_path, offset, length
@@ -1611,7 +1594,7 @@ class AlluxioClient:
                 http_port=29998,
                 alluxio_path=file_path,
             )
-            data = _c_send_get_request(url, headers)
+            data = _c_send_get_request_write_bytes(url, headers)
             return data
         except Exception as e:
             raise Exception(
