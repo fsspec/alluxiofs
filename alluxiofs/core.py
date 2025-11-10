@@ -589,11 +589,13 @@ class AlluxioFile(AbstractBufferedFile):
         import traceback
 
         try:
-            res = self.fs.alluxio.read_file_range(
+            res = self.fs.alluxio.read_file_range_with_retry(
                 file_path=self.path,
                 alluxio_path=self.alluxio_path,
                 offset=start,
                 length=end - start,
+                max_retries=self.fs.alluxio.config.http_max_retries,
+                time_out=self.fs.alluxio.config.http_timeouts,
             )
         except Exception as e:
             raise IOError(

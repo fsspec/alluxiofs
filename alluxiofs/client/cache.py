@@ -9,7 +9,7 @@ from multiprocessing import Value
 from fsspec.caching import BaseCache
 from fsspec.caching import Fetcher
 
-from .const import DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB
+from .const import DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB, ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS
 from .const import DEFAULT_LOCAL_CACHE_SIZE_GB
 from .const import LOCAL_CACHE_DIR_DEFAULT
 from .const import MAGIC_SIZE
@@ -125,6 +125,7 @@ class LocalCacheManager:
         alluxio_path,
         start,
         end,
+        time_out,
     ):
         """
         Write data to cache atomically using a two-phase commit:
@@ -155,7 +156,7 @@ class LocalCacheManager:
             temp_file.close()
             with open(temp_file.name, "wb") as f:
                 self._fetch_range_via_shell(
-                    f, worker_host, worker_http_port, alluxio_path, start, end
+                    f, worker_host, worker_http_port, alluxio_path, start, end, time_out=time_out
                 )
             # Step 3: Atomic rename
             os.rename(temp_file.name, file_path_hashed)
@@ -268,6 +269,7 @@ class LocalCacheManager:
         alluxio_path,
         start,
         end,
+        time_out,
     ):
         path_hashed = self._get_local_path(file_path, part_index)
         self._atomic_write(
@@ -278,6 +280,7 @@ class LocalCacheManager:
             alluxio_path,
             start,
             end,
+            time_out=time_out,
         )
 
     def read_from_cache(self, file_path, part_index, offset, length):
@@ -333,7 +336,7 @@ class LocalCacheManager:
         return files_sorted
 
     def _fetch_range_via_shell(
-        self, f, worker_host, worker_http_port, alluxio_path, start, end
+        self, f, worker_host, worker_http_port, alluxio_path, start, end, time_out
     ):
         """
         Fetch a byte range from the Alluxio worker using curl via subprocess.
@@ -347,7 +350,7 @@ class LocalCacheManager:
             http_port=worker_http_port,
             alluxio_path=alluxio_path,
         )
-        _c_send_get_request_write_file(url, headers, f)
+        _c_send_get_request_write_file(url, headers, f, time_out)
 
 
 # =========================================================
@@ -389,6 +392,7 @@ class CachedFileReader:
             block_index,
             start,
             end,
+            time_out,
         ) = args
         states = self.cache.get_file_status(
             file_path, block_index
@@ -405,6 +409,7 @@ class CachedFileReader:
                 alluxio_path,
                 start,
                 end,
+                time_out=time_out,
             )
             if self.logger:
                 self.logger.debug(
@@ -419,7 +424,7 @@ class CachedFileReader:
                 )
 
     def _parallel_download_file(
-        self, file_path, alluxio_path, offset=0, length=-1, file_size=None
+        self, file_path, alluxio_path, offset=0, length=-1, file_size=None, time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS
     ):
         """Use multiprocessing to download the entire file in parallel (per block)."""
         worker_host, worker_http_port = self._get_preferred_worker_address(
@@ -446,6 +451,7 @@ class CachedFileReader:
                     i,
                     start,
                     end,
+                    time_out,
                 )
             )
 
@@ -457,7 +463,7 @@ class CachedFileReader:
             self.pool.submit(self._fetch_block, arg)
 
     def read_file_range(
-        self, file_path, alluxio_path, offset=0, length=-1, file_size=None
+        self, file_path, alluxio_path, offset=0, length=-1, file_size=None, time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS
     ):
         """
         Read the requested file range.
@@ -492,7 +498,7 @@ class CachedFileReader:
             if chunk is None:
                 if state == BlockStatus.ABSENT:
                     self._parallel_download_file(
-                        file_path, alluxio_path, offset, length, file_size
+                        file_path, alluxio_path, offset, length, file_size, time_out=time_out
                     )
 
                 # Wait for the block to become available
@@ -503,7 +509,7 @@ class CachedFileReader:
                 if state != BlockStatus.CACHED:
                     # Fall back to direct read - return immediately
                     return self.alluxio_client.read_file_range_normal(
-                        file_path, alluxio_path, offset, length
+                        file_path, alluxio_path, offset, length, time_out=time_out
                     )
 
             chunks.append(chunk)
@@ -560,7 +566,7 @@ class CachedFileReader:
                 data = f.read(MAGIC_SIZE)
         else:
             data = self.alluxio_client.read_file_range_normal(
-                file_path, alluxio_path, 0, MAGIC_SIZE
+                file_path, alluxio_path, 0, MAGIC_SIZE, time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS
             )
         return data
 

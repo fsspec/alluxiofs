@@ -26,7 +26,7 @@ def set_log_level(logger, test_options):
 
 
 def _c_send_get_request_write_bytes(
-    url, headers, max_buffer_size=20 * 1024 * 1024
+    url, headers, time_out, max_buffer_size=20 * 1024 * 1024
 ):
     buffer = BytesIO()
     c = pycurl.Curl()
@@ -41,7 +41,7 @@ def _c_send_get_request_write_bytes(
         c.setopt(c.WRITEDATA, buffer)
         c.setopt(c.FOLLOWLOCATION, True)
         c.setopt(c.CONNECTTIMEOUT, 10)
-        c.setopt(c.TIMEOUT, 60)
+        c.setopt(c.TIMEOUT, time_out)
         c.setopt(c.BUFFERSIZE, 16384)
 
         c.perform()
@@ -66,7 +66,7 @@ def _c_send_get_request_write_bytes(
 
 
 def _c_send_get_request_write_file(
-    url, headers, f, max_buffer_size=20 * 1024 * 1024
+    url, headers, f, time_out, max_buffer_size=20 * 1024 * 1024,
 ):
     c = pycurl.Curl()
     try:
@@ -80,7 +80,7 @@ def _c_send_get_request_write_file(
         c.setopt(c.WRITEDATA, f)
         c.setopt(c.FOLLOWLOCATION, True)
         c.setopt(c.CONNECTTIMEOUT, 10)
-        c.setopt(c.TIMEOUT, 60)
+        c.setopt(c.TIMEOUT, time_out)
         c.setopt(c.BUFFERSIZE, 16384)
 
         c.perform()

@@ -1,6 +1,7 @@
 from typing import Optional
 
-from .const import ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE
+from .const import ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE, ALLUXIO_REQUEST_MAX_RETRIES, \
+    ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS
 
 
 class AlluxioClientConfig:
@@ -26,6 +27,8 @@ class AlluxioClientConfig:
         local_cache_block_size_mb=16,
         use_memory_cache=False,
         memory_cache_size_mb=256,
+        http_max_retries=ALLUXIO_REQUEST_MAX_RETRIES,
+        http_timeouts=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
         **kwargs,
     ):
         """
@@ -106,6 +109,14 @@ class AlluxioClientConfig:
             or isinstance(memory_cache_size_mb, float)
         ) and memory_cache_size_mb > 0, "'memory_range_cache_size_mb' should be a positive integer or float"
 
+        assert (
+            isinstance(http_max_retries, int) and http_max_retries >= 0
+        ), "'http_max_retries' should be a non-negative integer"
+
+        assert (
+            isinstance(http_timeouts, int) and http_timeouts > 0
+        ), "'http_timeouts' should be a positive integer"
+
         self.load_balance_domain = load_balance_domain
         self.worker_hosts = worker_hosts
         self.worker_http_port = worker_http_port
@@ -122,3 +133,5 @@ class AlluxioClientConfig:
         self.local_cache_block_size_mb = local_cache_block_size_mb
         self.use_memory_cache = use_memory_cache
         self.memory_cache_size_mb = memory_cache_size_mb
+        self.http_max_retries = http_max_retries
+        self.http_timeouts = http_timeouts
