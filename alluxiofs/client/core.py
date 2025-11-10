@@ -560,7 +560,7 @@ class AlluxioClient:
             offset=0,
             length=-1,
             max_retries=ALLUXIO_REQUEST_MAX_RETRIES,
-            time_out=None,
+            time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
     ):
         retry_count = 0
 
@@ -573,12 +573,43 @@ class AlluxioClient:
                     ConnectionResetError,
                     requests.exceptions.ConnectionError,
                     requests.exceptions.ChunkedEncodingError,
-            ):
+            ) as e:
                 retry_count += 1
                 if retry_count < max_retries:
                     time.sleep(1 * retry_count)
-                print(retry_count)
-                continue
+                    continue
+                else:
+                    raise e
+            except Exception as e:
+                raise e
+
+    def read_file_range_normal_with_retry(
+            self,
+            file_path,
+            alluxio_path,
+            offset=0,
+            length=-1,
+            max_retries=ALLUXIO_REQUEST_MAX_RETRIES,
+            time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
+    ):
+        retry_count = 0
+
+        while retry_count < max_retries:
+            try:
+                return self.read_file_range_normal(
+                    file_path, alluxio_path, offset, length, time_out
+                )
+            except (
+                    ConnectionResetError,
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.ChunkedEncodingError,
+            ) as e:
+                retry_count += 1
+                if retry_count < max_retries:
+                    time.sleep(1 * retry_count)
+                    continue
+                else:
+                    raise e
             except Exception as e:
                 raise e
 

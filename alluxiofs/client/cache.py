@@ -508,7 +508,7 @@ class CachedFileReader:
 
                 if state != BlockStatus.CACHED:
                     # Fall back to direct read - return immediately
-                    return self.alluxio_client.read_file_range_normal(
+                    return self.alluxio_client.read_file_range_normal_with_retry(
                         file_path, alluxio_path, offset, length, time_out=time_out
                     )
 
@@ -565,7 +565,7 @@ class CachedFileReader:
             with open(file_path_hashed, "rb") as f:
                 data = f.read(MAGIC_SIZE)
         else:
-            data = self.alluxio_client.read_file_range_normal(
+            data = self.alluxio_client.read_file_range_normal_with_retry(
                 file_path, alluxio_path, 0, MAGIC_SIZE, time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS
             )
         return data
