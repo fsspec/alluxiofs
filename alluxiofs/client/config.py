@@ -82,11 +82,13 @@ class AlluxioClientConfig:
         ), "'mcap_prefetch_concurrency' should be a positive integer"
 
         assert (
-            isinstance(local_cache_size_gb, int)
-            or isinstance(local_cache_size_gb, float)
-        ) and local_cache_size_gb > 0, (
-            "'local_cache_size_gb' should be a positive integer or float"
-        )
+            (
+                isinstance(local_cache_size_gb, int)
+                or isinstance(local_cache_size_gb, float)
+            )
+            and local_cache_size_gb > 0
+            or isinstance(local_cache_size_gb, str)
+        ), "'local_cache_size_gb' should be a positive integer or float"
 
         assert (
             isinstance(local_cache_block_size_mb, int)
