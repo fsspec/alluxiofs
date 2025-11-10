@@ -576,17 +576,18 @@ class AlluxioFile(AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
         super().__init__(fs, path, mode, **kwargs)
         self.alluxio_path = fs.info(path)["path"]
-        
+
         # Local read buffer for optimizing frequent small byte reads
-        self._read_buffer_size = 1024*64
+        self._read_buffer_size = 1024 * 64
         self._read_buffer_data = b""
         self._read_buffer_start = 0
         self._read_buffer_end = 0
-        self._file_size = getattr(self, 'size', None)
+        self._file_size = getattr(self, "size", None)
 
     def _fetch_range(self, start, end):
         """Get the specified set of bytes from remote"""
         import traceback
+
         try:
             res = self.fs.alluxio.read_file_range(
                 file_path=self.path,
@@ -605,9 +606,9 @@ class AlluxioFile(AbstractBufferedFile):
         end_pos = start_pos + self._read_buffer_size
         if self._file_size is not None and self._file_size > 0:
             end_pos = min(end_pos, self._file_size)
-        
+
         data = self.cache._fetch(start_pos, end_pos)
-        
+
         # Clear old buffer reference before assigning new one to help GC
         old_data = self._read_buffer_data
         self._read_buffer_data = data
@@ -615,7 +616,7 @@ class AlluxioFile(AbstractBufferedFile):
         self._read_buffer_end = start_pos + len(data)
         # Explicitly clear old reference to help garbage collection
         del old_data
-        
+
         return len(data)
 
     def read(self, length=-1):
@@ -634,7 +635,9 @@ class AlluxioFile(AbstractBufferedFile):
             available = self._read_buffer_end - loc
             if available >= length:
                 # All data available in buffer
-                out = self._read_buffer_data[buffer_offset:buffer_offset + length]
+                out = self._read_buffer_data[
+                    buffer_offset : buffer_offset + length
+                ]
                 self.loc = loc + length
                 return out
 
@@ -647,7 +650,9 @@ class AlluxioFile(AbstractBufferedFile):
             remaining_loc = self.loc
             if remaining > self._read_buffer_size // 2:
                 # Large remaining: fetch directly
-                remaining_data = self.cache._fetch(remaining_loc, remaining_loc + remaining)
+                remaining_data = self.cache._fetch(
+                    remaining_loc, remaining_loc + remaining
+                )
                 self.loc = remaining_loc + remaining
                 return out + remaining_data
 
@@ -661,7 +666,9 @@ class AlluxioFile(AbstractBufferedFile):
         if length < self._read_buffer_size // 4:
             self._fill_read_buffer(loc)
             buffer_offset = loc - self._read_buffer_start
-            out = self._read_buffer_data[buffer_offset:buffer_offset + length]
+            out = self._read_buffer_data[
+                buffer_offset : buffer_offset + length
+            ]
             self.loc = loc + length
             return out
 

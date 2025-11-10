@@ -45,7 +45,7 @@ class LocalCacheManager:
         self.evcit_rate = 0.8
         self.logger = logger
         self.pool = thread_pool
-        self.current_cache_size = Value('d', 0)
+        self.current_cache_size = Value("d", 0)
 
         # Thread lock for concurrent safety of cache operations
         os.makedirs(self.cache_root_dir, exist_ok=True)
@@ -56,7 +56,7 @@ class LocalCacheManager:
 
     def _load_existing_cache(self):
         """Scan existing cache files and rebuild cache index at startup."""
-        self.current_cache_size = Value('d', 0)
+        self.current_cache_size = Value("d", 0)
         for f in os.listdir(self.cache_data_dir):
             fp = os.path.join(self.cache_data_dir, f)
             if fp.endswith("_loading"):
@@ -80,7 +80,15 @@ class LocalCacheManager:
         path_hash = hash_obj.hexdigest()
         return os.path.join(self.cache_data_dir, f"{path_hash}_{part_index}")
 
-    def _atomic_write(self, file_path_hashed, worker_host, worker_http_port, file_path, start, end):
+    def _atomic_write(
+        self,
+        file_path_hashed,
+        worker_host,
+        worker_http_port,
+        file_path,
+        start,
+        end,
+    ):
         """
         Write data to cache atomically using a two-phase commit:
         1. Atomically transition status from ABSENT to LOADING
@@ -97,7 +105,9 @@ class LocalCacheManager:
             )
             temp_file.close()
             with open(temp_file.name, "wb") as f:
-                self._fetch_range_via_shell(f, worker_host, worker_http_port, file_path, start, end)
+                self._fetch_range_via_shell(
+                    f, worker_host, worker_http_port, file_path, start, end
+                )
             # Step 3: Atomic rename
             os.rename(temp_file.name, file_path_hashed)
             self._set_file_cached(file_path_hashed)
@@ -126,7 +136,7 @@ class LocalCacheManager:
         """Get or create AtomicBlockStatus for a file path."""
         if os.path.exists(file_path_hashed):
             return BlockStatus.CACHED
-        elif os.path.exists(file_path_hashed+"_loading"):
+        elif os.path.exists(file_path_hashed + "_loading"):
             return BlockStatus.LOADING
         else:
             return BlockStatus.ABSENT
@@ -137,7 +147,7 @@ class LocalCacheManager:
 
     def _set_file_loading(self, file_path_hashed):
         """Set the file status to LOADING."""
-        with open(file_path_hashed+"_loading", "x") as f:
+        with open(file_path_hashed + "_loading", "x"):
             pass
 
     def _set_file_cached(self, file_path_hashed):
@@ -193,9 +203,25 @@ class LocalCacheManager:
                         f"[LRU] Failed to evict cache {old_path}: {e}"
                     )
 
-    def add_to_cache(self, file_path, part_index, worker_host, worker_http_port, alluxio_path, start, end):
+    def add_to_cache(
+        self,
+        file_path,
+        part_index,
+        worker_host,
+        worker_http_port,
+        alluxio_path,
+        start,
+        end,
+    ):
         path_hashed = self._get_local_path(file_path, part_index)
-        self._atomic_write(path_hashed, worker_host, worker_http_port, alluxio_path, start, end)
+        self._atomic_write(
+            path_hashed,
+            worker_host,
+            worker_http_port,
+            alluxio_path,
+            start,
+            end,
+        )
 
     def read_from_cache(self, file_path, part_index, offset, length):
         """
@@ -218,7 +244,9 @@ class LocalCacheManager:
                 data = os.pread(f.fileno(), length, offset)
         except (IOError, OSError) as e:
             if self.logger:
-                self.logger.debug(f"[CACHE] Read error: {file_path_hashed}: {e}")
+                self.logger.debug(
+                    f"[CACHE] Read error: {file_path_hashed}: {e}"
+                )
             self._set_file_absent(file_path_hashed)
             return None, BlockStatus.ABSENT
 
@@ -231,13 +259,15 @@ class LocalCacheManager:
             for entry in entries:
                 if entry.is_file() and not entry.name.endswith("_loading"):
                     stat = entry.stat()
-                    files.append({
-                        'name': entry.name,
-                        'path': entry.path,
-                        'atime': stat.st_atime,
-                        'size': stat.st_size
-                    })
-        files_sorted = sorted(files, key=lambda x: x['atime'], reverse=reverse)
+                    files.append(
+                        {
+                            "name": entry.name,
+                            "path": entry.path,
+                            "atime": stat.st_atime,
+                            "size": stat.st_size,
+                        }
+                    )
+        files_sorted = sorted(files, key=lambda x: x["atime"], reverse=reverse)
         return files_sorted
 
     def _fetch_range_via_shell(
@@ -305,7 +335,15 @@ class CachedFileReader:
             return
         try:
             self.cache.set_file_loading(file_path, block_index)
-            self.cache.add_to_cache(file_path, block_index, worker_host, 29998, alluxio_path, start, end)
+            self.cache.add_to_cache(
+                file_path,
+                block_index,
+                worker_host,
+                29998,
+                alluxio_path,
+                start,
+                end,
+            )
             if self.logger:
                 self.logger.debug(
                     f"[BLOCK] Block download complete: {file_path}_{block_index}, size={end - start}B"
@@ -357,7 +395,7 @@ class CachedFileReader:
             self.pool.submit(self._fetch_block, arg)
 
     def read_file_range(
-            self, file_path, alluxio_path, offset=0, length=-1, file_size=None
+        self, file_path, alluxio_path, offset=0, length=-1, file_size=None
     ):
         """
         Read the requested file range.
@@ -464,13 +502,17 @@ class CachedFileReader:
             )
         return data
 
+
 class McapMemoryCache(BaseCache):
     name = "mcap"
 
     def __init__(self, blocksize: int, fetcher: Fetcher, size: int) -> None:
         super().__init__(blocksize, fetcher, size)
+
     def _fetch(self, start: int | None, stop: int | None) -> bytes:
         return self.fetcher(start, stop)
+
+
 #
 # class McapMemoryCache(BaseCache):
 #     name = "mcap"
@@ -644,4 +686,3 @@ class McapMemoryCache(BaseCache):
 #             self.cache_shards.clear()
 #             self.access_order.clear()
 #             self.current_size_bytes = 0
-

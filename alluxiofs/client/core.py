@@ -50,7 +50,6 @@ from .const import LIST_URL_FORMAT
 from .const import LOAD_PROGRESS_URL_FORMAT
 from .const import LOAD_SUBMIT_URL_FORMAT
 from .const import LOAD_URL_FORMAT
-from .const import MAGIC_SIZE
 from .const import MKDIR_URL_FORMAT
 from .const import MV_URL_FORMAT
 from .const import PAGE_URL_FORMAT

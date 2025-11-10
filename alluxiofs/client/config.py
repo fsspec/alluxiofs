@@ -102,9 +102,7 @@ class AlluxioClientConfig:
         assert (
             isinstance(memory_cache_size_mb, int)
             or isinstance(memory_cache_size_mb, float)
-        ) and memory_cache_size_mb > 0, (
-            "'memory_range_cache_size_mb' should be a positive integer or float"
-        )
+        ) and memory_cache_size_mb > 0, "'memory_range_cache_size_mb' should be a positive integer or float"
 
         self.load_balance_domain = load_balance_domain
         self.worker_hosts = worker_hosts

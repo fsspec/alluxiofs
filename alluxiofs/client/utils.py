@@ -25,13 +25,17 @@ def set_log_level(logger, test_options):
             logger.warning(f"Unsupported log level: {log_level}")
 
 
-def _c_send_get_request_write_bytes(url, headers, max_buffer_size=20 * 1024 * 1024):
+def _c_send_get_request_write_bytes(
+    url, headers, max_buffer_size=20 * 1024 * 1024
+):
     buffer = BytesIO()
     c = pycurl.Curl()
     try:
         c.setopt(c.MAXFILESIZE, max_buffer_size)
 
-        headers_list = [f"{k}: {v}".encode("utf-8") for k, v in headers.items()]
+        headers_list = [
+            f"{k}: {v}".encode("utf-8") for k, v in headers.items()
+        ]
         c.setopt(c.URL, url.encode("utf-8"))
         c.setopt(c.HTTPHEADER, headers_list)
         c.setopt(c.WRITEDATA, buffer)
@@ -60,12 +64,17 @@ def _c_send_get_request_write_bytes(url, headers, max_buffer_size=20 * 1024 * 10
         if not buffer.closed:
             buffer.close()
 
-def _c_send_get_request_write_file(url, headers, f, max_buffer_size=20 * 1024 * 1024):
+
+def _c_send_get_request_write_file(
+    url, headers, f, max_buffer_size=20 * 1024 * 1024
+):
     c = pycurl.Curl()
     try:
         c.setopt(c.MAXFILESIZE, max_buffer_size)
 
-        headers_list = [f"{k}: {v}".encode("utf-8") for k, v in headers.items()]
+        headers_list = [
+            f"{k}: {v}".encode("utf-8") for k, v in headers.items()
+        ]
         c.setopt(c.URL, url.encode("utf-8"))
         c.setopt(c.HTTPHEADER, headers_list)
         c.setopt(c.WRITEDATA, f)
@@ -85,6 +94,7 @@ def _c_send_get_request_write_file(url, headers, f, max_buffer_size=20 * 1024 * 
         raise RuntimeError(f"cURL error: {e}")
     finally:
         c.close()
+
 
 def _c_send_get_request_stream(url, headers=None):
     if headers is None:
