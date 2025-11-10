@@ -1,4 +1,3 @@
-import fcntl
 import hashlib
 import os
 import tempfile
@@ -73,6 +72,7 @@ class LocalCacheManager:
                         self.current_cache_size.value += size
                 except FileNotFoundError:
                     continue
+        self._evict_if_needed(0)
 
     def _get_local_path(self, file_path, part_index):
         """Generate local cache file path for a given block."""
@@ -164,9 +164,7 @@ class LocalCacheManager:
             cache_size = self.current_cache_size.value
         if cache_size + length <= self.max_cache_size * self.evcit_rate:
             return
-        with open(os.path.join(self.cache_lock_dir, ".evict.lock"), "w") as lockf:
-            fcntl.flock(lockf, fcntl.LOCK_EX)
-            self._perform_eviction(length)
+        self._perform_eviction(length)
 
     def _perform_eviction(self, length):
         cached_files = self._get_files_sorted_by_atime_scandir()
@@ -180,14 +178,15 @@ class LocalCacheManager:
             except FileNotFoundError:
                 size = 0
             try:
-                if os.path.exists(old_path):
-                    os.remove(old_path)
+                os.remove(old_path)
                 if size:
                     self.current_cache_size.value -= size
                 if self.logger:
                     self.logger.debug(
                         f"[LRU] Evicted old cache: {old_path} ({size} bytes)"
                     )
+            except FileNotFoundError:
+                pass
             except Exception as e:
                 if self.logger:
                     self.logger.debug(
@@ -211,21 +210,12 @@ class LocalCacheManager:
         if status == BlockStatus.ABSENT:
             return None, BlockStatus.ABSENT
         elif status == BlockStatus.LOADING:
-            if self.logger:
-                self.logger.debug(
-                    f"[CACHE] Block is currently loading: {file_path_hashed}"
-                )
             return None, BlockStatus.LOADING
-        # If cached, read data
-        if not os.path.exists(file_path_hashed):
-            self._set_file_absent(file_path_hashed)
-            return None, BlockStatus.ABSENT
 
         # Read file data
         try:
             with open(file_path_hashed, "rb") as f:
-                f.seek(offset)
-                data = f.read(length if length != -1 else None)
+                data = os.pread(f.fileno(), length, offset)
         except (IOError, OSError) as e:
             if self.logger:
                 self.logger.debug(f"[CACHE] Read error: {file_path_hashed}: {e}")
@@ -367,7 +357,7 @@ class CachedFileReader:
             self.pool.submit(self._fetch_block, arg)
 
     def read_file_range(
-        self, file_path, alluxio_path, offset=0, length=-1, file_size=None
+            self, file_path, alluxio_path, offset=0, length=-1, file_size=None
     ):
         """
         Read the requested file range.
@@ -375,37 +365,52 @@ class CachedFileReader:
         2. If cache miss occurs, trigger background download of missing blocks.
         """
         start_block, end_block = self.get_blocks(offset, length, file_size)
-        data = b""
+
+        # Pre-allocate list for chunks to avoid repeated string concatenation
+        chunks = []
+        total_size = 0
+
+        # Calculate remaining length for accurate part_length computation
+        remaining_length = length
+
         for blk in range(start_block, end_block + 1):
             part_offset = (
                 offset - blk * self.block_size if blk == start_block else 0
             )
-            part_length = (
-                min(length, self.block_size - part_offset)
-                if length != -1
-                else -1
-            )
+            # Calculate part_length more efficiently
+            if length != -1:
+                block_available = self.block_size - part_offset
+                part_length = min(remaining_length, block_available)
+                remaining_length -= part_length
+            else:
+                part_length = -1
+
             chunk, state = self.cache.read_from_cache(
                 file_path, blk, part_offset, part_length
             )
+
             if chunk is None:
-                self.logger.debug(
-                    f"[MISS] Cache miss, triggering background download: {file_path}"
-                )
                 if state == BlockStatus.ABSENT:
                     self._parallel_download_file(
                         file_path, alluxio_path, offset, length, file_size
                     )
+
+                # Wait for the block to become available
                 chunk, state = self.cache.read_from_cache(
                     file_path, blk, part_offset, part_length
                 )
+
                 if state != BlockStatus.CACHED:
-                    chunk = self.alluxio_client.read_file_range_normal(
+                    # Fall back to direct read - return immediately
+                    return self.alluxio_client.read_file_range_normal(
                         file_path, alluxio_path, offset, length
                     )
-                    return chunk
-            data = data + chunk
-        return data
+
+            chunks.append(chunk)
+            total_size += len(chunk)
+
+        # Use join() instead of repeated concatenation - much faster for multiple chunks
+        return b"".join(chunks)
 
     def get_blocks_prefetch(self, offset=0, length=-1, file_size=None):
         if length == -1 and file_size is None:
