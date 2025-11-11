@@ -34,7 +34,7 @@ from requests.adapters import HTTPAdapter
 from .cache import CachedFileReader
 from .cache import LocalCacheManager
 from .config import AlluxioClientConfig
-from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE, ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS
+from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
 from .const import ALLUXIO_REQUEST_MAX_RETRIES
 from .const import ALLUXIO_SUCCESS_IDENTIFIER
@@ -201,6 +201,8 @@ class AlluxioClient:
                 max_cache_size=self.config.local_cache_size_gb,
                 block_size=self.config.local_cache_block_size_mb,
                 thread_pool=self.mcap_async_prefetch_thread_pool,
+                http_max_retries=self.config.http_max_retries,
+                http_timeouts=self.config.http_timeouts,
                 logger=self.logger,
             )
             self.data_manager = CachedFileReader(
@@ -542,79 +544,19 @@ class AlluxioClient:
         except Exception as e:
             raise Exception(e)
 
-    def read_file_range(self, file_path, alluxio_path, offset=0, length=-1, time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS):
+    def read_file_range(self, file_path, alluxio_path, offset=0, length=-1):
         # Handle magic bytes cache for mcap
         if self.mcap_enabled:
             return self.data_manager.read_file_range(
-                file_path, alluxio_path, offset, length, time_out=time_out
+                file_path, alluxio_path, offset, length
             )
         else:
             return self.read_file_range_normal(
-                file_path, alluxio_path, offset, length, time_out=time_out
+                file_path, alluxio_path, offset, length
             )
 
-    def read_file_range_with_retry(
-            self,
-            file_path,
-            alluxio_path,
-            offset=0,
-            length=-1,
-            max_retries=ALLUXIO_REQUEST_MAX_RETRIES,
-            time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
-    ):
-        retry_count = 0
-
-        while retry_count < max_retries:
-            try:
-                return self.read_file_range(
-                    file_path, alluxio_path, offset, length, time_out
-                )
-            except (
-                    ConnectionResetError,
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.ChunkedEncodingError,
-            ) as e:
-                retry_count += 1
-                if retry_count < max_retries:
-                    time.sleep(1 * retry_count)
-                    continue
-                else:
-                    raise e
-            except Exception as e:
-                raise e
-
-    def read_file_range_normal_with_retry(
-            self,
-            file_path,
-            alluxio_path,
-            offset=0,
-            length=-1,
-            max_retries=ALLUXIO_REQUEST_MAX_RETRIES,
-            time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
-    ):
-        retry_count = 0
-
-        while retry_count < max_retries:
-            try:
-                return self.read_file_range_normal(
-                    file_path, alluxio_path, offset, length, time_out
-                )
-            except (
-                    ConnectionResetError,
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.ChunkedEncodingError,
-            ) as e:
-                retry_count += 1
-                if retry_count < max_retries:
-                    time.sleep(1 * retry_count)
-                    continue
-                else:
-                    raise e
-            except Exception as e:
-                raise e
-
     def read_file_range_normal(
-        self, file_path, alluxio_path, offset=0, length=-1, time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS
+        self, file_path, alluxio_path, offset=0, length=-1
     ):
         """
         Reads the full file.
@@ -641,7 +583,6 @@ class AlluxioClient:
                     alluxio_path,
                     offset,
                     length,
-                    time_out,
                 )
             else:
                 return self._all_file_range_generator(
@@ -651,7 +592,6 @@ class AlluxioClient:
                     alluxio_path,
                     offset,
                     length,
-                    time_out,
                 )
         except Exception as e:
             raise Exception(
@@ -1643,7 +1583,7 @@ class AlluxioClient:
                     break
 
     def _all_file_range_generator(
-        self, worker_host, worker_http_port, path_id, file_path, offset, length, time_out
+        self, worker_host, worker_http_port, path_id, file_path, offset, length
     ):
         try:
             headers = {"Range": f"bytes={offset}-{offset + length - 1}"}
@@ -1655,7 +1595,12 @@ class AlluxioClient:
                 http_port=29998,
                 alluxio_path=file_path,
             )
-            data = _c_send_get_request_write_bytes(url, headers, time_out)
+            data = _c_send_get_request_write_bytes(
+                url,
+                headers,
+                time_out=self.config.http_timeouts,
+                retry_tries=self.config.http_max_retries,
+            )
             return data
         except Exception as e:
             raise Exception(
@@ -1669,7 +1614,7 @@ class AlluxioClient:
 
     # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
     def _all_file_range_generator_alluxiocommon(
-        self, worker_host, worker_http_port, path_id, file_path, offset, length, time_out
+        self, worker_host, worker_http_port, path_id, file_path, offset, length
     ):
         return self._all_file_range_generator(
             worker_host,
@@ -1678,7 +1623,6 @@ class AlluxioClient:
             file_path,
             offset,
             length,
-            time_out,
         )
 
     def _create_session(self, concurrency):
