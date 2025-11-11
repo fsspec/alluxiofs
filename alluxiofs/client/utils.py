@@ -144,7 +144,7 @@ def _c_send_get_request_write_file(
 
 
 @retry_on_network(tries=ALLUXIO_REQUEST_MAX_RETRIES, delay=1)
-def _c_send_get_request_stream(url, headers=None):
+def _c_send_get_request_stream(url, time_out, headers=None):
     if headers is None:
         headers = {}
     buffer = BytesIO()
@@ -158,7 +158,7 @@ def _c_send_get_request_stream(url, headers=None):
         c.setopt(c.WRITEDATA, buffer)
         c.setopt(c.FOLLOWLOCATION, True)
         c.setopt(c.CONNECTTIMEOUT, 10)
-        c.setopt(c.TIMEOUT, 60)
+        c.setopt(c.TIMEOUT, time_out)
 
         c.perform()
         status = c.getinfo(c.RESPONSE_CODE)
