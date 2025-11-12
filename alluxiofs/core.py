@@ -577,9 +577,10 @@ class AlluxioFile(AbstractBufferedFile):
         super().__init__(fs, path, mode, **kwargs)
         self.alluxio_path = fs.info(path)["path"]
         self.mcap_enabled = fs.alluxio.config.mcap_enabled
+        read_buffer_size_mb = fs.alluxio.config.read_buffer_size_mb
 
         # Local read buffer for optimizing frequent small byte reads
-        self._read_buffer_size = 1024 * 64
+        self._read_buffer_size = int(1024 * 1024 * float(read_buffer_size_mb))
         self._read_buffer_data = b""
         self._read_buffer_start = 0
         self._read_buffer_end = 0

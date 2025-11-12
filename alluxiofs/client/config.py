@@ -30,6 +30,7 @@ class AlluxioClientConfig:
         memory_cache_size_mb=256,
         http_max_retries=ALLUXIO_REQUEST_MAX_RETRIES,
         http_timeouts=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
+        read_buffer_size_mb=0.064,
         **kwargs,
     ):
         """
@@ -118,6 +119,13 @@ class AlluxioClientConfig:
             isinstance(http_timeouts, int) and http_timeouts > 0
         ), "'http_timeouts' should be a positive integer"
 
+        assert (
+            isinstance(read_buffer_size_mb, int)
+            or isinstance(read_buffer_size_mb, float)
+        ) and read_buffer_size_mb > 0, (
+            "'read_buffer_size_mb' should be a positive integer or float"
+        )
+
         self.load_balance_domain = load_balance_domain
         self.worker_hosts = worker_hosts
         self.worker_http_port = worker_http_port
@@ -136,3 +144,4 @@ class AlluxioClientConfig:
         self.memory_cache_size_mb = memory_cache_size_mb
         self.http_max_retries = http_max_retries
         self.http_timeouts = http_timeouts
+        self.read_buffer_size_mb = read_buffer_size_mb
