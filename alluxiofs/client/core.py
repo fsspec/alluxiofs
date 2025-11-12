@@ -201,6 +201,8 @@ class AlluxioClient:
                 max_cache_size=self.config.local_cache_size_gb,
                 block_size=self.config.local_cache_block_size_mb,
                 thread_pool=self.mcap_async_prefetch_thread_pool,
+                http_max_retries=self.config.http_max_retries,
+                http_timeouts=self.config.http_timeouts,
                 logger=self.logger,
             )
             self.data_manager = CachedFileReader(
@@ -1593,7 +1595,12 @@ class AlluxioClient:
                 http_port=29998,
                 alluxio_path=file_path,
             )
-            data = _c_send_get_request_write_bytes(url, headers)
+            data = _c_send_get_request_write_bytes(
+                url,
+                headers,
+                time_out=self.config.http_timeouts,
+                retry_tries=self.config.http_max_retries,
+            )
             return data
         except Exception as e:
             raise Exception(

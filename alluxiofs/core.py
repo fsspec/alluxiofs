@@ -576,9 +576,11 @@ class AlluxioFile(AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
         super().__init__(fs, path, mode, **kwargs)
         self.alluxio_path = fs.info(path)["path"]
+        self.mcap_enabled = fs.alluxio.config.mcap_enabled
+        read_buffer_size_mb = fs.alluxio.config.read_buffer_size_mb
 
         # Local read buffer for optimizing frequent small byte reads
-        self._read_buffer_size = 1024 * 64
+        self._read_buffer_size = int(1024 * 1024 * float(read_buffer_size_mb))
         self._read_buffer_data = b""
         self._read_buffer_start = 0
         self._read_buffer_end = 0
@@ -607,7 +609,7 @@ class AlluxioFile(AbstractBufferedFile):
         if self._file_size is not None and self._file_size > 0:
             end_pos = min(end_pos, self._file_size)
 
-        data = self.cache._fetch(start_pos, end_pos)
+        data = self._fetch_range(start_pos, end_pos)
 
         # Clear old buffer reference before assigning new one to help GC
         old_data = self._read_buffer_data
@@ -620,6 +622,12 @@ class AlluxioFile(AbstractBufferedFile):
         return len(data)
 
     def read(self, length=-1):
+        if self.mcap_enabled:
+            return self.read_mcap(length)
+        else:
+            return super().read(length)
+
+    def read_mcap(self, length=-1):
         """Read data, prioritizing local buffer for frequent small reads"""
         loc = self.loc
 
@@ -650,7 +658,7 @@ class AlluxioFile(AbstractBufferedFile):
             remaining_loc = self.loc
             if remaining > self._read_buffer_size // 2:
                 # Large remaining: fetch directly
-                remaining_data = self.cache._fetch(
+                remaining_data = self._fetch_range(
                     remaining_loc, remaining_loc + remaining
                 )
                 self.loc = remaining_loc + remaining
@@ -672,7 +680,7 @@ class AlluxioFile(AbstractBufferedFile):
             self.loc = loc + length
             return out
 
-        out = self.cache._fetch(loc, loc + length)
+        out = self._fetch_range(loc, loc + length)
         self.loc = loc + len(out)
         return out
 

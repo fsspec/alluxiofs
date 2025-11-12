@@ -7,9 +7,14 @@
 #
 # See the NOTICE file distributed with this work for information regarding copyright ownership.
 import logging
+import time
+from functools import wraps
 from io import BytesIO
 
 import pycurl
+
+from .const import ALLUXIO_REQUEST_MAX_RETRIES
+from .const import ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS
 
 
 def set_log_level(logger, test_options):
@@ -25,14 +30,55 @@ def set_log_level(logger, test_options):
             logger.warning(f"Unsupported log level: {log_level}")
 
 
+def retry_on_network(tries=3, delay=1, backoff=2):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            _tries = kwargs.pop("retry_tries", tries)
+            _delay = kwargs.pop("retry_delay", delay)
+            _backoff = kwargs.pop("retry_backoff", backoff)
+
+            while _tries > 0:
+                try:
+                    return func(*args, **kwargs)
+                except (pycurl.error, ConnectionResetError, TimeoutError) as e:
+                    _tries -= 1
+                    if _tries == 0:
+                        raise
+                    print(
+                        f"[retry_on_network] Network exception: {e}, retrying in {_delay}s..."
+                    )
+                    time.sleep(_delay)
+                    _delay *= _backoff
+                except RuntimeError as e:
+                    if "cURL error: (28" in str(e):
+                        _tries -= 1
+                        if _tries == 0:
+                            raise
+                        print(
+                            f"[retry_on_network] Timeout exception: {e}, retrying in {_delay}s..."
+                        )
+                        time.sleep(_delay)
+                        _delay *= _backoff
+                    else:
+                        raise
+
+        return wrapper
+
+    return decorator
+
+
+@retry_on_network(tries=ALLUXIO_REQUEST_MAX_RETRIES, delay=1)
 def _c_send_get_request_write_bytes(
-    url, headers, max_buffer_size=20 * 1024 * 1024
+    url,
+    headers,
+    time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
+    max_buffer_size=20 * 1024 * 1024,
 ):
     buffer = BytesIO()
     c = pycurl.Curl()
     try:
         c.setopt(c.MAXFILESIZE, max_buffer_size)
-
         headers_list = [
             f"{k}: {v}".encode("utf-8") for k, v in headers.items()
         ]
@@ -41,14 +87,12 @@ def _c_send_get_request_write_bytes(
         c.setopt(c.WRITEDATA, buffer)
         c.setopt(c.FOLLOWLOCATION, True)
         c.setopt(c.CONNECTTIMEOUT, 10)
-        c.setopt(c.TIMEOUT, 60)
+        c.setopt(c.TIMEOUT, time_out)
         c.setopt(c.BUFFERSIZE, 16384)
 
         c.perform()
         status = c.getinfo(c.RESPONSE_CODE)
-
         result = buffer.getvalue()
-        buffer.close()
 
         if status == 104:
             raise ConnectionResetError("Connection reset by peer")
@@ -61,17 +105,20 @@ def _c_send_get_request_write_bytes(
         raise RuntimeError(f"cURL error: {e}")
     finally:
         c.close()
-        if not buffer.closed:
-            buffer.close()
+        buffer.close()
 
 
+@retry_on_network(tries=ALLUXIO_REQUEST_MAX_RETRIES, delay=1)
 def _c_send_get_request_write_file(
-    url, headers, f, max_buffer_size=20 * 1024 * 1024
+    url,
+    headers,
+    f,
+    time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
+    max_buffer_size=20 * 1024 * 1024,
 ):
     c = pycurl.Curl()
     try:
         c.setopt(c.MAXFILESIZE, max_buffer_size)
-
         headers_list = [
             f"{k}: {v}".encode("utf-8") for k, v in headers.items()
         ]
@@ -80,7 +127,7 @@ def _c_send_get_request_write_file(
         c.setopt(c.WRITEDATA, f)
         c.setopt(c.FOLLOWLOCATION, True)
         c.setopt(c.CONNECTTIMEOUT, 10)
-        c.setopt(c.TIMEOUT, 60)
+        c.setopt(c.TIMEOUT, time_out)
         c.setopt(c.BUFFERSIZE, 16384)
 
         c.perform()
@@ -96,25 +143,34 @@ def _c_send_get_request_write_file(
         c.close()
 
 
-def _c_send_get_request_stream(url, headers=None):
+@retry_on_network(tries=ALLUXIO_REQUEST_MAX_RETRIES, delay=1)
+def _c_send_get_request_stream(url, time_out, headers=None):
     if headers is None:
         headers = {}
     buffer = BytesIO()
     c = pycurl.Curl()
-    headers = [f"{k}: {v}".encode("utf-8") for k, v in headers.items()]
-    c.setopt(c.URL, url.encode("utf-8"))
-    c.setopt(c.HTTPHEADER, headers)
-    c.setopt(c.WRITEDATA, buffer)
-    c.setopt(c.FOLLOWLOCATION, True)
-    c.setopt(c.CONNECTTIMEOUT, 10)
-    c.setopt(c.TIMEOUT, 60)
-    c.perform()
-    status = c.getinfo(c.RESPONSE_CODE)
-    c.close()
+    try:
+        headers_list = [
+            f"{k}: {v}".encode("utf-8") for k, v in headers.items()
+        ]
+        c.setopt(c.URL, url.encode("utf-8"))
+        c.setopt(c.HTTPHEADER, headers_list)
+        c.setopt(c.WRITEDATA, buffer)
+        c.setopt(c.FOLLOWLOCATION, True)
+        c.setopt(c.CONNECTTIMEOUT, 10)
+        c.setopt(c.TIMEOUT, time_out)
 
-    if status == 104:
-        raise ConnectionResetError("Connection reset by peer")
-    elif status >= 400:
-        raise RuntimeError(f"HTTP error: {status}")
+        c.perform()
+        status = c.getinfo(c.RESPONSE_CODE)
 
-    return buffer
+        if status == 104:
+            raise ConnectionResetError("Connection reset by peer")
+        elif status >= 400:
+            raise RuntimeError(f"HTTP error: {status}")
+
+        return buffer
+    except pycurl.error as e:
+        raise RuntimeError(f"cURL error: {e}")
+    finally:
+        c.close()
+        buffer.close()
