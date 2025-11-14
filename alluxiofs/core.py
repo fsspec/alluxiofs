@@ -386,7 +386,7 @@ class AlluxioFileSystem(AbstractFileSystem):
 
         if self.alluxio.config.mcap_enabled:
             kwargs["cache_type"] = "none"
-        return AlluxioFile(
+        raw_file = AlluxioFile(
             fs=self,
             path=path,
             mode=mode,
@@ -396,6 +396,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             # cache=self.alluxio.mem_cache,
             **kwargs,
         )
+        return io.BufferedReader(raw_file)
 
     @fallback_handler
     def cat_file(self, path, start=0, end=None, **kwargs):

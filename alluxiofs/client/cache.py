@@ -133,7 +133,6 @@ class LocalCacheManager:
         alluxio_path,
         start,
         end,
-        time_out,
     ):
         """
         Write data to cache atomically using a two-phase commit:
@@ -277,7 +276,6 @@ class LocalCacheManager:
         alluxio_path,
         start,
         end,
-        time_out,
     ):
         path_hashed = self._get_local_path(file_path, part_index)
         self._atomic_write(
@@ -288,7 +286,6 @@ class LocalCacheManager:
             alluxio_path,
             start,
             end,
-            time_out=time_out,
         )
 
     def read_from_cache(self, file_path, part_index, offset, length):
@@ -406,7 +403,6 @@ class CachedFileReader:
             block_index,
             start,
             end,
-            time_out,
         ) = args
         states = self.cache.get_file_status(
             file_path, block_index
@@ -423,7 +419,6 @@ class CachedFileReader:
                 alluxio_path,
                 start,
                 end,
-                time_out=time_out,
             )
             if self.logger:
                 self.logger.debug(
@@ -444,7 +439,6 @@ class CachedFileReader:
         offset=0,
         length=-1,
         file_size=None,
-        time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
     ):
         """Use multiprocessing to download the entire file in parallel (per block)."""
         worker_host, worker_http_port = self._get_preferred_worker_address(
@@ -471,7 +465,6 @@ class CachedFileReader:
                     i,
                     start,
                     end,
-                    time_out,
                 )
             )
 
@@ -489,7 +482,6 @@ class CachedFileReader:
         offset=0,
         length=-1,
         file_size=None,
-        time_out=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
     ):
         """
         Read the requested file range.
@@ -528,7 +520,6 @@ class CachedFileReader:
                         offset,
                         length,
                         file_size,
-                        time_out=time_out,
                     )
 
                 # Wait for the block to become available
