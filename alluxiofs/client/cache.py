@@ -19,6 +19,7 @@ from .const import DEFAULT_LOCAL_CACHE_SIZE_GB
 from .const import LOCAL_CACHE_DIR_DEFAULT
 from .const import MAGIC_SIZE
 from .utils import _c_send_get_request_write_file
+from .utils import get_prefetch_policy
 
 
 # =========================================================
@@ -374,6 +375,10 @@ class CachedFileReader:
         self.logger = logger if logger is not None else None
         self.alluxio_client = alluxio
         self.pool = data_manager.pool
+        self.prefetch_policy = get_prefetch_policy(
+            alluxio.config,
+            self.block_size,
+        )
 
     def close(self):
         if self.logger:
@@ -404,11 +409,6 @@ class CachedFileReader:
             start,
             end,
         ) = args
-        states = self.cache.get_file_status(
-            file_path, block_index
-        )  # Ensure status is initialized
-        if states == BlockStatus.CACHED or states == BlockStatus.LOADING:
-            return
         try:
             self.cache.set_file_loading(file_path, block_index)
             self.cache.add_to_cache(
@@ -452,6 +452,11 @@ class CachedFileReader:
         )
         args_list = []
         for i in range(start_block, end_block + 1):
+            states = self.cache.get_file_status(
+                file_path, i
+            )  # Ensure status is initialized
+            if states == BlockStatus.CACHED or states == BlockStatus.LOADING:
+                continue
             start = i * self.block_size
             end = (i + 1) * self.block_size
             end = min(end, file_size)
@@ -488,11 +493,12 @@ class CachedFileReader:
         1. Try reading from the local cache.
         2. If cache miss occurs, trigger background download of missing blocks.
         """
+        if length == 0:
+            return b""
         start_block, end_block = self.get_blocks(offset, length, file_size)
 
         # Pre-allocate list for chunks to avoid repeated string concatenation
         chunks = []
-        total_size = 0
 
         # Calculate remaining length for accurate part_length computation
         remaining_length = length
@@ -534,28 +540,12 @@ class CachedFileReader:
                     )
 
             chunks.append(chunk)
-            total_size += len(chunk)
 
         # Use join() instead of repeated concatenation - much faster for multiple chunks
         return b"".join(chunks)
 
     def get_blocks_prefetch(self, offset=0, length=-1, file_size=None):
-        if length == -1 and file_size is None:
-            raise ValueError(
-                "file_size or length must be provided to determine block boundaries."
-            )
-        start_block = offset // self.block_size
-        end_block = (
-            (offset + length - 1) // self.block_size
-            if length != -1
-            else (file_size - 1) // self.block_size
-        )
-        # Expand the prefetch range by 16 blocks beyond the current end block
-        prefetch_ahead = self.alluxio_client.config.mcap_prefetch_ahead_blocks
-        end_block = min(
-            end_block + prefetch_ahead, (file_size - 1) // self.block_size
-        )
-        return start_block, end_block
+        return self.prefetch_policy.get_blocks(offset, length, file_size)
 
     def get_file_length(self, file_path):
         """Mock: Returns the file size for the given file path."""
