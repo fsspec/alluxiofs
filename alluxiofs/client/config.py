@@ -30,7 +30,7 @@ class AlluxioClientConfig:
         memory_cache_size_mb=256,
         http_max_retries=ALLUXIO_REQUEST_MAX_RETRIES,
         http_timeouts=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
-        read_buffer_size_mb=4,
+        read_buffer_size_mb=0.064,
         **kwargs,
     ):
         """
