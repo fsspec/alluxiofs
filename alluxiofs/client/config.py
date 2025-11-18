@@ -22,15 +22,17 @@ class AlluxioClientConfig:
         local_disk_cache_dir="/tmp/local_cache/",
         local_cache_dir="/tmp/local_cache/",
         mcap_enabled=False,
-        mcap_prefetch_ahead_blocks=16,
+        mcap_prefetch_ahead_blocks=2,
         mcap_prefetch_concurrency=32,
         local_cache_size_gb=64,
-        local_cache_block_size_mb=16,
+        local_cache_block_size_mb=4,
         use_memory_cache=False,
         memory_cache_size_mb=256,
         http_max_retries=ALLUXIO_REQUEST_MAX_RETRIES,
         http_timeouts=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
-        read_buffer_size_mb=0.064,
+        read_buffer_size_mb=0.008,
+        mcap_max_prefetch_blocks=16,
+        mcap_prefetch_policy="adaptive_window",
         **kwargs,
     ):
         """
@@ -126,6 +128,15 @@ class AlluxioClientConfig:
             "'read_buffer_size_mb' should be a positive integer or float"
         )
 
+        assert (
+            isinstance(mcap_max_prefetch_blocks, int)
+            and mcap_max_prefetch_blocks >= 0
+        ), "'mcap_max_prefetch_blocks' should be a non-negative integer"
+
+        assert isinstance(
+            mcap_prefetch_policy, str
+        ), "'mcap_prefetch_policy' should be a string"
+
         self.load_balance_domain = load_balance_domain
         self.worker_hosts = worker_hosts
         self.worker_http_port = worker_http_port
@@ -145,3 +156,5 @@ class AlluxioClientConfig:
         self.http_max_retries = http_max_retries
         self.http_timeouts = http_timeouts
         self.read_buffer_size_mb = read_buffer_size_mb
+        self.mcap_max_prefetch_blocks = mcap_max_prefetch_blocks
+        self.mcap_prefetch_policy = mcap_prefetch_policy

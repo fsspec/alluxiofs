@@ -30,6 +30,32 @@ def set_log_level(logger, test_options):
             logger.warning(f"Unsupported log level: {log_level}")
 
 
+def get_prefetch_policy(config, block_size):
+    policy_name = config.mcap_prefetch_policy.lower()
+    if policy_name == "none":
+        from alluxiofs.client.prefetch_policy import NoPrefetchPolicy
+
+        return NoPrefetchPolicy(block_size)
+    elif policy_name == "fixed_window":
+        from alluxiofs.client.prefetch_policy import FixedWindowPrefetchPolicy
+
+        return FixedWindowPrefetchPolicy(
+            block_size, config.mcap_prefetch_ahead_blocks
+        )
+    elif policy_name == "adaptive_window":
+        from alluxiofs.client.prefetch_policy import (
+            AdaptiveWindowPrefetchPolicy,
+        )
+
+        return AdaptiveWindowPrefetchPolicy(
+            block_size, config.mcap_max_prefetch_blocks
+        )
+    else:
+        raise ValueError(
+            f"Unsupported prefetch policy: {config.mcap_prefetch_policy}"
+        )
+
+
 def retry_on_network(tries=3, delay=1, backoff=2):
     def decorator(func):
         @wraps(func)
