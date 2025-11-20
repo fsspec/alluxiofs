@@ -31,9 +31,10 @@ LOG_LEVEL_MAP = {
     "NOTSET": logging.NOTSET,
 }
 
+
 def setup_logger(
     file_path=os.getenv("ALLUXIO_PYTHON_SDK_LOG_PATH", None),
-    level_str=os.getenv("ALLUXIO_PYTHON_SDK_LOG_LEVEL", "INFO")
+    level_str=os.getenv("ALLUXIO_PYTHON_SDK_LOG_LEVEL", "INFO"),
 ):
     # log dir
     level = LOG_LEVEL_MAP.get(level_str.upper(), logging.INFO)
@@ -257,19 +258,16 @@ class AlluxioFileSystem(AbstractFileSystem):
             for path in possible_path_arg_names:
                 if path in argument_list:
                     if path in kwargs:
-                        kwargs[path] = self._strip_protocol(
-                            kwargs[path]
-                        )
+                        kwargs[path] = self._strip_protocol(kwargs[path])
                     else:
                         path_index = argument_list.index(path) - 1
-                        positional_params[
-                            path_index
-                        ] = self._strip_protocol(
+                        positional_params[path_index] = self._strip_protocol(
                             positional_params[path_index]
                         )
 
             positional_params = tuple(positional_params)
             import traceback
+
             try:
                 if self.alluxio:
                     start_time = time.time()
@@ -306,7 +304,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                     )
                     return res
                 except Exception:
-                    self.logger.error(f"fallback to ufs is failed")
+                    self.logger.error("fallback to ufs is failed")
                 raise Exception("fallback to ufs is failed")
             raise NotImplementedError(
                 f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.target_protocol}"
