@@ -11,6 +11,7 @@ import io
 import logging
 import os
 import time
+import traceback
 from dataclasses import dataclass
 from functools import wraps
 
@@ -266,7 +267,6 @@ class AlluxioFileSystem(AbstractFileSystem):
                         )
 
             positional_params = tuple(positional_params)
-            import traceback
 
             try:
                 if self.alluxio:
@@ -383,11 +383,8 @@ class AlluxioFileSystem(AbstractFileSystem):
         else:
             length = end - start
         path = self.unstrip_protocol(path)
-        return self.alluxio.read_range(path, start, length)
-
-    @fallback_handler
-    def ukey(self, path, *args, **kwargs):
-        raise NotImplementedError
+        alluxio_path = self.info(path)["name"]
+        return self.alluxio.read_file_range(path, alluxio_path, start, length)
 
     @fallback_handler
     def mkdir(self, path, *args, **kwargs):
@@ -443,11 +440,11 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def created(self, path, *args, **kwargs):
-        raise NotImplementedError
+        return self.info(path).get("created", None)
 
     @fallback_handler
     def modified(self, path, *args, **kwargs):
-        raise NotImplementedError
+        return self.info(path).get("mtime", None)
 
     @fallback_handler
     def head(self, path, *args, **kwargs):
@@ -494,18 +491,6 @@ class AlluxioFileSystem(AbstractFileSystem):
         return self.alluxio.cp(path1, path2, option)
 
     @fallback_handler
-    def cp_file(self, path1, path2, *args, **kwargs):
-        return self.copy(path1, path2, *args, **kwargs)
-
-    @fallback_handler
-    def rename(self, path1, path2, **kwargs):
-        return self.mv(path1, path2, **kwargs)
-
-    @fallback_handler
-    def move(self, path1, path2, **kwargs):
-        return self.mv(path1, path2, **kwargs)
-
-    @fallback_handler
     def put_file(self, lpath, rpath, *args, **kwargs):
         return self.upload(lpath, rpath, *args, **kwargs)
 
@@ -526,12 +511,12 @@ class AlluxioFileSystem(AbstractFileSystem):
     @fallback_handler
     def created(self, path):
         info = self.info(path)
-        return info.get("creationTime", None)
+        return info.get("created", None)
 
     @fallback_handler
     def modified(self, path):
         info = self.info(path)
-        return info.get("modificationTime", None)
+        return info.get("mtime", None)
 
     @fallback_handler
     def upload(self, lpath: str, rpath: str, *args, **kwargs) -> bool:
