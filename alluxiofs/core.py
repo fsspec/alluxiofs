@@ -46,7 +46,7 @@ def setup_logger(
             os.makedirs(logs_dir, exist_ok=True)
         log_file = os.path.join(logs_dir, file_name)
     else:
-        log_file = os.path.join(file_path, file_name)
+        log_file = file_path + "/" + file_name
     # set handler
     file_handler = logging.FileHandler(log_file)
     file_handler.setLevel(level)
@@ -70,12 +70,12 @@ class RMOption:
     # delete files and subdirectories recursively
     recursive: bool = False
     recursiveAlias: bool = False
-    # remove data and metadata from Alluxio space only
-    remove_alluxio_only: bool = True
-    # remove directories without checking UFS contents are in sync
-    remove_unchecked_option: bool = False
     # Marks a directory to either trigger a metadata sync or skip the metadata sync on next access.
     sync_parent_next_time: bool = False
+    # remove directories without checking UFS contents are in sync
+    remove_unchecked_option: bool = False
+    # remove data and metadata from Alluxio space only
+    remove_alluxio_only: bool = True
     # remove mount points in the directory
     delete_mount_point: bool = False
 
