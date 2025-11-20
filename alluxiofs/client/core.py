@@ -67,16 +67,15 @@ from .utils import set_log_level
 class AlluxioPathStatus:
     type: str
     name: str
-    path: str
     ufs_path: str
-    length: int
+    size: int
     human_readable_file_size: str
     completed: bool
     owner: str
     group: str
     mode: str
-    creation_time_ms: int
-    last_modification_time_ms: int
+    created: int
+    mtime: int
     last_access_time_ms: int
     persisted: bool
     in_alluxio_percentage: int
@@ -273,7 +272,6 @@ class AlluxioClient:
                 result.append(
                     AlluxioPathStatus(
                         data.get("mType", ""),
-                        data.get("mName", ""),
                         data.get("mPath", ""),
                         data.get("mUfsPath", ""),
                         data.get("mLength", 0),
@@ -348,7 +346,6 @@ class AlluxioClient:
             data = open_source_adapter(data)
             return AlluxioPathStatus(
                 data.get("mType", ""),
-                data.get("mName", ""),
                 data.get("mPath", ""),
                 data.get("mUfsPath", ""),
                 data.get("mLength", 0),
