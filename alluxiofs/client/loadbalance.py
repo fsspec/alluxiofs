@@ -67,7 +67,7 @@ class WorkerListLoadBalancer:
                 host, port_str = worker_host.split(":")
             else:
                 host = worker_host
-                port_str = config.worker_http_port
+                port_str = str(config.worker_http_port)
             worker_hosts.append(host.replace(" ", ""))
             ports.append(int(port_str.replace(" ", "")))
         return worker_hosts, ports

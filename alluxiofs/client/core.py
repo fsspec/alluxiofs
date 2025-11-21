@@ -564,9 +564,11 @@ class AlluxioClient:
             file content (str): The full file content
         """
         self._validate_path(file_path)
-        worker_host, worker_http_port = self._get_preferred_worker_address(
-            file_path
-        )
+        worker_host = self.config.worker_hosts[0]
+        worker_http_port = 29998
+        # worker_host, worker_http_port = self._get_preferred_worker_address(
+        #     file_path
+        # )
         path_id = self._get_path_hash(file_path)
         try:
             if self.data_manager:
@@ -1564,7 +1566,7 @@ class AlluxioClient:
             raise Exception(
                 EXCEPTION_CONTENT.format(
                     worker_host=worker_host,
-                    http_port=worker_http_port,
+                    http_port=29998,
                     error=f"Error when reading file {file_path} with offset {offset} and length {length},"
                     f" error: {e}",
                 )
