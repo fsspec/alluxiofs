@@ -156,6 +156,12 @@ def _c_send_get_request_write_file(
         c.setopt(c.TIMEOUT, time_out)
         c.setopt(c.BUFFERSIZE, 16384)
 
+        c.setopt(c.FORBID_REUSE, True)
+        c.setopt(c.FRESH_CONNECT, True)
+        c.setopt(c.TCP_KEEPALIVE, 0)
+        c.setopt(c.NOSIGNAL, 1)
+        c.setopt(c.HTTP_VERSION, c.CURL_HTTP_VERSION_1_1)
+
         c.perform()
         status = c.getinfo(c.RESPONSE_CODE)
 
@@ -185,6 +191,12 @@ def _c_send_get_request_stream(url, time_out, headers=None):
         c.setopt(c.FOLLOWLOCATION, True)
         c.setopt(c.CONNECTTIMEOUT, 10)
         c.setopt(c.TIMEOUT, time_out)
+
+        c.setopt(c.FORBID_REUSE, True)
+        c.setopt(c.FRESH_CONNECT, True)
+        c.setopt(c.TCP_KEEPALIVE, 0)
+        c.setopt(c.NOSIGNAL, 1)
+        c.setopt(c.HTTP_VERSION, c.CURL_HTTP_VERSION_1_1)
 
         c.perform()
         status = c.getinfo(c.RESPONSE_CODE)

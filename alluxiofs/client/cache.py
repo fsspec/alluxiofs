@@ -552,7 +552,7 @@ class CachedFileReader:
         file_status = self.alluxio_client.get_file_status(file_path)
         if file_status is None:
             raise FileNotFoundError(f"File {file_path} not found")
-        length = file_status.length
+        length = file_status.size
         return length
 
     def get_blocks(self, offset=0, length=-1, file_size=None):
