@@ -361,7 +361,8 @@ class AlluxioFileSystem(AbstractFileSystem):
         if self.alluxio.config.mcap_enabled:
             kwargs["cache_type"] = "none"
         raw_file = AlluxioFile(
-            fs=self,
+            alluxio=self,
+            ufs=self.fs,
             path=path,
             mode=mode,
             block_size=block_size,
@@ -547,19 +548,66 @@ class AlluxioFileSystem(AbstractFileSystem):
 
 
 class AlluxioFile(AbstractBufferedFile):
-    def __init__(self, fs, path, mode="rb", **kwargs):
-        super().__init__(fs, path, mode, **kwargs)
-        self.alluxio_path = fs.info(path)["name"]
-        self.mcap_enabled = fs.alluxio.config.mcap_enabled
-        read_buffer_size_mb = fs.alluxio.config.read_buffer_size_mb
+    def __init__(self, alluxio, ufs, path, mode="rb", **kwargs):
+        super().__init__(alluxio, path, mode, **kwargs)
+        self.alluxio_path = alluxio.info(path)["name"]
+        self.ufs = ufs
+        self.f = ufs.open(path, mode, **kwargs) if ufs else None
+        self.kwargs = kwargs
+        self.logger = alluxio.logger
 
-        # Local read buffer for optimizing frequent small byte reads
-        self._read_buffer_size = int(1024 * 1024 * float(read_buffer_size_mb))
-        self._read_buffer_data = b""
-        self._read_buffer_start = 0
-        self._read_buffer_end = 0
-        self._file_size = getattr(self, "size", None)
+    def fallback_handler(alluxio_impl):
+        @wraps(alluxio_impl)
+        def fallback_wrapper(self, *args, **kwargs):
+            signature = inspect.signature(alluxio_impl)
+            positional_params = list(
+                args
+            )
+            argument_list = []
+            for param in signature.parameters.values():
+                argument_list.append(param.name)
+            possible_path_arg_names = [
+                "path",
+                "path1",
+                "path2",
+                "lpath",
+                "rpath",
+            ]
+            for path in possible_path_arg_names:
+                if path in argument_list:
+                    if path in kwargs:
+                        kwargs[path] = self._strip_protocol(kwargs[path])
+                    else:
+                        path_index = argument_list.index(path) - 1
+                        positional_params[path_index] = self._strip_protocol(
+                            positional_params[path_index]
+                        )
 
+            positional_params = tuple(positional_params)
+
+            try:
+                if self.fs:
+                    res = alluxio_impl(self, *positional_params, **kwargs)
+                    return res
+            except Exception as e:
+                if not isinstance(e, NotImplementedError):
+                    self.logger.debug(f"{e} {traceback.format_exc()}")
+                if self.ufs is None:
+                    raise e
+            fs_method = getattr(self.f, alluxio_impl.__name__, None)
+            if fs_method:
+                try:
+                    res = fs_method(*positional_params, **kwargs)
+                    return res
+                except Exception as e:
+                    self.logger.error("fallback to ufs is failed")
+                raise Exception("fallback to ufs is failed")
+            raise NotImplementedError(
+                f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.target_protocol}"
+            )
+        return fallback_wrapper
+
+    @fallback_handler
     def _fetch_range(self, start, end):
         """Get the specified set of bytes from remote"""
 
@@ -590,12 +638,7 @@ class AlluxioFile(AbstractBufferedFile):
     def close(self):
         """Close file and clean up resources to prevent memory leaks"""
         if not self.closed:
-            # Clear read buffer to help GC
-            self._read_buffer_data = b""
-            self._read_buffer_start = 0
-            self._read_buffer_end = 0
-            # Clear file size reference
-            self._file_size = None
+            self.f.close()
         super().close()
 
     def flush(self, force=False):
@@ -622,3 +665,5 @@ class AlluxioFile(AbstractBufferedFile):
         if self._upload_chunk(final=force) is not False:
             self.offset += self.buffer.seek(0, 2)
             self.buffer = io.BytesIO()
+
+
