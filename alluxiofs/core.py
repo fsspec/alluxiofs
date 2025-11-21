@@ -15,6 +15,7 @@ import traceback
 from dataclasses import dataclass
 from functools import wraps
 
+import fsspec
 from cachetools import LRUCache
 from fsspec import AbstractFileSystem
 from fsspec import filesystem
@@ -121,9 +122,7 @@ class AlluxioFileSystem(AbstractFileSystem):
     def __init__(
         self,
         preload_path=None,
-        target_protocol=None,
-        target_options=None,
-        fs=None,
+        ufs=None,
         logger=None,
         **kwargs,
     ):
@@ -156,35 +155,8 @@ class AlluxioFileSystem(AbstractFileSystem):
         self.logger = logger
         if self.logger is None:
             self.logger = setup_logger()
-        if fs and target_protocol:
-            raise ValueError(
-                "Please provide one of filesystem instance (fs) or"
-                " target_protocol, not both"
-            )
-        if fs is None and target_protocol is None:
-            self.logger.warning(
-                "Neither filesystem instance(fs) nor target_protocol is "
-                "provided. Will not fall back to under file systems when "
-                "accessed files are not in Alluxiofs"
-            )
-        self.target_options = target_options or {}
-        self.fs = None
-        self.target_protocol = None
-        if fs is not None:
-            self.fs = fs
-            if isinstance(self.fs.protocol, tuple):
-                # e.g. file or local both representing local filesystem
-                self.target_protocol = self.fs.protocol[0]
-            elif isinstance(self.fs.protocol, str):
-                self.target_protocol = self.fs.protocol
-            else:
-                raise TypeError(
-                    "target filesystem protocol should be str or tuple but found "
-                    + self.fs.protocol
-                )
-        elif target_protocol is not None:
-            self.fs = filesystem(target_protocol, **self.target_options)
-            self.target_protocol = target_protocol
+
+        # init alluxio client
         test_options = kwargs.get("test_options", {})
         set_log_level(self.logger, test_options)
         if test_options.get("skip_alluxio") is True:
@@ -196,8 +168,40 @@ class AlluxioFileSystem(AbstractFileSystem):
             )
             if preload_path is not None:
                 self.alluxio.load(preload_path)
+
+        # init ufs
+        self.ufs = {}
+        self.ufs_info = {}
+        if ufs is None:
+            self.logger.warning(
+                "Neither filesystem instance(fs) nor target_protocol is "
+                "provided. Will not fall back to under file systems when "
+                "accessed files are not in Alluxiofs"
+            )
+        else:
+            self.target_protocols = ufs.split(",")
+            for protocol in self.target_protocols:
+                if fsspec.get_filesystem_class(protocol) is None:
+                    raise ValueError(
+                        f"Unsupported target protocol: {protocol}"
+                    )
+                else:
+                    target_options = self.get_target_options_from_worker(protocol)
+                    self.ufs[protocol] = filesystem(
+                        protocol, **target_options
+                    )
+
         self.file_info_cache = LRUCache(maxsize=1000)
         self.error_metrics = AlluxioErrorMetrics()
+
+    def get_target_options_from_worker(self, ufs):
+        if ufs in self.ufs_info:
+            return self.ufs_info[ufs]
+        else:
+            if self.alluxio:
+                return self.alluxio.get_target_options_from_worker(ufs)
+            else:
+                return {}
 
     # TODO(littleEast7): there may be a bug.
     def unstrip_protocol(self, path):
@@ -224,93 +228,150 @@ class AlluxioFileSystem(AbstractFileSystem):
         else:
             return file_status.path
 
-    def fallback_handler(alluxio_impl):
-        @wraps(alluxio_impl)
-        def fallback_wrapper(self, *args, **kwargs):
-            signature = inspect.signature(alluxio_impl)
 
-            # process path related arguments to remove alluxiofs protocol
-            # since both alluxio and ufs cannot process alluxiofs protocol
-            # Require s3://bucket/path or /bucket/path
-            # paths may be passed as positional argument or kwarg arguments
-            # process accordingly and keep paths as positional argument if passed as positional,
-            # and keep as kwarg arguments if passed as kwarg.
+    def fallback_handler(func):
+        """
+        Decorator that attempts to perform an operation using the Alluxio implementation.
+        If it fails (or is not implemented), it falls back to the Underlying File System (UFS).
+        It also sanitizes path arguments by stripping protocol prefixes (e.g., 's3://').
+        """
 
-            positional_params = list(
-                args
-            )  # args is an immutable tuple so make a copy of it to change its elements
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            # 1. Pre-processing: Argument Binding
+            # Use inspect.bind() to map args/kwargs to parameter names safely.
+            sig = inspect.signature(func)
+            bound = sig.bind(self, *args, **kwargs)
+            bound.apply_defaults()
 
-            # get a list of arguments defined in the function
-            # argument_list is used to check which path parameter that needs processing appears
-            argument_list = []
-            for param in signature.parameters.values():
-                argument_list.append(param.name)
+            detected_protocol = None
+            # Define constants at the module level or class level
+            PATH_ARG_NAMES = {"path", "path1", "path2", "lpath", "rpath"}
 
-            # fsspec path parameters has different names and sequences
-            # check if the path parameters are passed as kwargs or positional args
-            # process the path and put them back into kwargs or positional args
-            possible_path_arg_names = [
-                "path",
-                "path1",
-                "path2",
-                "lpath",
-                "rpath",
-            ]
-            for path in possible_path_arg_names:
-                if path in argument_list:
-                    if path in kwargs:
-                        kwargs[path] = self._strip_protocol(kwargs[path])
-                    else:
-                        path_index = argument_list.index(path) - 1
-                        positional_params[path_index] = self._strip_protocol(
-                            positional_params[path_index]
-                        )
+            # 2. Argument Sanitization & Protocol Detection
+            # We iterate ONCE. We must detect the protocol BEFORE stripping it.
+            for name, value in bound.arguments.items():
+                if name in PATH_ARG_NAMES and isinstance(value, str):
+                    # A. Try to capture protocol if we haven't found one yet
+                    if detected_protocol is None:
+                        detected_protocol = self._get_protocol_from_path(value)
 
-            positional_params = tuple(positional_params)
+                    # B. Strip the protocol from the argument for Alluxio usage
+                    # Modify the value directly in the bound arguments dictionary
+                    bound.arguments[name] = self._strip_protocol(value)
 
-            try:
-                if self.alluxio:
-                    start_time = time.time()
-                    res = alluxio_impl(self, *positional_params, **kwargs)
-                    self.logger.debug(
-                        f"Exit(Ok): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}) time({(time.time() - start_time):.2f}s)"
-                    )
-                    return res
-            except Exception as e:
-                if not isinstance(e, NotImplementedError):
-                    if alluxio_impl.__name__ not in [
-                        "write",
-                        "upload",
-                        "upload_data",
-                    ]:
-                        self.logger.warning(
-                            f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}), fallback to ufs"
-                        )
-                    else:
-                        self.logger.warning(
-                            f"Exit(Error): alluxio op({alluxio_impl.__name__}), fallback to ufs"
-                        )
-                    self.logger.debug(f"{e} {traceback.format_exc()}")
-                    self.error_metrics.record_error(alluxio_impl.__name__, e)
-                if self.fs is None:
-                    raise e
-            fs_method = getattr(self.fs, alluxio_impl.__name__, None)
+            # Extract sanitized arguments for the Alluxio call
+            sanitized_args = bound.args
+            sanitized_kwargs = bound.kwargs
 
-            if fs_method:
+            # 3. Happy Path: Attempt to execute via Alluxio
+            if self.alluxio:
                 try:
-                    res = fs_method(*positional_params, **kwargs)
-                    self.logger.debug(
-                        f"Exit(Ok): ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs})"
-                    )
-                    return res
-                except Exception:
-                    self.logger.error("fallback to ufs is failed")
-                raise Exception("fallback to ufs is failed")
-            raise NotImplementedError(
-                f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.target_protocol}"
-            )
+                    start_time = time.time()
+                    # Call the original method with sanitized arguments
+                    result = func(*sanitized_args, **sanitized_kwargs)
 
-        return fallback_wrapper
+                    duration = time.time() - start_time
+                    self.logger.debug(
+                        f"Exit(Ok): alluxio op({func.__name__}) "
+                        f"time({duration:.2f}s)"
+                    )
+                    return result
+                except Exception as e:
+                    # If not NotImplementedError, it's a real runtime error. Log it.
+                    if not isinstance(e, NotImplementedError):
+                        self._log_alluxio_error(func.__name__, e)
+                    # Proceed to fallback
+
+            # 4. Fallback Path: Execute logic on UFS
+            # FIX: Pass the 'bound' object, not the sanitized tuple/dict,
+            # because _execute_fallback needs to inspect parameter names.
+            return self._execute_fallback(func.__name__, detected_protocol, bound)
+
+        return wrapper
+
+    # ---------------------------------------------------------
+    # The following methods should be part of your Class
+    # (e.g., AlluxioFileSystem)
+    # ---------------------------------------------------------
+
+    def _get_protocol_from_path(self, path):
+        """Extracts protocol (e.g., 's3') from 's3://bucket/key'."""
+        if path and "://" in path:
+            return path.split("://")[0]
+        return None
+
+    def _execute_fallback(self, method_name, protocol, bound_args):
+        """
+        Executes the operation using the Underlying File System (UFS).
+        Includes Smart Argument Adaptation to prevent TypeErrors.
+        """
+        try:
+            # Determine which protocol to use.
+            # If no protocol was detected from args, use the FS default target protocol.
+            target_protocol = protocol if protocol else None
+
+            # Retrieve the UFS client
+            fs = self.ufs.get(target_protocol)
+
+            if fs is None:
+                raise RuntimeError(f"No UFS client found for protocol: {target_protocol}")
+
+            # Dynamically retrieve the corresponding method from the UFS client
+            fs_method = getattr(fs, method_name, None)
+            if not fs_method:
+                raise NotImplementedError(
+                    f"Method {method_name} is not implemented in UFS {target_protocol}"
+                )
+
+            # --- Smart Argument Adaptation ---
+
+            # 1. Inspect the target method's signature (UFS implementation)
+            target_sig = inspect.signature(fs_method)
+            target_params = target_sig.parameters
+
+            # 2. Check if the target method accepts generic **kwargs.
+            accepts_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in target_params.values())
+
+            # 3. Construct the final arguments dictionary (Keyword Arguments only)
+            final_kwargs = {}
+
+            for name, value in bound_args.arguments.items():
+                if name == 'self':
+                    continue  # Never pass the wrapper's 'self' to the UFS instance method
+
+                # Pass the argument ONLY if:
+                # A. The target method explicitly defines this parameter name, OR
+                # B. The target method accepts **kwargs (wildcard)
+                if name in target_params or accepts_kwargs:
+                    final_kwargs[name] = value
+                else:
+                    # Argument is implicitly dropped because the UFS method doesn't support it.
+                    pass
+
+            # 4. Execute the UFS method
+            # Using **final_kwargs maps arguments by name, avoiding positional mismatches.
+            res = fs_method(**final_kwargs)
+
+            self.logger.debug(
+                f"Exit(Ok): ufs({target_protocol}) op({method_name})"
+            )
+            return res
+
+        except Exception as e:
+            self.logger.error(f"Fallback to UFS failed for {method_name}")
+            # [Critical] Use 'from e' to preserve the original exception stack trace
+            raise RuntimeError(f"Fallback to UFS failed for {method_name}") from e
+
+    def _log_alluxio_error(self, method_name, error):
+        """
+        Helper method to handle error logging, keeping the main logic clean.
+        """
+        log_msg = f"Exit(Error): alluxio op({method_name}), fallback to ufs"
+
+        self.logger.warning(log_msg)
+        self.logger.debug(f"{error} {traceback.format_exc()}")
+        self.error_metrics.record_error(method_name, error)
 
     @fallback_handler
     def ls(self, path, detail=False, **kwargs):
