@@ -67,16 +67,15 @@ from .utils import set_log_level
 class AlluxioPathStatus:
     type: str
     name: str
-    path: str
     ufs_path: str
-    length: int
+    size: int
     human_readable_file_size: str
     completed: bool
     owner: str
     group: str
     mode: str
-    creation_time_ms: int
-    last_modification_time_ms: int
+    created: int
+    mtime: int
     last_access_time_ms: int
     persisted: bool
     in_alluxio_percentage: int
@@ -273,7 +272,6 @@ class AlluxioClient:
                 result.append(
                     AlluxioPathStatus(
                         data.get("mType", ""),
-                        data.get("mName", ""),
                         data.get("mPath", ""),
                         data.get("mUfsPath", ""),
                         data.get("mLength", 0),
@@ -348,7 +346,6 @@ class AlluxioClient:
             data = open_source_adapter(data)
             return AlluxioPathStatus(
                 data.get("mType", ""),
-                data.get("mName", ""),
                 data.get("mPath", ""),
                 data.get("mUfsPath", ""),
                 data.get("mLength", 0),
@@ -537,10 +534,7 @@ class AlluxioClient:
             file content (str): The full file content
         """
         try:
-            file_status = self.get_file_status(file_path)
-            if file_status is None:
-                raise FileNotFoundError(f"File {file_path} not found")
-            return self.read_range(file_path, 0, file_status.length)
+            return self.read_chunked(file_path).read()
         except Exception as e:
             raise Exception(e)
 
@@ -939,42 +933,6 @@ class AlluxioClient:
             raise RuntimeError("alluxiocommon extension disabled.")
         data = self.data_manager.make_multi_read_file_http_req(urls)
         return data
-
-    def read_range(self, file_path, offset, length):
-        """
-        Reads parts of a file.
-
-        Args:
-            file_path (str): The full ufs file path to read data from
-            offset (integer): The offset to start reading data from
-            length (integer): The file length to read
-
-        Returns:
-            file content (str): The file content with length from offset
-        """
-        self.logger.debug(f"read_range,off:{offset}:length:{length}")
-        self._validate_path(file_path)
-        if not isinstance(offset, int) or offset < 0:
-            raise ValueError("Offset must be a non-negative integer")
-
-        if length is None or length == -1:
-            file_status = self.get_file_status(file_path)
-            if file_status is None:
-                raise FileNotFoundError(f"File {file_path} not found")
-            length = file_status.length - offset
-
-        if length == 0:
-            return b""
-
-        if not isinstance(length, int) or length < 0:
-            raise ValueError(
-                f"Invalid length: {length}. Length must be a non-negative integer, -1, or None. Requested offset: {offset}"
-            )
-
-        try:
-            return self.read_file_range(file_path, offset, length)
-        except Exception as e:
-            raise Exception(e)
 
     def write(self, file_path, file_bytes):
         """

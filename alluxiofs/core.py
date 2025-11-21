@@ -11,9 +11,9 @@ import io
 import logging
 import os
 import time
+import traceback
 from dataclasses import dataclass
 from functools import wraps
-from typing import Callable
 
 from cachetools import LRUCache
 from fsspec import AbstractFileSystem
@@ -23,11 +23,22 @@ from fsspec.spec import AbstractBufferedFile
 from alluxiofs.client import AlluxioClient
 from alluxiofs.client.utils import set_log_level
 
+LOG_LEVEL_MAP = {
+    "CRITICAL": logging.CRITICAL,
+    "ERROR": logging.ERROR,
+    "WARNING": logging.WARNING,
+    "INFO": logging.INFO,
+    "DEBUG": logging.DEBUG,
+    "NOTSET": logging.NOTSET,
+}
+
 
 def setup_logger(
-    file_path=None, level=os.getenv("PYTHON_LOGLEVEL", logging.INFO)
+    file_path=os.getenv("ALLUXIO_PYTHON_SDK_LOG_PATH", None),
+    level_str=os.getenv("ALLUXIO_PYTHON_SDK_LOG_LEVEL", "INFO"),
 ):
     # log dir
+    level = LOG_LEVEL_MAP.get(level_str.upper(), logging.INFO)
     file_name = "user.log"
     if file_path is None:
         project_dir = os.getcwd()
@@ -185,38 +196,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             )
             if preload_path is not None:
                 self.alluxio.load(preload_path)
-
         self.file_info_cache = LRUCache(maxsize=1000)
-
-        def _strip_alluxiofs_protocol(path):
-            def _strip_individual_path(p):
-                if p.startswith(self.protocol_prefix):
-                    if self.target_protocol is None:
-                        raise TypeError(
-                            f"Filesystem instance(fs) or target_protocol should be provided to use {self.protocol_prefix} schema"
-                        )
-                    return p[len(self.protocol_prefix) :]
-                return p
-
-            if isinstance(path, str):
-                return _strip_individual_path(path)
-            elif isinstance(path, list):
-                return [_strip_individual_path(p) for p in path]
-            else:
-                raise TypeError("Path must be a string or a list of strings")
-
-        self._strip_alluxiofs_protocol: Callable = _strip_alluxiofs_protocol
-
-        def _strip_protocol(path):
-            path = self._strip_alluxiofs_protocol(path)
-            if self.fs:
-                return self.fs._strip_protocol(
-                    type(self)._strip_protocol(path)
-                )
-            return path
-
-        self._strip_protocol: Callable = _strip_protocol
-
         self.error_metrics = AlluxioErrorMetrics()
 
     # TODO(littleEast7): there may be a bug.
@@ -240,7 +220,6 @@ class AlluxioFileSystem(AbstractFileSystem):
     def _translate_alluxio_info_to_fsspec_info(self, file_status, detail):
         if detail:
             res = file_status.__dict__
-            res["size"] = res.pop("length")
             return res
         else:
             return file_status.path
@@ -280,14 +259,10 @@ class AlluxioFileSystem(AbstractFileSystem):
             for path in possible_path_arg_names:
                 if path in argument_list:
                     if path in kwargs:
-                        kwargs[path] = self._strip_alluxiofs_protocol(
-                            kwargs[path]
-                        )
+                        kwargs[path] = self._strip_protocol(kwargs[path])
                     else:
                         path_index = argument_list.index(path) - 1
-                        positional_params[
-                            path_index
-                        ] = self._strip_alluxiofs_protocol(
+                        positional_params[path_index] = self._strip_protocol(
                             positional_params[path_index]
                         )
 
@@ -308,17 +283,17 @@ class AlluxioFileSystem(AbstractFileSystem):
                         "upload",
                         "upload_data",
                     ]:
-                        self.logger.error(
-                            f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}): {e}\nfallback to ufs"
+                        self.logger.warning(
+                            f"Exit(Error): alluxio op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs}), fallback to ufs"
                         )
                     else:
-                        self.logger.error(
-                            f"Exit(Error): alluxio op({alluxio_impl.__name__}) {e}\nfallback to ufs"
+                        self.logger.warning(
+                            f"Exit(Error): alluxio op({alluxio_impl.__name__}), fallback to ufs"
                         )
+                    self.logger.debug(f"{e} {traceback.format_exc()}")
                     self.error_metrics.record_error(alluxio_impl.__name__, e)
                 if self.fs is None:
                     raise e
-
             fs_method = getattr(self.fs, alluxio_impl.__name__, None)
 
             if fs_method:
@@ -328,8 +303,8 @@ class AlluxioFileSystem(AbstractFileSystem):
                         f"Exit(Ok): ufs({self.target_protocol}) op({alluxio_impl.__name__}) args({positional_params}) kwargs({kwargs})"
                     )
                     return res
-                except Exception as e:
-                    self.logger.error(f"fallback to ufs is failed: {e}")
+                except Exception:
+                    self.logger.error("fallback to ufs is failed")
                 raise Exception("fallback to ufs is failed")
             raise NotImplementedError(
                 f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.target_protocol}"
@@ -351,13 +326,12 @@ class AlluxioFileSystem(AbstractFileSystem):
         path = self.unstrip_protocol(path)
         if path in self.file_info_cache:
             return self.file_info_cache[path]
-        else:
-            file_status = self.alluxio.get_file_status(path)
-            fsspec_info = self._translate_alluxio_info_to_fsspec_info(
-                file_status, True
-            )
-            self.file_info_cache[path] = fsspec_info
-            return fsspec_info
+        file_status = self.alluxio.get_file_status(path)
+        fsspec_info = self._translate_alluxio_info_to_fsspec_info(
+            file_status, True
+        )
+        self.file_info_cache[path] = fsspec_info
+        return fsspec_info
 
     @fallback_handler
     def exists(self, path, **kwargs):
@@ -409,11 +383,8 @@ class AlluxioFileSystem(AbstractFileSystem):
         else:
             length = end - start
         path = self.unstrip_protocol(path)
-        return self.alluxio.read_range(path, start, length)
-
-    @fallback_handler
-    def ukey(self, path, *args, **kwargs):
-        raise NotImplementedError
+        alluxio_path = self.info(path)["name"]
+        return self.alluxio.read_file_range(path, alluxio_path, start, length)
 
     @fallback_handler
     def mkdir(self, path, *args, **kwargs):
@@ -439,7 +410,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         option = RMOption(
             recursive,
             recursive_alias,
-            recursive_alias,
+            remove_alluxio_only,
             delete_mount_point,
             sync_parent_next_time,
             remove_unchecked_option_char,
@@ -469,11 +440,11 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def created(self, path, *args, **kwargs):
-        raise NotImplementedError
+        return self.info(path).get("created", None)
 
     @fallback_handler
     def modified(self, path, *args, **kwargs):
-        raise NotImplementedError
+        return self.info(path).get("mtime", None)
 
     @fallback_handler
     def head(self, path, *args, **kwargs):
@@ -520,18 +491,6 @@ class AlluxioFileSystem(AbstractFileSystem):
         return self.alluxio.cp(path1, path2, option)
 
     @fallback_handler
-    def cp_file(self, path1, path2, *args, **kwargs):
-        return self.copy(path1, path2, *args, **kwargs)
-
-    @fallback_handler
-    def rename(self, path1, path2, **kwargs):
-        return self.mv(path1, path2, **kwargs)
-
-    @fallback_handler
-    def move(self, path1, path2, **kwargs):
-        return self.mv(path1, path2, **kwargs)
-
-    @fallback_handler
     def put_file(self, lpath, rpath, *args, **kwargs):
         return self.upload(lpath, rpath, *args, **kwargs)
 
@@ -548,6 +507,16 @@ class AlluxioFileSystem(AbstractFileSystem):
     def read_bytes(self, path, *args, **kwargs):
         path = self.unstrip_protocol(path)
         return self.alluxio.read_chunked(path).read()
+
+    @fallback_handler
+    def created(self, path):
+        info = self.info(path)
+        return info.get("created", None)
+
+    @fallback_handler
+    def modified(self, path):
+        info = self.info(path)
+        return info.get("mtime", None)
 
     @fallback_handler
     def upload(self, lpath: str, rpath: str, *args, **kwargs) -> bool:
@@ -580,7 +549,7 @@ class AlluxioFileSystem(AbstractFileSystem):
 class AlluxioFile(AbstractBufferedFile):
     def __init__(self, fs, path, mode="rb", **kwargs):
         super().__init__(fs, path, mode, **kwargs)
-        self.alluxio_path = fs.info(path)["path"]
+        self.alluxio_path = fs.info(path)["name"]
         self.mcap_enabled = fs.alluxio.config.mcap_enabled
         read_buffer_size_mb = fs.alluxio.config.read_buffer_size_mb
 
@@ -593,7 +562,6 @@ class AlluxioFile(AbstractBufferedFile):
 
     def _fetch_range(self, start, end):
         """Get the specified set of bytes from remote"""
-        import traceback
 
         try:
             res = self.fs.alluxio.read_file_range(
@@ -604,7 +572,7 @@ class AlluxioFile(AbstractBufferedFile):
             )
         except Exception as e:
             raise IOError(
-                f"Failed to fetch range {start}-{end} of {self.alluxio_path}: {e} {traceback.print_exc()}"
+                f"Failed to fetch range {start}-{end} of {self.alluxio_path}: {e} "
             )
         return res
 
