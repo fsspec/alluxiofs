@@ -38,6 +38,7 @@ from .const import ALLUXIO_PAGE_SIZE_DEFAULT_VALUE
 from .const import ALLUXIO_PAGE_SIZE_KEY
 from .const import ALLUXIO_REQUEST_MAX_RETRIES
 from .const import ALLUXIO_SUCCESS_IDENTIFIER
+from .const import ALLUXIO_WORKER_S3_SERVER_PORT_DEFAULT_VALUE
 from .const import CP_URL_FORMAT
 from .const import EXCEPTION_CONTENT
 from .const import FULL_CHUNK_URL_FORMAT
@@ -45,6 +46,7 @@ from .const import FULL_PAGE_URL_FORMAT
 from .const import GET_FILE_STATUS_URL_FORMAT
 from .const import GET_NODE_ADDRESS_DOMAIN
 from .const import GET_NODE_ADDRESS_IP
+from .const import GET_UFS_SECRET_INFO
 from .const import HEAD_URL_FORMAT
 from .const import LIST_URL_FORMAT
 from .const import LOAD_PROGRESS_URL_FORMAT
@@ -564,11 +566,11 @@ class AlluxioClient:
             file content (str): The full file content
         """
         self._validate_path(file_path)
-        worker_host = self.config.worker_hosts[0]
-        worker_http_port = 29998
-        # worker_host, worker_http_port = self._get_preferred_worker_address(
-        #     file_path
-        # )
+        if self.loadbalancer is None:
+            worker_host = self.config.load_balance_domain
+        else:
+            worker_host = self.loadbalancer.get_worker(file_path).host
+        worker_http_port = ALLUXIO_WORKER_S3_SERVER_PORT_DEFAULT_VALUE
         path_id = self._get_path_hash(file_path)
         try:
             if self.data_manager:
@@ -834,6 +836,30 @@ class AlluxioClient:
             file_path,
             chunk_size,
         )
+
+    def get_target_options_from_worker(self, ufs):
+        if self.loadbalancer is None:
+            worker_host = self.config.load_balance_domain
+        else:
+            worker_host = self.loadbalancer.get_worker().host
+        try:
+            url = GET_UFS_SECRET_INFO.format(
+                domain=worker_host,
+                http_port=self.config.worker_http_port,
+                ufs=ufs,
+            )
+            response = requests.get(url)
+            response.raise_for_status()
+            info = response.content
+            return json.loads(info)
+        except Exception as e:
+            raise Exception(
+                EXCEPTION_CONTENT.format(
+                    worker_host=worker_host,
+                    http_port=self.config.worker_http_port,
+                    error=f"Error when get ufsInfo of {ufs}, " + str(e),
+                )
+            )
 
     def _all_chunk_generator(
         self, worker_host, worker_http_port, path_id, file_path, chunk_size
@@ -1543,7 +1569,7 @@ class AlluxioClient:
                     break
 
     def _all_file_range_generator(
-        self, worker_host, worker_http_port, path_id, file_path, offset, length
+        self, worker_host, worker_port, path_id, file_path, offset, length
     ):
         try:
             headers = {"Range": f"bytes={offset}-{offset + length - 1}"}
@@ -1552,7 +1578,7 @@ class AlluxioClient:
             )
             url = S3_RANGE_URL_FORMAT.format(
                 worker_host=worker_host,
-                http_port=29998,
+                http_port=worker_port,
                 alluxio_path=file_path,
             )
             data = _c_send_get_request_write_bytes(
@@ -1566,7 +1592,7 @@ class AlluxioClient:
             raise Exception(
                 EXCEPTION_CONTENT.format(
                     worker_host=worker_host,
-                    http_port=29998,
+                    http_port=worker_port,
                     error=f"Error when reading file {file_path} with offset {offset} and length {length},"
                     f" error: {e}",
                 )

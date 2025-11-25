@@ -22,6 +22,7 @@ ALLUXIO_HASH_NODE_PER_WORKER_KEY1 = (
 ALLUXIO_HASH_NODE_PER_WORKER_KEY2 = "alluxio.user.worker.selection.policy.consistent.hash.virtual.node.count.per.worker"
 ALLUXIO_WORKER_HTTP_SERVER_PORT_KEY = "alluxio.worker.http.server.port"
 ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE = 28080
+ALLUXIO_WORKER_S3_SERVER_PORT_DEFAULT_VALUE = 29998
 
 ALLUXIO_HASH_NODE_PER_WORKER_DEFAULT_VALUE = 5
 ALLUXIO_SUCCESS_IDENTIFIER = "success"
@@ -34,6 +35,7 @@ GET_NODE_ADDRESS_IP = (
 GET_NODE_ADDRESS_DOMAIN = (
     "http://{domain}:{http_port}/v1/node?path={file_path}"
 )
+GET_UFS_SECRET_INFO = "http://{domain}:{http_port}/v1/ufsInfo?ufs={ufs}"
 FULL_PAGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}?ufsFullPath={file_path}"
 FULL_RANGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/range/{path_id}?ufsFullPath={file_path}&offset={offset}&length={length}"
 FULL_CHUNK_URL_FORMAT = "http://{worker_host}:{http_port}/v1/chunk/{path_id}?ufsFullPath={file_path}&chunkSize={chunk_size}"

@@ -174,17 +174,16 @@ class AlluxioFileSystem(AbstractFileSystem):
         self.ufs_info = {}
         if ufs is None:
             self.logger.warning(
-                "Neither filesystem instance(fs) nor target_protocol is "
-                "provided. Will not fall back to under file systems when "
-                "accessed files are not in Alluxiofs"
+                "No 'ufs' parameter provided. Will not fall back to under file systems when "
+                "accessed files failed in Alluxiofs."
             )
         else:
-            self.target_protocols = ufs.split(",")
+            self.target_protocols = [
+                p.strip() for p in ufs.split(",") if p.strip()
+            ]
             for protocol in self.target_protocols:
                 if fsspec.get_filesystem_class(protocol) is None:
-                    raise ValueError(
-                        f"Unsupported target protocol: {protocol}"
-                    )
+                    raise ValueError(f"Unsupported protocol: {protocol}")
                 else:
                     target_options = self.get_target_options_from_worker(
                         protocol
@@ -194,6 +193,9 @@ class AlluxioFileSystem(AbstractFileSystem):
         self.file_info_cache = LRUCache(maxsize=1000)
         self.error_metrics = AlluxioErrorMetrics()
 
+    def get_protocol_from_path(self, path):
+        return path.split("://")[0]
+
     def get_target_options_from_worker(self, ufs):
         if ufs in self.ufs_info:
             return self.ufs_info[ufs]
@@ -202,21 +204,6 @@ class AlluxioFileSystem(AbstractFileSystem):
                 return self.alluxio.get_target_options_from_worker(ufs)
             else:
                 return {}
-
-    # TODO(littleEast7): there may be a bug.
-    def unstrip_protocol(self, path):
-        if self.fs:
-            # avoid adding Alluxiofs protocol to the full ufs url
-            # if path.startswith('/'):
-            #     return self.fs.unstrip_protocol(path[1:])
-            # else:
-            path = self.fs.unstrip_protocol(path)
-            if (
-                not (path.startswith("file") or path.startswith("alluxiofs"))
-                and "///" in path
-            ):
-                path = path.replace("///", "//", 1)
-        return path
 
     def get_error_metrics(self):
         return self.error_metrics.get_metrics()
@@ -383,7 +370,6 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def ls(self, path, detail=False, **kwargs):
-        path = self.unstrip_protocol(path)
         paths = self.alluxio.listdir(path)
         return [
             self._translate_alluxio_info_to_fsspec_info(p, detail)
@@ -392,7 +378,6 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def info(self, path, **kwargs):
-        path = self.unstrip_protocol(path)
         if path in self.file_info_cache:
             return self.file_info_cache[path]
         file_status = self.alluxio.get_file_status(path)
@@ -405,7 +390,6 @@ class AlluxioFileSystem(AbstractFileSystem):
     @fallback_handler
     def exists(self, path, **kwargs):
         try:
-            path = self.unstrip_protocol(path)
             self.alluxio.get_file_status(path)
             return True
         except FileNotFoundError:
@@ -425,13 +409,13 @@ class AlluxioFileSystem(AbstractFileSystem):
         cache_options=None,
         **kwargs,
     ):
-        path = self.unstrip_protocol(path)
-
+        protocol = self.get_protocol_from_path(path)
+        ufs = self.ufs.get(protocol)
         if self.alluxio.config.mcap_enabled:
             kwargs["cache_type"] = "none"
         raw_file = AlluxioFile(
             alluxio=self,
-            ufs=self.fs,
+            ufs=ufs,
             path=path,
             mode=mode,
             block_size=block_size,
@@ -452,13 +436,11 @@ class AlluxioFileSystem(AbstractFileSystem):
             length = -1
         else:
             length = end - start
-        path = self.unstrip_protocol(path)
         alluxio_path = self.info(path)["name"]
         return self.alluxio.read_file_range(path, alluxio_path, start, length)
 
     @fallback_handler
     def mkdir(self, path, *args, **kwargs):
-        path = self.unstrip_protocol(path)
         return self.alluxio.mkdir(path)
 
     @fallback_handler
@@ -476,7 +458,6 @@ class AlluxioFileSystem(AbstractFileSystem):
         sync_parent_next_time=False,
         remove_unchecked_option_char=False,
     ):
-        path = self.unstrip_protocol(path)
         option = RMOption(
             recursive,
             recursive_alias,
@@ -505,7 +486,6 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def touch(self, path, *args, **kwargs):
-        path = self.unstrip_protocol(path)
         return self.alluxio.touch(path)
 
     @fallback_handler
@@ -518,12 +498,10 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def head(self, path, *args, **kwargs):
-        path = self.unstrip_protocol(path)
         return self.alluxio.head(path, *args, **kwargs)
 
     @fallback_handler
     def tail(self, path, *args, **kwargs):
-        path = self.unstrip_protocol(path)
         return self.alluxio.tail(path, *args, **kwargs)
 
     @fallback_handler
@@ -570,12 +548,10 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def write_bytes(self, path, value, **kwargs):
-        path = self.unstrip_protocol(path)
         return self.alluxio.write_chunked(path, value)
 
     @fallback_handler
     def read_bytes(self, path, *args, **kwargs):
-        path = self.unstrip_protocol(path)
         return self.alluxio.read_chunked(path).read()
 
     @fallback_handler
@@ -608,20 +584,16 @@ class AlluxioFileSystem(AbstractFileSystem):
     def get_file(self, rpath, lpath, *args, **kwargs):
         raise NotImplementedError
 
-    @fallback_handler
-    def read_block(self, *args, **kwargs):
-        if self.fs:
-            return self.fs.read_block(*args, **kwargs)
-        else:
-            raise NotImplementedError
-
 
 class AlluxioFile(AbstractBufferedFile):
     def __init__(self, alluxio, ufs, path, mode="rb", **kwargs):
         super().__init__(alluxio, path, mode, **kwargs)
         self.alluxio_path = alluxio.info(path)["name"]
         self.ufs = ufs
-        self.f = ufs.open(path, mode, **kwargs) if ufs else None
+        if ufs and isinstance(ufs, AbstractFileSystem):
+            self.f = ufs.open(path, mode, **kwargs)
+        else:
+            self.f = None
         self.kwargs = kwargs
         self.logger = alluxio.logger
 
@@ -706,7 +678,8 @@ class AlluxioFile(AbstractBufferedFile):
     def close(self):
         """Close file and clean up resources to prevent memory leaks"""
         if not self.closed:
-            self.f.close()
+            if self.f is not None:
+                self.f.close()
         super().close()
 
     def flush(self, force=False):
