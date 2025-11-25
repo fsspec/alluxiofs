@@ -186,10 +186,10 @@ class AlluxioFileSystem(AbstractFileSystem):
                         f"Unsupported target protocol: {protocol}"
                     )
                 else:
-                    target_options = self.get_target_options_from_worker(protocol)
-                    self.ufs[protocol] = filesystem(
-                        protocol, **target_options
+                    target_options = self.get_target_options_from_worker(
+                        protocol
                     )
+                    self.ufs[protocol] = filesystem(protocol, **target_options)
 
         self.file_info_cache = LRUCache(maxsize=1000)
         self.error_metrics = AlluxioErrorMetrics()
@@ -227,7 +227,6 @@ class AlluxioFileSystem(AbstractFileSystem):
             return res
         else:
             return file_status.path
-
 
     def fallback_handler(func):
         """
@@ -286,7 +285,9 @@ class AlluxioFileSystem(AbstractFileSystem):
             # 4. Fallback Path: Execute logic on UFS
             # FIX: Pass the 'bound' object, not the sanitized tuple/dict,
             # because _execute_fallback needs to inspect parameter names.
-            return self._execute_fallback(func.__name__, detected_protocol, bound)
+            return self._execute_fallback(
+                func.__name__, detected_protocol, bound
+            )
 
         return wrapper
 
@@ -315,7 +316,9 @@ class AlluxioFileSystem(AbstractFileSystem):
             fs = self.ufs.get(target_protocol)
 
             if fs is None:
-                raise RuntimeError(f"No UFS client found for protocol: {target_protocol}")
+                raise RuntimeError(
+                    f"No UFS client found for protocol: {target_protocol}"
+                )
 
             # Dynamically retrieve the corresponding method from the UFS client
             fs_method = getattr(fs, method_name, None)
@@ -331,13 +334,16 @@ class AlluxioFileSystem(AbstractFileSystem):
             target_params = target_sig.parameters
 
             # 2. Check if the target method accepts generic **kwargs.
-            accepts_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in target_params.values())
+            accepts_kwargs = any(
+                p.kind == inspect.Parameter.VAR_KEYWORD
+                for p in target_params.values()
+            )
 
             # 3. Construct the final arguments dictionary (Keyword Arguments only)
             final_kwargs = {}
 
             for name, value in bound_args.arguments.items():
-                if name == 'self':
+                if name == "self":
                     continue  # Never pass the wrapper's 'self' to the UFS instance method
 
                 # Pass the argument ONLY if:
@@ -361,7 +367,9 @@ class AlluxioFileSystem(AbstractFileSystem):
         except Exception as e:
             self.logger.error(f"Fallback to UFS failed for {method_name}")
             # [Critical] Use 'from e' to preserve the original exception stack trace
-            raise RuntimeError(f"Fallback to UFS failed for {method_name}") from e
+            raise RuntimeError(
+                f"Fallback to UFS failed for {method_name}"
+            ) from e
 
     def _log_alluxio_error(self, method_name, error):
         """
@@ -621,9 +629,7 @@ class AlluxioFile(AbstractBufferedFile):
         @wraps(alluxio_impl)
         def fallback_wrapper(self, *args, **kwargs):
             signature = inspect.signature(alluxio_impl)
-            positional_params = list(
-                args
-            )
+            positional_params = list(args)
             argument_list = []
             for param in signature.parameters.values():
                 argument_list.append(param.name)
@@ -660,12 +666,13 @@ class AlluxioFile(AbstractBufferedFile):
                 try:
                     res = fs_method(*positional_params, **kwargs)
                     return res
-                except Exception as e:
+                except Exception:
                     self.logger.error("fallback to ufs is failed")
                 raise Exception("fallback to ufs is failed")
             raise NotImplementedError(
                 f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.target_protocol}"
             )
+
         return fallback_wrapper
 
     @fallback_handler
@@ -726,5 +733,3 @@ class AlluxioFile(AbstractBufferedFile):
         if self._upload_chunk(final=force) is not False:
             self.offset += self.buffer.seek(0, 2)
             self.buffer = io.BytesIO()
-
-
