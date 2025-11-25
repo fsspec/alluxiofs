@@ -1,3 +1,4 @@
+import random
 import socket
 from dataclasses import dataclass
 from typing import List
@@ -46,6 +47,12 @@ class WorkerListLoadBalancer:
             self.workers[index], self.ports[index]
         )
 
+    def get_worker(self) -> WorkerNetAddress:
+        index = random.choice(range(len(self.workers)))
+        return WorkerNetAddress.from_host_and_port(
+            self.workers[index], self.ports[index]
+        )
+
     def get_multiple_worker(self, path, worker_num):
         # Simple hash-based load balancing
         index = hash(path) % len(self.workers)
@@ -67,7 +74,7 @@ class WorkerListLoadBalancer:
                 host, port_str = worker_host.split(":")
             else:
                 host = worker_host
-                port_str = config.worker_http_port
+                port_str = str(config.worker_http_port)
             worker_hosts.append(host.replace(" ", ""))
             ports.append(int(port_str.replace(" ", "")))
         return worker_hosts, ports
