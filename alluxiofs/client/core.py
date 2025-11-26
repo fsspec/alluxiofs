@@ -62,7 +62,6 @@ from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
 from .loadbalance import WorkerListLoadBalancer
 from .utils import _c_send_get_request_write_bytes
-from .utils import set_log_level
 
 
 @dataclass
@@ -172,8 +171,6 @@ class AlluxioClient:
             raise ValueError(
                 "Either 'worker_hosts' or 'load_balance_domain' must be provided."
             )
-        test_options = kwargs.get("test_options", {})
-        set_log_level(self.logger, test_options)
         self.executor = None
         self.mem_map = {}
         self.use_mem_cache = self.config.use_mem_cache
