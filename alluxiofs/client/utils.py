@@ -7,6 +7,7 @@
 #
 # See the NOTICE file distributed with this work for information regarding copyright ownership.
 import logging
+import os
 import time
 from functools import wraps
 from io import BytesIO
@@ -17,17 +18,61 @@ from .const import ALLUXIO_REQUEST_MAX_RETRIES
 from .const import ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS
 
 
-def set_log_level(logger, test_options):
-    if "log_level" in test_options:
-        log_level = test_options["log_level"].upper()
-        if log_level == "DEBUG":
-            logger.setLevel(logging.DEBUG)
-        elif log_level == "INFO":
-            logger.setLevel(logging.INFO)
-        elif log_level == "WARN" or log_level == "WARNING":
-            logger.setLevel(logging.WARN)
-        else:
-            logger.warning(f"Unsupported log level: {log_level}")
+LOG_LEVEL_MAP = {
+    "CRITICAL": logging.CRITICAL,
+    "ERROR": logging.ERROR,
+    "WARNING": logging.WARNING,
+    "INFO": logging.INFO,
+    "DEBUG": logging.DEBUG,
+    "NOTSET": logging.NOTSET,
+}
+
+OSS_SETUP_OPTIONS_MAP = {
+    "access_key": "key",
+    "secret_key": "secret",
+    "endpoint": "endpoint",
+}
+
+
+def convert_ufs_info_to(ufs, info):
+    if ufs == "oss":
+        res = {OSS_SETUP_OPTIONS_MAP[k]: info[k] for k in info}
+    else:
+        res = info
+    return res
+
+
+def setup_logger(
+    file_path=os.getenv("ALLUXIO_PYTHON_SDK_LOG_DIR", None),
+    level_str=os.getenv("ALLUXIO_PYTHON_SDK_LOG_LEVEL", "INFO"),
+):
+    # log dir
+    level = LOG_LEVEL_MAP.get(level_str.upper(), logging.INFO)
+    file_name = "user.log"
+    if file_path is None:
+        project_dir = os.getcwd()
+        logs_dir = os.path.join(project_dir, "logs")
+        if not os.path.exists(logs_dir):
+            os.makedirs(logs_dir, exist_ok=True)
+        log_file = os.path.join(logs_dir, file_name)
+    else:
+        log_file = file_path + "/" + file_name
+    # set handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(level)
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(level)
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    # init logger
+    logger = logging.getLogger(__name__)
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    logger.setLevel(level)
+    return logger
 
 
 def get_prefetch_policy(config, block_size):

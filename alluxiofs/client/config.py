@@ -15,6 +15,7 @@ class AlluxioClientConfig:
         load_balance_domain: str = None,
         worker_hosts: Optional[str] = None,
         worker_http_port=ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
+        ufs="",
         concurrency=64,
         use_mem_cache=False,
         mem_map_capacity=1024,
@@ -49,6 +50,8 @@ class AlluxioClientConfig:
         assert isinstance(worker_http_port, int) and (
             1 <= worker_http_port <= 65535
         ), "'worker_http_port' should be an integer in the range 1-65535"
+
+        assert isinstance(ufs, str), "'ufs' should be a string"
 
         assert (
             isinstance(concurrency, int) and concurrency > 0
@@ -158,3 +161,4 @@ class AlluxioClientConfig:
         self.read_buffer_size_mb = read_buffer_size_mb
         self.mcap_max_prefetch_blocks = mcap_max_prefetch_blocks
         self.mcap_prefetch_policy = mcap_prefetch_policy
+        self.ufs = ufs

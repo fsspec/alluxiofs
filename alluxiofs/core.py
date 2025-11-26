@@ -8,7 +8,6 @@
 # See the NOTICE file distributed with this work for information regarding copyright ownership.
 import inspect
 import io
-import logging
 import os
 import time
 import traceback
@@ -22,49 +21,8 @@ from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
 
 from alluxiofs.client import AlluxioClient
-from alluxiofs.client.utils import set_log_level
-
-LOG_LEVEL_MAP = {
-    "CRITICAL": logging.CRITICAL,
-    "ERROR": logging.ERROR,
-    "WARNING": logging.WARNING,
-    "INFO": logging.INFO,
-    "DEBUG": logging.DEBUG,
-    "NOTSET": logging.NOTSET,
-}
-
-
-def setup_logger(
-    file_path=os.getenv("ALLUXIO_PYTHON_SDK_LOG_PATH", None),
-    level_str=os.getenv("ALLUXIO_PYTHON_SDK_LOG_LEVEL", "INFO"),
-):
-    # log dir
-    level = LOG_LEVEL_MAP.get(level_str.upper(), logging.INFO)
-    file_name = "user.log"
-    if file_path is None:
-        project_dir = os.getcwd()
-        logs_dir = os.path.join(project_dir, "logs")
-        if not os.path.exists(logs_dir):
-            os.makedirs(logs_dir, exist_ok=True)
-        log_file = os.path.join(logs_dir, file_name)
-    else:
-        log_file = file_path + "/" + file_name
-    # set handler
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(level)
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(level)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-    # init logger
-    logger = logging.getLogger(__name__)
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-    logger.setLevel(level)
-    return logger
+from alluxiofs.client.utils import convert_ufs_info_to
+from alluxiofs.client.utils import setup_logger
 
 
 @dataclass
@@ -121,9 +79,6 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def __init__(
         self,
-        preload_path=None,
-        ufs=None,
-        logger=None,
         **kwargs,
     ):
         """
@@ -152,13 +107,21 @@ class AlluxioFileSystem(AbstractFileSystem):
             **kwargs: other parameters for core session.
         """
         super().__init__(**kwargs)
-        self.logger = logger
-        if self.logger is None:
-            self.logger = setup_logger()
-
+        log_dir = kwargs.get("log_dir")
+        log_level = kwargs.get("log_level")
+        log_dir = (
+            log_dir
+            if log_dir is not None
+            else os.getenv("ALLUXIO_PYTHON_SDK_LOG_DIR", None)
+        )
+        log_level = (
+            log_level
+            if log_level is not None
+            else os.getenv("ALLUXIO_PYTHON_SDK_LOG_LEVEL", "INFO")
+        )
+        self.logger = setup_logger(log_dir, log_level)
         # init alluxio client
         test_options = kwargs.get("test_options", {})
-        set_log_level(self.logger, test_options)
         if test_options.get("skip_alluxio") is True:
             self.alluxio = None
         else:
@@ -166,10 +129,8 @@ class AlluxioFileSystem(AbstractFileSystem):
                 logger=self.logger,
                 **kwargs,
             )
-            if preload_path is not None:
-                self.alluxio.load(preload_path)
-
         # init ufs
+        ufs = kwargs.get("ufs")
         self.ufs = {}
         self.ufs_info = {}
         if ufs is None:
@@ -201,7 +162,8 @@ class AlluxioFileSystem(AbstractFileSystem):
             return self.ufs_info[ufs]
         else:
             if self.alluxio:
-                return self.alluxio.get_target_options_from_worker(ufs)
+                info = self.alluxio.get_target_options_from_worker(ufs)
+                return convert_ufs_info_to(ufs, info)
             else:
                 return {}
 
@@ -251,23 +213,22 @@ class AlluxioFileSystem(AbstractFileSystem):
             sanitized_kwargs = bound.kwargs
 
             # 3. Happy Path: Attempt to execute via Alluxio
-            if self.alluxio:
-                try:
+            try:
+                if self.alluxio:
                     start_time = time.time()
                     # Call the original method with sanitized arguments
                     result = func(*sanitized_args, **sanitized_kwargs)
-
                     duration = time.time() - start_time
                     self.logger.debug(
                         f"Exit(Ok): alluxio op({func.__name__}) "
                         f"time({duration:.2f}s)"
                     )
                     return result
-                except Exception as e:
-                    # If not NotImplementedError, it's a real runtime error. Log it.
-                    if not isinstance(e, NotImplementedError):
-                        self._log_alluxio_error(func.__name__, e)
-                    # Proceed to fallback
+                else:
+                    raise ModuleNotFoundError("alluxio client is None")
+            except Exception as e:
+                # If not NotImplementedError, it's a real runtime error. Log it.
+                self._log_alluxio_error(func.__name__, e)
 
             # 4. Fallback Path: Execute logic on UFS
             # FIX: Pass the 'bound' object, not the sanitized tuple/dict,
@@ -363,9 +324,11 @@ class AlluxioFileSystem(AbstractFileSystem):
         Helper method to handle error logging, keeping the main logic clean.
         """
         log_msg = f"Exit(Error): alluxio op({method_name}), fallback to ufs"
-
         self.logger.warning(log_msg)
-        self.logger.debug(f"{error} {traceback.format_exc()}")
+        if len(self.ufs) > 0:
+            self.logger.debug(f"{error} {traceback.format_exc()}")
+        else:
+            self.logger.info(f"{error} {traceback.format_exc()}")
         self.error_metrics.record_error(method_name, error)
 
     @fallback_handler
@@ -630,6 +593,9 @@ class AlluxioFile(AbstractBufferedFile):
                     return res
             except Exception as e:
                 if not isinstance(e, NotImplementedError):
+                    self.logger.warning(
+                        f"alluxio's {alluxio_impl.__name__} failed, fallback to ufs"
+                    )
                     self.logger.debug(f"{e} {traceback.format_exc()}")
                 if self.ufs is None:
                     raise e
