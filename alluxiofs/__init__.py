@@ -1,5 +1,8 @@
+import fsspec
+
 from alluxiofs.client import AlluxioClient
 from alluxiofs.core import AlluxioFileSystem
-from alluxiofs.core import setup_logger
 
-__all__ = ["AlluxioFileSystem", "AlluxioClient", "setup_logger"]
+fsspec.register_implementation("alluxiofs", AlluxioFileSystem, clobber=True)
+
+__all__ = ["AlluxioFileSystem", "AlluxioClient"]

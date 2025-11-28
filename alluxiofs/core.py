@@ -15,12 +15,14 @@ from dataclasses import dataclass
 from functools import wraps
 
 import fsspec
+import yaml
 from cachetools import LRUCache
 from fsspec import AbstractFileSystem
 from fsspec import filesystem
 from fsspec.spec import AbstractBufferedFile
 
 from alluxiofs.client import AlluxioClient
+from alluxiofs.client.config import AlluxioClientConfig
 from alluxiofs.client.utils import convert_ufs_info_to
 from alluxiofs.client.utils import setup_logger
 
@@ -79,6 +81,7 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def __init__(
         self,
+        yaml_path=None,
         **kwargs,
     ):
         """
@@ -93,19 +96,19 @@ class AlluxioFileSystem(AbstractFileSystem):
             concurrency (int, optional): The maximum number of concurrent operations (e.g., reads, writes) that the file system interface will allow. Defaults to 64.
             worker_http_port (int, optional): The port number used by the HTTP server on each Alluxio worker.
                 This is used for accessing Alluxio's HTTP-based APIs.
-            preload_path (str, optional): Specifies a path to preload into the Alluxio file system cache at initialization.
-                This can be useful for ensuring that certain critical data is immediately available in the cache.
         The underlying filesystem args
-            target_protocol (str, optional): Specifies the under storage protocol to create the under storage file system object.
-                Common examples include 's3' for Amazon S3, 'hdfs' for Hadoop Distributed File System, and others.
-            target_options (dict, optional): Provides a set of configuration options relevant to the `target_protocol`.
-                These options might include credentials, endpoint URLs, and other protocol-specific settings required to successfully interact with the under storage system.
-            fs (object, optional): Directly supplies an instance of a file system object for accessing the underlying storage of Alluxio
+            ufs (object, optional): Directly supplies an instance of a file system object for accessing the underlying storage of Alluxio
         Other args:
             test_options (dict, optional): A dictionary of options used exclusively for testing purposes.
                 These might include mock interfaces or specific configuration overrides for test scenarios.
             **kwargs: other parameters for core session.
         """
+        assert (
+            isinstance(yaml_path, str) or yaml_path is None
+        ), f"{yaml_path} must be a string or None, got {type(yaml_path).__name__}."
+        yaml_cfg = self.load_yaml_config(yaml_path) if yaml_path else {}
+        kwargs = self.merge_config(yaml_cfg, kwargs)
+
         super().__init__(**kwargs)
         log_dir = kwargs.get("log_dir")
         log_level = kwargs.get("log_level")
@@ -143,6 +146,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                 p.strip() for p in ufs.split(",") if p.strip()
             ]
             for protocol in self.target_protocols:
+                self.register_unregistered_ufs_to_fsspec(protocol)
                 if fsspec.get_filesystem_class(protocol) is None:
                     raise ValueError(f"Unsupported protocol: {protocol}")
                 else:
@@ -153,6 +157,40 @@ class AlluxioFileSystem(AbstractFileSystem):
 
         self.file_info_cache = LRUCache(maxsize=1000)
         self.error_metrics = AlluxioErrorMetrics()
+
+    def load_yaml_config(self, path: str) -> dict:
+        """Load YAML configuration from file. Returns empty dict if file is missing, None, or empty."""
+        if path is None or not os.path.exists(path):
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+        except yaml.YAMLError as e:
+            print(f"Error parsing YAML config file '{path}': {e}")
+            return {}
+        except Exception as e:
+            print(f"Error loading YAML config file '{path}': {e}")
+            return {}
+
+    def merge_config(self, yaml_config: dict, other_config: dict) -> dict:
+        # Extract defaults from AlluxioClientConfig.__init__
+        defaults = {}
+        sig = inspect.signature(AlluxioClientConfig.__init__)
+        for k, v in sig.parameters.items():
+            if k == "self" or v.default is inspect._empty:
+                continue
+            defaults[k] = v.default
+        # Merge all keys, preserving everything from yaml_config and other_config
+        merged = {**defaults, **yaml_config, **other_config}
+        return merged
+
+    def register_unregistered_ufs_to_fsspec(self, protocol):
+        if protocol == "bos":
+            try:
+                from bosfs import BOSFileSystem
+            except ImportError as e:
+                raise ImportError(f"Please install bosfs, {e}")
+            fsspec.register_implementation("bos", BOSFileSystem)
 
     def get_protocol_from_path(self, path):
         return path.split("://")[0]
