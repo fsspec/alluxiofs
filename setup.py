@@ -19,11 +19,11 @@ setup(
         "decorator",
         "humanfriendly",
         "requests",
-        "etcd3",
         "mmh3",
         "sortedcontainers",
-        "pycurl",
+        "pycurl>=7.45.2; sys_platform != 'win32'",
         "cachetools",
+        "PyYAML",
     ],
     extras_require={
         "tests": [

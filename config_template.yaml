@@ -1,0 +1,32 @@
+# Alluxio Client Configuration
+load_balance_domain: null          # Load balancing domain; mutually exclusive with worker_hosts
+worker_hosts: "host1,host2,host3"  # Specify worker host list, format: "host1,host2,host3"
+
+worker_http_port: 28080            # Alluxio worker HTTP port
+ufs: ""                            # Under File System type (e.g., s3, hdfs, etc.)
+concurrency: 64                    # Maximum concurrency
+
+use_mem_cache: false               # Enable memory cache
+mem_map_capacity: 512            # Memory cache capacity
+
+use_local_disk_cache: false        # Enable local disk cache
+local_disk_cache_dir: "/tmp/local_cache/"  # Local disk cache directory
+local_cache_dir: "/tmp/local_cache/"       # MCAP-specific cache directory
+
+mcap_enabled: false                # Enable MCAP acceleration
+mcap_prefetch_ahead_blocks: 2      # MCAP prefetch ahead blocks count
+mcap_prefetch_concurrency: 32      # MCAP prefetch concurrency
+
+local_cache_size_gb: 64            # Local cache size (GB)
+local_cache_block_size_mb: 4       # Cache block size (MB)
+
+use_memory_cache: false            # Enable memory range cache
+memory_cache_size_mb: 256          # Memory range cache size (MB)
+
+http_max_retries: 3                # HTTP maximum retry count
+http_timeouts: 60                  # HTTP timeout (seconds)
+
+read_buffer_size_mb: 0.008         # Read buffer size (MB)
+
+mcap_max_prefetch_blocks: 16       # Maximum prefetchable blocks count
+mcap_prefetch_policy: "adaptive_window" # Prefetch policy
