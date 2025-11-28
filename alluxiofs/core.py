@@ -105,7 +105,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         """
         assert (
             isinstance(yaml_path, str) or yaml_path is None
-        ), f"{yaml_path} must be a string."
+        ), f"{yaml_path} must be a string or None, got {type(yaml_path).__name__}."
         yaml_cfg = self.load_yaml_config(yaml_path) if yaml_path else {}
         kwargs = self.merge_config(yaml_cfg, kwargs)
 
@@ -146,7 +146,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                 p.strip() for p in ufs.split(",") if p.strip()
             ]
             for protocol in self.target_protocols:
-                self.regiter_unregitered_ufs_to_fsspec(protocol)
+                self.register_unregistered_ufs_to_fsspec(protocol)
                 if fsspec.get_filesystem_class(protocol) is None:
                     raise ValueError(f"Unsupported protocol: {protocol}")
                 else:
@@ -159,28 +159,32 @@ class AlluxioFileSystem(AbstractFileSystem):
         self.error_metrics = AlluxioErrorMetrics()
 
     def load_yaml_config(self, path: str) -> dict:
-        """Load YAML, return empty dict if file missing."""
+        """Load YAML configuration from file. Returns empty dict if file is missing, None, or empty."""
         if path is None or not os.path.exists(path):
             return {}
-        with open(path, "r") as f:
-            return yaml.safe_load(f) or {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+        except yaml.YAMLError as e:
+            print(f"Error parsing YAML config file '{path}': {e}")
+            return {}
+        except Exception as e:
+            print(f"Error loading YAML config file '{path}': {e}")
+            return {}
 
     def merge_config(self, yaml_config: dict, other_config: dict) -> dict:
-        final_config = {}
-
+        # Extract defaults from AlluxioClientConfig.__init__
+        defaults = {}
         sig = inspect.signature(AlluxioClientConfig.__init__)
         for k, v in sig.parameters.items():
             if k == "self" or v.default is inspect._empty:
                 continue
-            final_config[k] = v.default
+            defaults[k] = v.default
+        # Merge all keys, preserving everything from yaml_config and other_config
+        merged = {**defaults, **yaml_config, **other_config}
+        return merged
 
-        final_config.update(yaml_config)
-
-        final_config.update(other_config)
-
-        return final_config
-
-    def regiter_unregitered_ufs_to_fsspec(self, protocol):
+    def register_unregistered_ufs_to_fsspec(self, protocol):
         if protocol == "bos":
             try:
                 from bosfs import BOSFileSystem

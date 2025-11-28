@@ -7,7 +7,7 @@ ufs: ""                            # Under File System type (e.g., s3, hdfs, etc
 concurrency: 64                    # Maximum concurrency
 
 use_mem_cache: false               # Enable memory cache
-mem_map_capacity: 512            # Memory cache capacity
+mem_map_capacity: 1024             # Memory cache capacity
 
 use_local_disk_cache: false        # Enable local disk cache
 local_disk_cache_dir: "/tmp/local_cache/"  # Local disk cache directory
