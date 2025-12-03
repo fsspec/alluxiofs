@@ -19,6 +19,7 @@ import yaml
 from cachetools import LRUCache
 from fsspec import AbstractFileSystem
 from fsspec import filesystem
+from fsspec.callbacks import DEFAULT_CALLBACK
 from fsspec.spec import AbstractBufferedFile
 
 from alluxiofs.client import AlluxioClient
@@ -397,10 +398,6 @@ class AlluxioFileSystem(AbstractFileSystem):
             return False
 
     @fallback_handler
-    def isdir(self, path, **kwargs):
-        return self.info(path)["type"] == "directory"
-
-    @fallback_handler
     def _open(
         self,
         path,
@@ -410,9 +407,10 @@ class AlluxioFileSystem(AbstractFileSystem):
         cache_options=None,
         **kwargs,
     ):
-        protocol = self.get_protocol_from_path(path)
-        ufs = self.ufs.get(protocol)
-        if self.alluxio.config.mcap_enabled:
+        """Open a file for reading or writing."""
+        protocol = self._get_protocol_from_path(path)
+        ufs = self.ufs.get(protocol) if protocol else None
+        if self.alluxio and self.alluxio.config.mcap_enabled:
             kwargs["cache_type"] = "none"
         raw_file = AlluxioFile(
             alluxio=self,
@@ -432,158 +430,78 @@ class AlluxioFileSystem(AbstractFileSystem):
         return io.BufferedReader(raw_file, buffer_size=_read_buffer_size)
 
     @fallback_handler
-    def cat_file(self, path, start=0, end=None, **kwargs):
-        if end is None:
-            length = -1
-        else:
-            length = end - start
-        alluxio_path = self.info(path)["name"]
-        return self.alluxio.read_file_range(path, alluxio_path, start, length)
-
-    @fallback_handler
-    def mkdir(self, path, *args, **kwargs):
+    def mkdir(self, path, create_parents=False, **kwargs):
+        if create_parents:
+            raise NotImplementedError(
+                "makedirs with create_parents=True is not implemented. Use makedirs() instead."
+            )
         return self.alluxio.mkdir(path)
 
     @fallback_handler
-    def makedirs(self, path, *args, **kwargs):
-        raise NotImplementedError
+    def makedirs(self, path, exist_ok=False, **kwargs):
+        raise NotImplementedError(
+            "makedirs is not implemented. Use mkdir() for single directory creation."
+        )
 
     @fallback_handler
-    def rm(
+    def _rm(
         self,
         path,
-        recursive=False,
-        recursive_alias=False,
-        remove_alluxio_only=False,
-        delete_mount_point=False,
-        sync_parent_next_time=False,
-        remove_unchecked_option_char=False,
     ):
-        option = RMOption(
-            recursive,
-            recursive_alias,
-            remove_alluxio_only,
-            delete_mount_point,
-            sync_parent_next_time,
-            remove_unchecked_option_char,
+        return self.alluxio.rm(path, RMOption())
+
+    @fallback_handler
+    def rmdir(self, path):
+        raise NotImplementedError(
+            "rmdir is not implemented. Use rm(path, recursive=False) instead."
         )
-        return self.alluxio.rm(path, option)
 
     @fallback_handler
-    def rmdir(self, path, *args, **kwargs):
-        raise NotImplementedError
-
-    @fallback_handler
-    def _rm(self, path, *args, **kwargs):
-        raise NotImplementedError
-
-    @fallback_handler
-    def pipe_file(self, path, *args, **kwargs):
-        raise NotImplementedError
-
-    @fallback_handler
-    def rm_file(self, path, *args, **kwargs):
-        raise NotImplementedError
-
-    @fallback_handler
-    def touch(self, path, *args, **kwargs):
+    def touch(self, path, truncate=True, **kwargs):
         return self.alluxio.touch(path)
 
     @fallback_handler
-    def created(self, path, *args, **kwargs):
-        return self.info(path).get("created", None)
+    def created(self, path, **kwargs):
+        info = self.info(path, **kwargs)
+        return info.get("created", None)
 
     @fallback_handler
-    def modified(self, path, *args, **kwargs):
-        return self.info(path).get("mtime", None)
-
-    @fallback_handler
-    def head(self, path, *args, **kwargs):
-        return self.alluxio.head(path, *args, **kwargs)
-
-    @fallback_handler
-    def tail(self, path, *args, **kwargs):
-        return self.alluxio.tail(path, *args, **kwargs)
-
-    @fallback_handler
-    def expand_path(self, path, *args, **kwargs):
-        raise NotImplementedError
+    def modified(self, path, **kwargs):
+        """Get the modification time of a file."""
+        info = self.info(path, **kwargs)
+        return info.get("mtime", None)
 
     # Comment it out as s3fs will return folder as well.
     # @fallback_handler
     # def find(self, path, *args, **kwargs):
     #     raise NotImplementedError
+    @fallback_handler
+    def expand_path(self, path, *args, **kwargs):
+        super().expand_path(path, *args, **kwargs)
 
     @fallback_handler
-    def mv(self, path1, path2, *args, **kwargs):
-        path1 = self.unstrip_protocol(path1)
-        path2 = self.unstrip_protocol(path2)
+    def mv(self, path1, path2, recursive=False, maxdepth=None, **kwargs):
         return self.alluxio.mv(path1, path2)
 
     @fallback_handler
-    def copy(
-        self,
-        path1,
-        path2,
-        recursive=False,
-        recursiveAlias=False,
-        force=False,
-        thread=None,
-        bufferSize=None,
-        preserve=None,
+    def cp_file(self, path1, path2, **kwargs):
+        return self.alluxio.cp(path1, path2, CPOption())
+
+    @fallback_handler
+    def put_file(
+        self, lpath, rpath, callback=DEFAULT_CALLBACK, mode="overwrite", **kwargs
     ):
-        path1 = self.unstrip_protocol(path1)
-        path2 = self.unstrip_protocol(path2)
-        option = CPOption(
-            recursive, recursiveAlias, force, thread, bufferSize, preserve
+        raise NotImplementedError(
+            "put_file is not implemented"
         )
-        return self.alluxio.cp(path1, path2, option)
 
     @fallback_handler
-    def put_file(self, lpath, rpath, *args, **kwargs):
-        return self.upload(lpath, rpath, *args, **kwargs)
-
-    @fallback_handler
-    def put(self, lpath, rpath, *args, **kwargs):
-        raise NotImplementedError
-
-    @fallback_handler
-    def write_bytes(self, path, value, **kwargs):
+    def pipe_file(self, path, value, mode="overwrite", **kwargs):
+        if mode != "overwrite":
+            raise NotImplementedError(
+                "only pipe_file witch mode = overwrite is implemented."
+            )
         return self.alluxio.write_chunked(path, value)
-
-    @fallback_handler
-    def read_bytes(self, path, *args, **kwargs):
-        return self.alluxio.read_chunked(path).read()
-
-    @fallback_handler
-    def created(self, path):
-        info = self.info(path)
-        return info.get("created", None)
-
-    @fallback_handler
-    def modified(self, path):
-        info = self.info(path)
-        return info.get("mtime", None)
-
-    @fallback_handler
-    def upload(self, lpath: str, rpath: str, *args, **kwargs) -> bool:
-        rpath = self.unstrip_protocol(rpath)
-        with open(lpath, "rb") as f:
-            return self.alluxio.write_chunked(rpath, f.read())
-
-    @fallback_handler
-    def download(self, lpath, rpath, *args, **kwargs):
-        rpath = self.unstrip_protocol(rpath)
-        with open(lpath, "wb") as f:
-            return f.write(self.alluxio.read_chunked(rpath).read())
-
-    @fallback_handler
-    def get(self, rpath, lpath, *args, **kwargs):
-        raise NotImplementedError
-
-    @fallback_handler
-    def get_file(self, rpath, lpath, *args, **kwargs):
-        raise NotImplementedError
 
 
 class AlluxioFile(AbstractBufferedFile):
@@ -616,12 +534,13 @@ class AlluxioFile(AbstractBufferedFile):
             for path in possible_path_arg_names:
                 if path in argument_list:
                     if path in kwargs:
-                        kwargs[path] = self._strip_protocol(kwargs[path])
+                        kwargs[path] = self.fs._strip_protocol(kwargs[path])
                     else:
                         path_index = argument_list.index(path) - 1
-                        positional_params[path_index] = self._strip_protocol(
-                            positional_params[path_index]
-                        )
+                        if path_index >= 0 and path_index < len(positional_params):
+                            positional_params[path_index] = self.fs._strip_protocol(
+                                positional_params[path_index]
+                            )
 
             positional_params = tuple(positional_params)
 
