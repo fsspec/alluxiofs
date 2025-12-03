@@ -398,6 +398,24 @@ class AlluxioFileSystem(AbstractFileSystem):
             return False
 
     @fallback_handler
+    def open(
+        self,
+        path,
+        mode="rb",
+        block_size=None,
+        cache_options=None,
+        compression=None,
+        **kwargs,
+    ):
+        return super().open(
+            path,
+            mode,
+            block_size,
+            cache_options,
+            compression,
+            **kwargs,
+        )
+
     def _open(
         self,
         path,
@@ -451,6 +469,10 @@ class AlluxioFileSystem(AbstractFileSystem):
         return self.alluxio.rm(path, RMOption())
 
     @fallback_handler
+    def rm(self, path, recursive=False, **kwargs):
+        return super().rm(path, recursive=recursive, **kwargs)
+
+    @fallback_handler
     def rmdir(self, path):
         raise NotImplementedError(
             "rmdir is not implemented. Use rm(path, recursive=False) instead."
@@ -472,12 +494,13 @@ class AlluxioFileSystem(AbstractFileSystem):
         return info.get("mtime", None)
 
     # Comment it out as s3fs will return folder as well.
-    # @fallback_handler
-    # def find(self, path, *args, **kwargs):
-    #     raise NotImplementedError
+    @fallback_handler
+    def find(self, path, *args, **kwargs):
+        raise NotImplementedError
+
     @fallback_handler
     def expand_path(self, path, *args, **kwargs):
-        super().expand_path(path, *args, **kwargs)
+        return super().expand_path(path, *args, **kwargs)
 
     @fallback_handler
     def mv(self, path1, path2, recursive=False, maxdepth=None, **kwargs):
@@ -487,6 +510,7 @@ class AlluxioFileSystem(AbstractFileSystem):
     def cp_file(self, path1, path2, **kwargs):
         return self.alluxio.cp(path1, path2, CPOption())
 
+    # TODO: need to implement after stream write is ready
     @fallback_handler
     def put_file(
         self, lpath, rpath, callback=DEFAULT_CALLBACK, mode="overwrite", **kwargs
@@ -502,6 +526,35 @@ class AlluxioFileSystem(AbstractFileSystem):
                 "only pipe_file witch mode = overwrite is implemented."
             )
         return self.alluxio.write_chunked(path, value)
+
+    # need to implement
+    @fallback_handler
+    def cat_file(self, path, start=None, end=None, **kwargs):
+        return super().cat_file(path, start=start, end=end, **kwargs)
+
+    @fallback_handler
+    def get_file(
+        self, rpath, lpath, callback=DEFAULT_CALLBACK, **kwargs
+    ):
+        return super().get_file(rpath, lpath, callback=callback, **kwargs)
+
+    @fallback_handler
+    def sign(self, path, expiration=100, **kwargs):
+        return super().sign(path, expiration=expiration, **kwargs)
+
+    @fallback_handler
+    def fsid(self):
+        return super().fsid()
+
+    @fallback_handler
+    def ukey(self, path):
+        """Hash of file properties, to tell if it has changed"""
+        return super().ukey(path)
+
+    @fallback_handler
+    def checksum(self, path):
+        """Get the checksum of a file."""
+        return super().checksum(path)
 
 
 class AlluxioFile(AbstractBufferedFile):
