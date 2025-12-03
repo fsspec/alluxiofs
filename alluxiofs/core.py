@@ -513,11 +513,14 @@ class AlluxioFileSystem(AbstractFileSystem):
     # TODO: need to implement after stream write is ready
     @fallback_handler
     def put_file(
-        self, lpath, rpath, callback=DEFAULT_CALLBACK, mode="overwrite", **kwargs
+        self,
+        lpath,
+        rpath,
+        callback=DEFAULT_CALLBACK,
+        mode="overwrite",
+        **kwargs,
     ):
-        raise NotImplementedError(
-            "put_file is not implemented"
-        )
+        raise NotImplementedError("put_file is not implemented")
 
     @fallback_handler
     def pipe_file(self, path, value, mode="overwrite", **kwargs):
@@ -533,9 +536,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         return super().cat_file(path, start=start, end=end, **kwargs)
 
     @fallback_handler
-    def get_file(
-        self, rpath, lpath, callback=DEFAULT_CALLBACK, **kwargs
-    ):
+    def get_file(self, rpath, lpath, callback=DEFAULT_CALLBACK, **kwargs):
         return super().get_file(rpath, lpath, callback=callback, **kwargs)
 
     @fallback_handler
@@ -590,8 +591,12 @@ class AlluxioFile(AbstractBufferedFile):
                         kwargs[path] = self.fs._strip_protocol(kwargs[path])
                     else:
                         path_index = argument_list.index(path) - 1
-                        if path_index >= 0 and path_index < len(positional_params):
-                            positional_params[path_index] = self.fs._strip_protocol(
+                        if path_index >= 0 and path_index < len(
+                            positional_params
+                        ):
+                            positional_params[
+                                path_index
+                            ] = self.fs._strip_protocol(
                                 positional_params[path_index]
                             )
 
