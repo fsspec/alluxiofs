@@ -409,7 +409,7 @@ class AlluxioFileSystem(AbstractFileSystem):
     ):
         """Open a file for reading or writing."""
         ufs = self.ufs_updater.must_get_ufs_from_path(path) if path else None
-        if self.alluxio and self.alluxio.config.mcap_enabled:
+        if self.alluxio is not None and self.alluxio.config.mcap_enabled:
             kwargs["cache_type"] = "none"
         raw_file = AlluxioFile(
             alluxio=self,
@@ -432,7 +432,7 @@ class AlluxioFileSystem(AbstractFileSystem):
     def mkdir(self, path, create_parents=False, **kwargs):
         if create_parents:
             raise NotImplementedError(
-                "makedirs with create_parents=True is not implemented. Use makedirs() instead."
+                "mkdir with create_parents=True is not supported. Only single directory creation is available."
             )
         return self.alluxio.mkdir(path)
 
@@ -507,7 +507,7 @@ class AlluxioFileSystem(AbstractFileSystem):
     def pipe_file(self, path, value, mode="overwrite", **kwargs):
         if mode != "overwrite":
             raise NotImplementedError(
-                "only pipe_file witch mode = overwrite is implemented."
+                "only pipe_file with mode = overwrite is implemented."
             )
         return self.alluxio.write_chunked(path, value)
 
@@ -546,7 +546,7 @@ class AlluxioFile(AbstractBufferedFile):
             alluxio.ufs_updater.must_get_alluxio_path_from_ufs_full_path(path)
         )
         self.ufs = ufs
-        if ufs and isinstance(ufs, AbstractFileSystem):
+        if ufs is not None and isinstance(ufs, AbstractFileSystem):
             self.f = ufs.open(path, mode, **kwargs)
         else:
             self.f = None

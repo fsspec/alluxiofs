@@ -49,9 +49,9 @@ class UFSUpdater:
         self._cached_ufs: Optional[Dict[str, Any]] = {}
         self._path_map: Optional[Dict[str, str]] = {}
 
-        # Lock to protect the shared variable _cached_options
+        # Lock to protect the shared variables _cached_ufs and _path_map
         self._lock = threading.RLock()
-        self._inited = False
+        self._init_event = threading.Event()
         # Thread control flag
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -92,7 +92,7 @@ class UFSUpdater:
             if ufs_info_json is not None:
                 # Use lock to safely update the shared variable
                 with self._lock:
-                    ufs_info_list = self.parase_ufs_info(ufs_info_json)
+                    ufs_info_list = self.parse_ufs_info(ufs_info_json)
                     self.register_ufs_fallback(ufs_info_list)
                 self.logger.debug(
                     f"ufs's Info updated. Time: {time.strftime('%H:%M:%S')}"
@@ -106,7 +106,7 @@ class UFSUpdater:
                 f"Exception occurred during ufs's Info update: {e}"
             )
         finally:
-            self._inited = True
+            self._init_event.set()
 
     def start_updater(self):
         """
@@ -132,7 +132,7 @@ class UFSUpdater:
             self._stop_event.clear()  # Reset the event for the next start
             self.logger.debug("Ufs Info updater stopped.")
 
-    def parase_ufs_info(self, ufs_info_str: str) -> list:
+    def parse_ufs_info(self, ufs_info_str: str) -> list:
         """
         Parse UFS info from a JSON string.
 
@@ -186,45 +186,37 @@ class UFSUpdater:
         return ufs_info_list
 
     def must_get_ufs_count(self):
-        while not self._inited:
-            time.sleep(0.1)
-        if self._inited:
-            with self._lock:
-                if self._cached_ufs is None:
-                    return 0
-                return len(self._cached_ufs)
+        self._init_event.wait()
+        return self.get_ufs_count()
+
+    def get_ufs_count(self):
+        with self._lock:
+            if self._cached_ufs is None:
+                return 0
+            return len(self._cached_ufs)
 
     def get_protocol_from_path(self, path):
         return get_protocol_from_path(path)
 
-    def get_ufs_from_path(self, path: str):
-        with self._lock:
-            for ufs_path in self._cached_ufs:
-                if path.startswith(ufs_path):
-                    return self._cached_ufs[ufs_path]
-
     def must_get_ufs_from_path(self, path: str):
-        while not self._inited:
-            time.sleep(0.1)
-        if self._inited:
-            return self._get_ufs_from_cache(path)
+        self._init_event.wait()
+        return self.get_ufs_from_cache(path)
 
-    def _get_ufs_from_cache(self, path: str):
+    def get_ufs_from_cache(self, path: str):
         with self._lock:
             for ufs_path in self._cached_ufs:
                 if path.startswith(ufs_path):
                     return self._cached_ufs[ufs_path]
 
     def must_get_alluxio_path_from_ufs_full_path(self, path: str):
-        while not self._inited:
-            time.sleep(0.1)
-        if self._inited:
-            with self._lock:
-                for ufs_path in self._cached_ufs:
-                    if path.startswith(ufs_path):
-                        return path.replace(
-                            ufs_path, self._path_map[ufs_path], 1
-                        )
+        self._init_event.wait()
+        return self.get_alluxio_path_from_ufs_full_path(path)
+
+    def get_alluxio_path_from_ufs_full_path(self, path: str):
+        with self._lock:
+            for ufs_path in self._cached_ufs:
+                if path.startswith(ufs_path):
+                    return path.replace(ufs_path, self._path_map[ufs_path], 1)
 
     def register_ufs_fallback(self, ufs_info_list: UfsInfo):
         """
@@ -233,7 +225,6 @@ class UFSUpdater:
         Args:
             ufs_info_list: List of UfsInfo objects containing UFS details
         """
-
         for ufs_info in ufs_info_list:
             protocol = self.get_protocol_from_path(
                 ufs_info.ufs_full_path.lower()
