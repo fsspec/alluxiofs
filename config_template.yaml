@@ -1,9 +1,10 @@
 # Alluxio Client Configuration
-load_balance_domain: null          # Load balancing domain; mutually exclusive with worker_hosts
-worker_hosts: "host1,host2,host3"  # Specify worker host list, format: "host1,host2,host3"
+load_balance_domain: "localhost"   # Load balancing domain; mutually exclusive with worker_hosts
+worker_hosts: null                 # Specify worker host list, format: "host1,host2,host3"
 
 worker_http_port: 28080            # Alluxio worker HTTP port
-ufs: ""                            # Under File System type (e.g., s3, hdfs, etc.)
+fallback_to_ufs_enabled: true      # Enable fallback to UFS
+ufs_info_refresh_interval_minutes: 2  # UFS info refresh interval (minutes)
 concurrency: 64                    # Maximum concurrency
 
 use_mem_cache: false               # Enable memory cache

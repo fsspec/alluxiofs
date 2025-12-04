@@ -86,21 +86,27 @@ class UFSUpdater:
         """
         Helper method to fetch data and update the cache safely.
         """
-        ufs_info_json = self._get_ufs_info_from_worker()
+        try:
+            ufs_info_json = self._get_ufs_info_from_worker()
 
-        if ufs_info_json is not None:
-            # Use lock to safely update the shared variable
-            with self._lock:
-                ufs_info_list = self.parase_ufs_info(ufs_info_json)
-                self.register_ufs_fallback(ufs_info_list)
-                self._inited = True
-            self.logger.debug(
-                f"ufs's Info updated. Time: {time.strftime('%H:%M:%S')}"
+            if ufs_info_json is not None:
+                # Use lock to safely update the shared variable
+                with self._lock:
+                    ufs_info_list = self.parase_ufs_info(ufs_info_json)
+                    self.register_ufs_fallback(ufs_info_list)
+                self.logger.debug(
+                    f"ufs's Info updated. Time: {time.strftime('%H:%M:%S')}"
+                )
+            else:
+                self.logger.warning(
+                    f"ufs's Info update failed, keeping previous result. Time: {time.strftime('%H:%M:%S')}"
+                )
+        except Exception as e:
+            self.logger.error(
+                f"Exception occurred during ufs's Info update: {e}"
             )
-        else:
-            self.logger.warning(
-                f"ufs's Info update failed, keeping previous result. Time: {time.strftime('%H:%M:%S')}"
-            )
+        finally:
+            self._inited = True
 
     def start_updater(self):
         """

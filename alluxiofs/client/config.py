@@ -12,7 +12,7 @@ class AlluxioClientConfig:
 
     def __init__(
         self,
-        load_balance_domain: str = None,
+        load_balance_domain: str = "localhost",
         worker_hosts: Optional[str] = None,
         worker_http_port=ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
         fallback_to_ufs_enabled=True,
