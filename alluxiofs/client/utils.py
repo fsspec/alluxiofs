@@ -12,6 +12,7 @@ import time
 from functools import wraps
 from io import BytesIO
 
+import fsspec
 import pycurl
 
 from .const import ALLUXIO_REQUEST_MAX_RETRIES
@@ -40,6 +41,22 @@ def convert_ufs_info_to(ufs, info):
     else:
         res = info
     return res
+
+
+def get_protocol_from_path(path):
+    """Extracts protocol (e.g., 's3') from 's3://bucket/key'."""
+    if path and "://" in path:
+        return path.split("://")[0]
+    return None
+
+
+def register_unregistered_ufs_to_fsspec(protocol):
+    if protocol == "bos":
+        try:
+            from bosfs import BOSFileSystem
+        except ImportError as e:
+            raise ImportError(f"Please install bosfs, {e}")
+        fsspec.register_implementation("bos", BOSFileSystem)
 
 
 def setup_logger(

@@ -14,16 +14,15 @@ import traceback
 from dataclasses import dataclass
 from functools import wraps
 
-import fsspec
 import yaml
 from cachetools import LRUCache
 from fsspec import AbstractFileSystem
-from fsspec import filesystem
+from fsspec.callbacks import DEFAULT_CALLBACK
 from fsspec.spec import AbstractBufferedFile
 
 from alluxiofs.client import AlluxioClient
 from alluxiofs.client.config import AlluxioClientConfig
-from alluxiofs.client.utils import convert_ufs_info_to
+from alluxiofs.client.transfer import UFSUpdater
 from alluxiofs.client.utils import setup_logger
 
 
@@ -103,6 +102,7 @@ class AlluxioFileSystem(AbstractFileSystem):
                 These might include mock interfaces or specific configuration overrides for test scenarios.
             **kwargs: other parameters for core session.
         """
+        self._closed = False
         assert (
             isinstance(yaml_path, str) or yaml_path is None
         ), f"{yaml_path} must be a string or None, got {type(yaml_path).__name__}."
@@ -126,37 +126,51 @@ class AlluxioFileSystem(AbstractFileSystem):
         # init alluxio client
         test_options = kwargs.get("test_options", {})
         if test_options.get("skip_alluxio") is True:
+            self.alluxio = AlluxioClient(
+                logger=self.logger,
+                **kwargs,
+            )
+            self.ufs_updater = UFSUpdater(self.alluxio)
+            self.ufs_updater.start_updater()
             self.alluxio = None
         else:
             self.alluxio = AlluxioClient(
                 logger=self.logger,
                 **kwargs,
             )
-        # init ufs
-        ufs = kwargs.get("ufs")
-        self.ufs = {}
-        self.ufs_info = {}
-        if ufs is None:
-            self.logger.warning(
-                "No 'ufs' parameter provided. Will not fall back to under file systems when "
-                "accessed files failed in Alluxiofs."
-            )
-        else:
-            self.target_protocols = [
-                p.strip() for p in ufs.split(",") if p.strip()
-            ]
-            for protocol in self.target_protocols:
-                self.register_unregistered_ufs_to_fsspec(protocol)
-                if fsspec.get_filesystem_class(protocol) is None:
-                    raise ValueError(f"Unsupported protocol: {protocol}")
-                else:
-                    target_options = self.get_target_options_from_worker(
-                        protocol
-                    )
-                    self.ufs[protocol] = filesystem(protocol, **target_options)
+            self.ufs_updater = UFSUpdater(self.alluxio)
+            self.ufs_updater.start_updater()
+        # init ufs updater
+        self.fallback_to_ufs_enabled = (
+            (self.alluxio.config.fallback_to_ufs_enabled)
+            if self.alluxio
+            else kwargs.get("fallback_to_ufs_enabled", True)
+        )
 
         self.file_info_cache = LRUCache(maxsize=1000)
         self.error_metrics = AlluxioErrorMetrics()
+
+    def __del__(self):
+        if not self._closed:
+            self.close()
+
+    def close(self):
+        if self._closed:
+            return
+
+        try:
+            if hasattr(self, "ufs_updater") and self.ufs_updater is not None:
+                self.ufs_updater.stop_updater()
+        except Exception as e:
+            self.logger.error(f"Error during cleanup: {e}")
+        finally:
+            self._closed = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     def load_yaml_config(self, path: str) -> dict:
         """Load YAML configuration from file. Returns empty dict if file is missing, None, or empty."""
@@ -184,27 +198,6 @@ class AlluxioFileSystem(AbstractFileSystem):
         merged = {**defaults, **yaml_config, **other_config}
         return merged
 
-    def register_unregistered_ufs_to_fsspec(self, protocol):
-        if protocol == "bos":
-            try:
-                from bosfs import BOSFileSystem
-            except ImportError as e:
-                raise ImportError(f"Please install bosfs, {e}")
-            fsspec.register_implementation("bos", BOSFileSystem)
-
-    def get_protocol_from_path(self, path):
-        return path.split("://")[0]
-
-    def get_target_options_from_worker(self, ufs):
-        if ufs in self.ufs_info:
-            return self.ufs_info[ufs]
-        else:
-            if self.alluxio:
-                info = self.alluxio.get_target_options_from_worker(ufs)
-                return convert_ufs_info_to(ufs, info)
-            else:
-                return {}
-
     def get_error_metrics(self):
         return self.error_metrics.get_metrics()
 
@@ -230,7 +223,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             bound = sig.bind(self, *args, **kwargs)
             bound.apply_defaults()
 
-            detected_protocol = None
+            detected_path = None
             # Define constants at the module level or class level
             PATH_ARG_NAMES = {"path", "path1", "path2", "lpath", "rpath"}
 
@@ -239,8 +232,8 @@ class AlluxioFileSystem(AbstractFileSystem):
             for name, value in bound.arguments.items():
                 if name in PATH_ARG_NAMES and isinstance(value, str):
                     # A. Try to capture protocol if we haven't found one yet
-                    if detected_protocol is None:
-                        detected_protocol = self._get_protocol_from_path(value)
+                    if detected_path is None:
+                        detected_path = value
 
                     # B. Strip the protocol from the argument for Alluxio usage
                     # Modify the value directly in the bound arguments dictionary
@@ -265,15 +258,14 @@ class AlluxioFileSystem(AbstractFileSystem):
                 else:
                     raise ModuleNotFoundError("alluxio client is None")
             except Exception as e:
-                # If not NotImplementedError, it's a real runtime error. Log it.
+                if not self.fallback_to_ufs_enabled:
+                    raise e
                 self._log_alluxio_error(func.__name__, e)
 
             # 4. Fallback Path: Execute logic on UFS
             # FIX: Pass the 'bound' object, not the sanitized tuple/dict,
             # because _execute_fallback needs to inspect parameter names.
-            return self._execute_fallback(
-                func.__name__, detected_protocol, bound
-            )
+            return self._execute_fallback(func.__name__, detected_path, bound)
 
         return wrapper
 
@@ -282,13 +274,7 @@ class AlluxioFileSystem(AbstractFileSystem):
     # (e.g., AlluxioFileSystem)
     # ---------------------------------------------------------
 
-    def _get_protocol_from_path(self, path):
-        """Extracts protocol (e.g., 's3') from 's3://bucket/key'."""
-        if path and "://" in path:
-            return path.split("://")[0]
-        return None
-
-    def _execute_fallback(self, method_name, protocol, bound_args):
+    def _execute_fallback(self, method_name, detected_path, bound_args):
         """
         Executes the operation using the Underlying File System (UFS).
         Includes Smart Argument Adaptation to prevent TypeErrors.
@@ -296,21 +282,20 @@ class AlluxioFileSystem(AbstractFileSystem):
         try:
             # Determine which protocol to use.
             # If no protocol was detected from args, use the FS default target protocol.
-            target_protocol = protocol if protocol else None
 
             # Retrieve the UFS client
-            fs = self.ufs.get(target_protocol)
+            fs = self.ufs_updater.must_get_ufs_from_path(detected_path)
 
             if fs is None:
                 raise RuntimeError(
-                    f"No UFS client found for protocol: {target_protocol}"
+                    f"No UFS client found for path: {detected_path}"
                 )
 
             # Dynamically retrieve the corresponding method from the UFS client
             fs_method = getattr(fs, method_name, None)
             if not fs_method:
                 raise NotImplementedError(
-                    f"Method {method_name} is not implemented in UFS {target_protocol}"
+                    f"Method {method_name} is not implemented in UFS {fs}"
                 )
 
             # --- Smart Argument Adaptation ---
@@ -345,9 +330,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             # Using **final_kwargs maps arguments by name, avoiding positional mismatches.
             res = fs_method(**final_kwargs)
 
-            self.logger.debug(
-                f"Exit(Ok): ufs({target_protocol}) op({method_name})"
-            )
+            self.logger.debug(f"Exit(Ok): ufs({fs}) op({method_name})")
             return res
 
         except Exception as e:
@@ -363,7 +346,7 @@ class AlluxioFileSystem(AbstractFileSystem):
         """
         log_msg = f"Exit(Error): alluxio op({method_name}), fallback to ufs"
         self.logger.warning(log_msg)
-        if len(self.ufs) > 0:
+        if self.ufs_updater.must_get_ufs_count() > 0:
             self.logger.debug(f"{error} {traceback.format_exc()}")
         else:
             self.logger.info(f"{error} {traceback.format_exc()}")
@@ -397,10 +380,24 @@ class AlluxioFileSystem(AbstractFileSystem):
             return False
 
     @fallback_handler
-    def isdir(self, path, **kwargs):
-        return self.info(path)["type"] == "directory"
+    def open(
+        self,
+        path,
+        mode="rb",
+        block_size=None,
+        cache_options=None,
+        compression=None,
+        **kwargs,
+    ):
+        return super().open(
+            path,
+            mode,
+            block_size,
+            cache_options,
+            compression,
+            **kwargs,
+        )
 
-    @fallback_handler
     def _open(
         self,
         path,
@@ -410,9 +407,9 @@ class AlluxioFileSystem(AbstractFileSystem):
         cache_options=None,
         **kwargs,
     ):
-        protocol = self.get_protocol_from_path(path)
-        ufs = self.ufs.get(protocol)
-        if self.alluxio.config.mcap_enabled:
+        """Open a file for reading or writing."""
+        ufs = self.ufs_updater.must_get_ufs_from_path(path) if path else None
+        if self.alluxio is not None and self.alluxio.config.mcap_enabled:
             kwargs["cache_type"] = "none"
         raw_file = AlluxioFile(
             alluxio=self,
@@ -432,166 +429,124 @@ class AlluxioFileSystem(AbstractFileSystem):
         return io.BufferedReader(raw_file, buffer_size=_read_buffer_size)
 
     @fallback_handler
-    def cat_file(self, path, start=0, end=None, **kwargs):
-        if end is None:
-            length = -1
-        else:
-            length = end - start
-        alluxio_path = self.info(path)["name"]
-        return self.alluxio.read_file_range(path, alluxio_path, start, length)
-
-    @fallback_handler
-    def mkdir(self, path, *args, **kwargs):
+    def mkdir(self, path, create_parents=False, **kwargs):
+        if create_parents:
+            raise NotImplementedError(
+                "mkdir with create_parents=True is not supported. Only single directory creation is available."
+            )
         return self.alluxio.mkdir(path)
 
     @fallback_handler
-    def makedirs(self, path, *args, **kwargs):
-        raise NotImplementedError
+    def makedirs(self, path, exist_ok=False, **kwargs):
+        raise NotImplementedError(
+            "makedirs is not implemented. Use mkdir() for single directory creation."
+        )
 
     @fallback_handler
-    def rm(
+    def _rm(
         self,
         path,
-        recursive=False,
-        recursive_alias=False,
-        remove_alluxio_only=False,
-        delete_mount_point=False,
-        sync_parent_next_time=False,
-        remove_unchecked_option_char=False,
     ):
-        option = RMOption(
-            recursive,
-            recursive_alias,
-            remove_alluxio_only,
-            delete_mount_point,
-            sync_parent_next_time,
-            remove_unchecked_option_char,
+        return self.alluxio.rm(path, RMOption())
+
+    @fallback_handler
+    def rm(self, path, recursive=False, **kwargs):
+        return super().rm(path, recursive=recursive, **kwargs)
+
+    @fallback_handler
+    def rmdir(self, path):
+        raise NotImplementedError(
+            "rmdir is not implemented. Use rm(path, recursive=False) instead."
         )
-        return self.alluxio.rm(path, option)
 
     @fallback_handler
-    def rmdir(self, path, *args, **kwargs):
-        raise NotImplementedError
-
-    @fallback_handler
-    def _rm(self, path, *args, **kwargs):
-        raise NotImplementedError
-
-    @fallback_handler
-    def pipe_file(self, path, *args, **kwargs):
-        raise NotImplementedError
-
-    @fallback_handler
-    def rm_file(self, path, *args, **kwargs):
-        raise NotImplementedError
-
-    @fallback_handler
-    def touch(self, path, *args, **kwargs):
+    def touch(self, path, truncate=True, **kwargs):
         return self.alluxio.touch(path)
 
     @fallback_handler
-    def created(self, path, *args, **kwargs):
-        return self.info(path).get("created", None)
-
-    @fallback_handler
-    def modified(self, path, *args, **kwargs):
-        return self.info(path).get("mtime", None)
-
-    @fallback_handler
-    def head(self, path, *args, **kwargs):
-        return self.alluxio.head(path, *args, **kwargs)
-
-    @fallback_handler
-    def tail(self, path, *args, **kwargs):
-        return self.alluxio.tail(path, *args, **kwargs)
-
-    @fallback_handler
-    def expand_path(self, path, *args, **kwargs):
-        raise NotImplementedError
-
-    # Comment it out as s3fs will return folder as well.
-    # @fallback_handler
-    # def find(self, path, *args, **kwargs):
-    #     raise NotImplementedError
-
-    @fallback_handler
-    def mv(self, path1, path2, *args, **kwargs):
-        path1 = self.unstrip_protocol(path1)
-        path2 = self.unstrip_protocol(path2)
-        return self.alluxio.mv(path1, path2)
-
-    @fallback_handler
-    def copy(
-        self,
-        path1,
-        path2,
-        recursive=False,
-        recursiveAlias=False,
-        force=False,
-        thread=None,
-        bufferSize=None,
-        preserve=None,
-    ):
-        path1 = self.unstrip_protocol(path1)
-        path2 = self.unstrip_protocol(path2)
-        option = CPOption(
-            recursive, recursiveAlias, force, thread, bufferSize, preserve
-        )
-        return self.alluxio.cp(path1, path2, option)
-
-    @fallback_handler
-    def put_file(self, lpath, rpath, *args, **kwargs):
-        return self.upload(lpath, rpath, *args, **kwargs)
-
-    @fallback_handler
-    def put(self, lpath, rpath, *args, **kwargs):
-        raise NotImplementedError
-
-    @fallback_handler
-    def write_bytes(self, path, value, **kwargs):
-        return self.alluxio.write_chunked(path, value)
-
-    @fallback_handler
-    def read_bytes(self, path, *args, **kwargs):
-        return self.alluxio.read_chunked(path).read()
-
-    @fallback_handler
-    def created(self, path):
-        info = self.info(path)
+    def created(self, path, **kwargs):
+        info = self.info(path, **kwargs)
         return info.get("created", None)
 
     @fallback_handler
-    def modified(self, path):
-        info = self.info(path)
+    def modified(self, path, **kwargs):
+        """Get the modification time of a file."""
+        info = self.info(path, **kwargs)
         return info.get("mtime", None)
 
+    # Comment it out as s3fs will return folder as well.
     @fallback_handler
-    def upload(self, lpath: str, rpath: str, *args, **kwargs) -> bool:
-        rpath = self.unstrip_protocol(rpath)
-        with open(lpath, "rb") as f:
-            return self.alluxio.write_chunked(rpath, f.read())
-
-    @fallback_handler
-    def download(self, lpath, rpath, *args, **kwargs):
-        rpath = self.unstrip_protocol(rpath)
-        with open(lpath, "wb") as f:
-            return f.write(self.alluxio.read_chunked(rpath).read())
-
-    @fallback_handler
-    def get(self, rpath, lpath, *args, **kwargs):
+    def find(self, path, *args, **kwargs):
         raise NotImplementedError
 
     @fallback_handler
-    def get_file(self, rpath, lpath, *args, **kwargs):
-        raise NotImplementedError
+    def expand_path(self, path, *args, **kwargs):
+        return super().expand_path(path, *args, **kwargs)
+
+    @fallback_handler
+    def mv(self, path1, path2, recursive=False, maxdepth=None, **kwargs):
+        return self.alluxio.mv(path1, path2)
+
+    @fallback_handler
+    def cp_file(self, path1, path2, **kwargs):
+        return self.alluxio.cp(path1, path2, CPOption())
+
+    # TODO: need to implement after stream write is ready
+    @fallback_handler
+    def put_file(
+        self,
+        lpath,
+        rpath,
+        callback=DEFAULT_CALLBACK,
+        mode="overwrite",
+        **kwargs,
+    ):
+        raise NotImplementedError("put_file is not implemented")
+
+    @fallback_handler
+    def pipe_file(self, path, value, mode="overwrite", **kwargs):
+        if mode != "overwrite":
+            raise NotImplementedError(
+                "only pipe_file with mode = overwrite is implemented."
+            )
+        return self.alluxio.write_chunked(path, value)
+
+    # need to implement
+    @fallback_handler
+    def cat_file(self, path, start=None, end=None, **kwargs):
+        return super().cat_file(path, start=start, end=end, **kwargs)
+
+    @fallback_handler
+    def get_file(self, rpath, lpath, callback=DEFAULT_CALLBACK, **kwargs):
+        return super().get_file(rpath, lpath, callback=callback, **kwargs)
+
+    @fallback_handler
+    def sign(self, path, expiration=100, **kwargs):
+        return super().sign(path, expiration=expiration, **kwargs)
+
+    @fallback_handler
+    def fsid(self):
+        return super().fsid()
+
+    @fallback_handler
+    def ukey(self, path):
+        """Hash of file properties, to tell if it has changed"""
+        return super().ukey(path)
+
+    @fallback_handler
+    def checksum(self, path):
+        """Get the checksum of a file."""
+        return super().checksum(path)
 
 
 class AlluxioFile(AbstractBufferedFile):
     def __init__(self, alluxio, ufs, path, mode="rb", **kwargs):
         super().__init__(alluxio, path, mode, **kwargs)
-        self.alluxio_path = alluxio.info(path)["name"]
+        self.alluxio_path = (
+            alluxio.ufs_updater.must_get_alluxio_path_from_ufs_full_path(path)
+        )
         self.ufs = ufs
-        if ufs and isinstance(ufs, AbstractFileSystem):
+        if ufs is not None and isinstance(ufs, AbstractFileSystem):
             self.f = ufs.open(path, mode, **kwargs)
         else:
             self.f = None
@@ -616,12 +571,17 @@ class AlluxioFile(AbstractBufferedFile):
             for path in possible_path_arg_names:
                 if path in argument_list:
                     if path in kwargs:
-                        kwargs[path] = self._strip_protocol(kwargs[path])
+                        kwargs[path] = self.fs._strip_protocol(kwargs[path])
                     else:
                         path_index = argument_list.index(path) - 1
-                        positional_params[path_index] = self._strip_protocol(
-                            positional_params[path_index]
-                        )
+                        if path_index >= 0 and path_index < len(
+                            positional_params
+                        ):
+                            positional_params[
+                                path_index
+                            ] = self.fs._strip_protocol(
+                                positional_params[path_index]
+                            )
 
             positional_params = tuple(positional_params)
 
@@ -635,7 +595,7 @@ class AlluxioFile(AbstractBufferedFile):
                         f"alluxio's {alluxio_impl.__name__} failed, fallback to ufs"
                     )
                     self.logger.debug(f"{e} {traceback.format_exc()}")
-                if self.ufs is None:
+                if self.fs.fallback_to_ufs_enabled or self.f is None:
                     raise e
             fs_method = getattr(self.f, alluxio_impl.__name__, None)
             if fs_method:
@@ -682,7 +642,7 @@ class AlluxioFile(AbstractBufferedFile):
     def close(self):
         """Close file and clean up resources to prevent memory leaks"""
         if not self.closed:
-            if self.f is not None:
+            if hasattr(self, "f") and self.f is not None:
                 self.f.close()
         super().close()
 
