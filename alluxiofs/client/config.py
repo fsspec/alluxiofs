@@ -15,7 +15,8 @@ class AlluxioClientConfig:
         load_balance_domain: str = None,
         worker_hosts: Optional[str] = None,
         worker_http_port=ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
-        ufs="",
+        fallback_to_ufs_enabled=True,
+        ufs_info_refresh_interval_minutes=2,
         concurrency=64,
         use_mem_cache=False,
         mem_map_capacity=1024,
@@ -51,7 +52,9 @@ class AlluxioClientConfig:
             1 <= worker_http_port <= 65535
         ), "'worker_http_port' should be an integer in the range 1-65535"
 
-        assert isinstance(ufs, str), "'ufs' should be a string"
+        assert isinstance(
+            fallback_to_ufs_enabled, bool
+        ), "'fallback_to_ufs_enabled' should be a boolean"
 
         assert (
             isinstance(concurrency, int) and concurrency > 0
@@ -140,6 +143,11 @@ class AlluxioClientConfig:
             mcap_prefetch_policy, str
         ), "'mcap_prefetch_policy' should be a string"
 
+        assert (
+            isinstance(ufs_info_refresh_interval_minutes, float)
+            or isinstance(ufs_info_refresh_interval_minutes, int)
+        ) and ufs_info_refresh_interval_minutes > 0, "'ufs_info_refresh_interval_minutes' should be a positive float or integer"
+
         self.load_balance_domain = load_balance_domain
         self.worker_hosts = worker_hosts
         self.worker_http_port = worker_http_port
@@ -161,4 +169,7 @@ class AlluxioClientConfig:
         self.read_buffer_size_mb = read_buffer_size_mb
         self.mcap_max_prefetch_blocks = mcap_max_prefetch_blocks
         self.mcap_prefetch_policy = mcap_prefetch_policy
-        self.ufs = ufs
+        self.fallback_to_ufs_enabled = fallback_to_ufs_enabled
+        self.ufs_info_refresh_interval_minutes = (
+            ufs_info_refresh_interval_minutes
+        )

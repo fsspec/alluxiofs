@@ -172,10 +172,10 @@ class AlluxioClient:
                 "Either 'worker_hosts' or 'load_balance_domain' must be provided."
             )
         self.executor = None
+
         self.mem_map = {}
         self.use_mem_cache = self.config.use_mem_cache
         self.mem_map_capacity = self.config.mem_map_capacity
-
         self.use_local_disk_cache = self.config.use_local_disk_cache
         self.local_disk_cache_dir = self.config.local_disk_cache_dir
         self.mcap_enabled = self.config.mcap_enabled
@@ -834,7 +834,7 @@ class AlluxioClient:
             chunk_size,
         )
 
-    def get_target_options_from_worker(self, ufs):
+    def get_ufs_info_from_worker(self):
         if self.loadbalancer is None:
             worker_host = self.config.load_balance_domain
         else:
@@ -843,18 +843,17 @@ class AlluxioClient:
             url = GET_UFS_SECRET_INFO.format(
                 domain=worker_host,
                 http_port=self.config.worker_http_port,
-                ufs=ufs,
             )
             response = requests.get(url)
             response.raise_for_status()
             info = response.content
-            return json.loads(info)
+            return info
         except Exception as e:
             raise Exception(
                 EXCEPTION_CONTENT.format(
                     worker_host=worker_host,
                     http_port=self.config.worker_http_port,
-                    error=f"Error when get ufsInfo of {ufs}, " + str(e),
+                    error=f"Error when get ufsInfo, {e}",
                 )
             )
 

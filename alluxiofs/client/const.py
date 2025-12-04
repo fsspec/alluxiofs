@@ -12,6 +12,7 @@ ALLUXIO_PAGE_SIZE_KEY = "alluxio.worker.page.store.page.size"
 ALLUXIO_PAGE_SIZE_DEFAULT_VALUE = "1MB"
 ALLUXIO_REQUEST_MAX_RETRIES = 5
 ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS = 20
+ALLUXIO_UFS_INFO_REFRESH_INTERVAL_MINUTES = 2
 LOCAL_CACHE_DIR_DEFAULT = "/tmp/local_cache"
 DEFAULT_LOCAL_CACHE_SIZE_GB = 64
 DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB = 16
@@ -35,7 +36,7 @@ GET_NODE_ADDRESS_IP = (
 GET_NODE_ADDRESS_DOMAIN = (
     "http://{domain}:{http_port}/v1/node?path={file_path}"
 )
-GET_UFS_SECRET_INFO = "http://{domain}:{http_port}/v1/ufsInfo?ufs={ufs}"
+GET_UFS_SECRET_INFO = "http://{domain}:{http_port}/v1/ufsInfo"
 FULL_PAGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/file/{path_id}/page/{page_index}?ufsFullPath={file_path}"
 FULL_RANGE_URL_FORMAT = "http://{worker_host}:{http_port}/v1/range/{path_id}?ufsFullPath={file_path}&offset={offset}&length={length}"
 FULL_CHUNK_URL_FORMAT = "http://{worker_host}:{http_port}/v1/chunk/{path_id}?ufsFullPath={file_path}&chunkSize={chunk_size}"
