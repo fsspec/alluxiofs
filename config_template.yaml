@@ -1,33 +1,211 @@
-# Alluxio Client Configuration
-load_balance_domain: "localhost"   # Load balancing domain; mutually exclusive with worker_hosts
-worker_hosts: null                 # Specify worker host list, format: "host1,host2,host3"
+# ============================================================================
+# Alluxio Client Configuration File
+# ============================================================================
+# This configuration file is used to configure the behavior of the Alluxio Python SDK client.
+# The configuration file can be passed to the AlluxioFileSystem initialization function via the yaml_path parameter.
+# Example: fs = AlluxioFileSystem(yaml_path="config.yaml")
+# ============================================================================
 
-worker_http_port: 28080            # Alluxio worker HTTP port
-fallback_to_ufs_enabled: true      # Enable fallback to UFS
-ufs_info_refresh_interval_minutes: 2  # UFS info refresh interval (minutes)
-concurrency: 64                    # Maximum concurrency
+# ----------------------------------------------------------------------------
+# Worker Node Discovery Configuration
+# ----------------------------------------------------------------------------
+# Note: load_balance_domain and worker_hosts are mutually exclusive - only one can be configured
 
-use_mem_cache: false               # Enable memory cache
-mem_map_capacity: 1024             # Memory cache capacity
+# load_balance_domain: Load balancing domain name for discovering Alluxio Worker nodes via DNS service
+#   Use Case: Use when the Alluxio cluster uses DNS load balancing or service discovery mechanisms
+#   How It Works: The client resolves the domain name via DNS to get all associated IP addresses (Worker nodes),
+#                 then uses a path-hashing strategy to distribute requests among these nodes
+#   Example Values: "localhost" or "alluxio-workers.example.com"
+#   Default Value: "localhost"
+load_balance_domain: "localhost"
 
-use_local_disk_cache: false        # Enable local disk cache
-local_disk_cache_dir: "/tmp/local_cache/"  # Local disk cache directory
-local_cache_dir: "/tmp/local_cache/"       # MCAP-specific cache directory
+# worker_hosts: Directly specify the Worker node list as comma-separated hostnames
+#   Use Case: Use when you know all Worker node addresses explicitly, without needing DNS resolution
+#   Format: "host1,host2,host3" or "host1:port1,host2:port2" (with ports)
+#   How It Works: The client directly uses these host addresses and performs load balancing via path hashing
+#   Example Values: "worker1.example.com,worker2.example.com,worker3.example.com"
+#   Default Value: null (not set)
+#   Note: If worker_hosts is set, load_balance_domain will be ignored
+worker_hosts: null
 
-mcap_enabled: false                # Enable MCAP acceleration
-mcap_prefetch_ahead_blocks: 2      # MCAP prefetch ahead blocks count
-mcap_prefetch_concurrency: 32      # MCAP prefetch concurrency
+# worker_http_port: HTTP service port of Alluxio Worker nodes
+#   Purpose: Used for HTTP API communication between the client and Worker nodes (e.g., file listing, metadata queries)
+#   Default Value: 28080
+#   Note: Ensure this port is properly configured and open on Worker nodes
+worker_http_port: 28080
 
-local_cache_size_gb: 64            # Local cache size (GB)
-local_cache_block_size_mb: 4       # Cache block size (MB)
+# worker_data_port: Data port of Alluxio Worker nodes
+#   Purpose: Used for data transmission (reserved configuration item)
+#   Default Value: 29998
+#   Note: This configuration may not be directly used in the current version, but it's recommended to keep it consistent with the Alluxio cluster configuration
+worker_data_port: 29998
 
-use_memory_cache: false            # Enable memory range cache
-memory_cache_size_mb: 256          # Memory range cache size (MB)
+# ----------------------------------------------------------------------------
+# UFS (Underlying File System) Fallback Configuration
+# ----------------------------------------------------------------------------
 
-http_max_retries: 3                # HTTP maximum retry count
-http_timeouts: 60                  # HTTP timeout (seconds)
+# fallback_to_ufs_enabled: Whether to enable UFS fallback mechanism
+#   Purpose: When Alluxio operations fail, whether to automatically fall back to the underlying file system (UFS) to execute operations
+#   Use Cases:
+#     - true: Improves fault tolerance, allows data access via UFS when Alluxio service is unavailable
+#     - false: Strict mode, throws exceptions immediately when Alluxio fails, helpful for quickly identifying issues
+#   How It Works:
+#     1. First attempts to execute operations via Alluxio
+#     2. If Alluxio operation fails and this option is true, automatically switches to UFS execution
+#     3. All fallback operations are logged for monitoring and debugging
+#   Default Value: true
+#   Recommendation: Recommended for production environments to improve system availability
+fallback_to_ufs_enabled: true
 
-read_buffer_size_mb: 0.008         # Read buffer size (MB)
+# ufs_info_refresh_interval_minutes: UFS information refresh interval (minutes)
+#   Purpose: Controls how frequently the client refreshes underlying file system information
+#   How It Works: The client periodically updates UFS metadata information to ensure data consistency
+#   Default Value: 2 (minutes)
+#   Recommendations:
+#     - For scenarios with frequent data updates, consider reducing this value (e.g., 1 minute)
+#     - For scenarios with infrequent data updates, consider increasing this value (e.g., 5 minutes) to reduce overhead
+ufs_info_refresh_interval_minutes: 2
 
-mcap_max_prefetch_blocks: 16       # Maximum prefetchable blocks count
-mcap_prefetch_policy: "adaptive_window" # Prefetch policy
+# ----------------------------------------------------------------------------
+# Concurrency Control Configuration
+# ----------------------------------------------------------------------------
+
+# concurrency: Maximum number of concurrent operations
+#   Purpose: Controls the maximum number of concurrent operations the client can execute simultaneously (e.g., concurrent reads, writes)
+#   Affected Areas:
+#     - HTTP request connection pool size (pool_connections and pool_maxsize)
+#     - Thread pool size for concurrent file operations
+#   Default Value: 64
+#   Tuning Recommendations:
+#     - High concurrency scenarios: Consider increasing (e.g., 128 or 256)
+#     - Resource-constrained scenarios: Consider decreasing (e.g., 32 or 16)
+#     - Should be adjusted based on actual network bandwidth and Worker node performance
+concurrency: 64
+
+# ----------------------------------------------------------------------------
+# Local Cache Configuration
+# ----------------------------------------------------------------------------
+# Local cache functionality can accelerate data access by caching data blocks to local disk, reducing network transmission
+
+# local_cache_enabled: Whether to enable local cache acceleration
+#   Purpose: Controls whether to enable local disk cache functionality
+#   Note: This configuration item may not be directly used in the current version; actual cache functionality is controlled by mcap_enabled
+#   Default Value: false
+local_cache_enabled: false
+
+# local_cache_dir: Local cache directory path
+#   Purpose: Specifies the directory where local cache data is stored
+#   Format: Supports single directory or multiple directories (comma-separated), e.g., "/tmp/cache1/, /tmp/cache2/"
+#   How It Works:
+#     - Cache data is distributed to different directories based on file path hash
+#     - Supports multi-directory configuration for distributed cache storage
+#   Default Value: "/tmp/local_cache/"
+#   Important Notes:
+#     - Ensure the directory has sufficient write permissions
+#     - Ensure the disk where the directory is located has sufficient space
+#     - Recommend using SSD for better performance
+local_cache_dir: "/tmp/local_cache/"
+
+# local_cache_size_gb: Total local cache size (GB)
+#   Purpose: Limits the maximum disk space used by local cache
+#   Format: Supports single value or multiple values (comma-separated, corresponding to multiple cache directories)
+#   Examples: "64" or "32, 64" (two directories limited to 32GB and 64GB respectively)
+#   Default Value: 64 (GB)
+#   Tuning Recommendations:
+#     - Set based on available disk space
+#     - Recommend setting to 1-2 times the size of frequently used data
+#     - When cache is full, uses LRU (Least Recently Used) strategy to evict old data
+local_cache_size_gb: 64
+
+# local_cache_block_size_mb: Cache block size (MB)
+#   Purpose: Defines the size of each cache block; data is stored and read in chunks of this size
+#   Default Value: 4 (MB)
+#   Tuning Recommendations:
+#     - Many small files: Use smaller block size (e.g., 2MB)
+#     - Many large files: Use larger block size (e.g., 8MB or 16MB)
+#     - Need to balance memory usage and network transmission efficiency
+local_cache_block_size_mb: 4
+
+# ----------------------------------------------------------------------------
+# Prefetch Configuration
+# ----------------------------------------------------------------------------
+# Prefetch functionality can download subsequent data blocks to local cache in advance while reading the current data block, improving sequential read performance
+
+# local_cache_prefetch_concurrency: Prefetch concurrency
+#   Purpose: Controls the number of threads performing prefetch operations simultaneously
+#   How It Works: Uses a thread pool to execute prefetch tasks; this parameter controls the thread pool size
+#   Default Value: 32
+#   Tuning Recommendations:
+#     - Sufficient network bandwidth: Consider increasing (e.g., 64)
+#     - Limited network bandwidth: Consider decreasing (e.g., 16)
+#     - Need to balance prefetch speed and system resource usage
+local_cache_prefetch_concurrency: 32
+
+# local_cache_max_prefetch_blocks: Maximum number of prefetchable blocks
+#   Purpose: Limits the maximum number of cache blocks that can be prefetched for a single file
+#   How It Works: Prevents prefetching too much data from occupying cache space, affecting caching for other files
+#   Default Value: 16
+#   Tuning Recommendations:
+#     - Sequential reading of large files: Consider increasing (e.g., 32)
+#     - Random read scenarios: Consider decreasing (e.g., 8)
+local_cache_max_prefetch_blocks: 16
+
+# local_cache_prefetch_policy: Prefetch policy
+#   Purpose: Controls the prefetch algorithm, determining when and how much data to prefetch
+#   Valid Values:
+#     - "none": No prefetching, only caches the currently read data block
+#     - "fixed_window": Fixed window prefetching, always prefetches a fixed number of subsequent blocks
+#     - "adaptive_window": Adaptive window prefetching, dynamically adjusts prefetch window size based on read patterns
+#   Default Value: "adaptive_window"
+#   Policy Descriptions:
+#     - "none": Suitable for random read scenarios, saves bandwidth and cache space
+#     - "fixed_window": Suitable for sequential read scenarios, predictable prefetch behavior
+#     - "adaptive_window": Suitable for mixed read scenarios, automatically optimizes prefetch behavior
+#   Recommendation: Most scenarios recommend using "adaptive_window"
+local_cache_prefetch_policy: "adaptive_window"
+
+# local_cache_prefetch_ahead_blocks: Number of blocks to prefetch ahead
+#   Purpose: When using fixed_window policy, specifies the fixed number of blocks to prefetch
+#   Effective Condition: Only effective when local_cache_prefetch_policy="fixed_window"
+#   Default Value: 2
+#   Example: Setting to 2 means when reading the current block, it will prefetch the next 2 blocks
+#   Note: This parameter is ignored when using other prefetch policies
+local_cache_prefetch_ahead_blocks: 2
+
+# ----------------------------------------------------------------------------
+# HTTP Request Configuration
+# ----------------------------------------------------------------------------
+
+# http_max_retries: Maximum number of HTTP request retries
+#   Purpose: Maximum number of automatic retries when HTTP requests fail
+#   Use Cases: Network jitter, temporary service unavailability, etc.
+#   Default Value: 3
+#   Tuning Recommendations:
+#     - Unstable network: Consider increasing (e.g., 5)
+#     - Fast-fail scenarios: Consider decreasing (e.g., 1 or 2)
+#   Note: Setting to 0 means no retry, returns error immediately on failure
+http_max_retries: 3
+
+# http_timeouts: HTTP request timeout (seconds)
+#   Purpose: Sets the timeout for HTTP requests to prevent requests from hanging for too long
+#   Default Value: 60 (seconds)
+#   Tuning Recommendations:
+#     - Large file transfers: Consider increasing (e.g., 120 or 300)
+#     - Fast response requirements: Consider decreasing (e.g., 30)
+#     - Should be adjusted based on actual network environment and file size
+http_timeouts: 60
+
+# ----------------------------------------------------------------------------
+# Read Buffer Configuration
+# ----------------------------------------------------------------------------
+
+# read_buffer_size_mb: Read buffer size (MB)
+#   Purpose: Sets the buffer size for io.BufferedReader to optimize file read performance
+#   How It Works: Larger buffers can reduce the number of calls to alluxio worker, improving read efficiency
+#   Default Value: 0.008 (MB, i.e., 8KB)
+#   Tuning Recommendations:
+#     - Sequential reading of large files: Consider increasing (e.g., 0.064 or 0.128, i.e., 64KB or 128KB)
+#     - Random reads or small files: Keep smaller value (e.g., 0.008 or 0.016)
+#     - Need to balance memory usage and read performance
+#   Note: This buffer is used for Python-level buffering, different from system-level cache
+read_buffer_size_mb: 0.008
