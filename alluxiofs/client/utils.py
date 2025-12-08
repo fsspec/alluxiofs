@@ -62,6 +62,7 @@ def register_unregistered_ufs_to_fsspec(protocol):
 def setup_logger(
     file_path=os.getenv("ALLUXIO_PYTHON_SDK_LOG_DIR", None),
     level_str=os.getenv("ALLUXIO_PYTHON_SDK_LOG_LEVEL", "INFO"),
+    class_name=__name__,
 ):
     # log dir
     level = LOG_LEVEL_MAP.get(level_str.upper(), logging.INFO)
@@ -85,7 +86,7 @@ def setup_logger(
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
     # init logger
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger(class_name)
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
     logger.setLevel(level)

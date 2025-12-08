@@ -132,7 +132,6 @@ class AlluxioClient:
             length: 77542,
             human_readable_file_size: '75.72KB'
         },
-
     ]
     >>> print(alluxio.read("s3://mybucket/mypath/dir/myfile"))
     my_file_content
@@ -178,7 +177,7 @@ class AlluxioClient:
         self.mem_map_capacity = self.config.mem_map_capacity
         self.use_local_disk_cache = self.config.use_local_disk_cache
         self.local_disk_cache_dir = self.config.local_disk_cache_dir
-        self.mcap_enabled = self.config.mcap_enabled
+        self.local_cache_enabled = self.config.local_cache_enabled
         if (
             self.local_disk_cache_dir
             and not self.local_disk_cache_dir.endswith("/")
@@ -189,16 +188,16 @@ class AlluxioClient:
                 os.makedirs(self.local_disk_cache_dir)
 
         self.async_persisting_pool = ThreadPoolExecutor(max_workers=8)
-        if self.mcap_enabled:
+        if self.local_cache_enabled:
             self.magic_bytes_cache = LRUCache(maxsize=10000)
-            self.mcap_async_prefetch_thread_pool = ThreadPoolExecutor(
-                self.config.mcap_prefetch_concurrency
+            self.local_cache_async_prefetch_thread_pool = ThreadPoolExecutor(
+                self.config.local_cache_prefetch_concurrency
             )
             data_manager = LocalCacheManager(
                 cache_dir=self.config.local_cache_dir,
                 max_cache_size=self.config.local_cache_size_gb,
                 block_size=self.config.local_cache_block_size_mb,
-                thread_pool=self.mcap_async_prefetch_thread_pool,
+                thread_pool=self.local_cache_async_prefetch_thread_pool,
                 http_max_retries=self.config.http_max_retries,
                 http_timeouts=self.config.http_timeouts,
                 logger=self.logger,
@@ -210,7 +209,7 @@ class AlluxioClient:
             #     max_size_bytes=(
             #         int(self.config.memory_cache_size_mb * 1024 * 1024)
             #     ),
-            #     num_shards=self.config.mcap_prefetch_concurrency,
+            #     num_shards=self.config.local_cache_prefetch_concurrency,
             #     logger=self.logger,
             # )
 
@@ -538,8 +537,7 @@ class AlluxioClient:
             raise Exception(e)
 
     def read_file_range(self, file_path, alluxio_path, offset=0, length=-1):
-        # Handle magic bytes cache for mcap
-        if self.mcap_enabled:
+        if self.local_cache_enabled:
             return self.data_manager.read_file_range(
                 file_path, alluxio_path, offset, length
             )

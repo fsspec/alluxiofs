@@ -46,12 +46,14 @@ class NoPrefetchPolicy(PrefetchPolicy):
 
 
 class FixedWindowPrefetchPolicy(PrefetchPolicy):
-    def __init__(self, block_size, mcap_prefetch_ahead_blocks):
+    def __init__(self, block_size, local_cache_prefetch_ahead_blocks):
         super().__init__(block_size)
-        self.mcap_prefetch_ahead_blocks = mcap_prefetch_ahead_blocks
+        self.local_cache_prefetch_ahead_blocks = (
+            local_cache_prefetch_ahead_blocks
+        )
 
     def get_blocks(self, offset, length, file_size):
-        prefetch_ahead = self.mcap_prefetch_ahead_blocks
+        prefetch_ahead = self.local_cache_prefetch_ahead_blocks
 
         start_block = offset // self.block_size
 
@@ -69,10 +71,10 @@ class FixedWindowPrefetchPolicy(PrefetchPolicy):
 
 
 class AdaptiveWindowPrefetchPolicy(PrefetchPolicy):
-    def __init__(self, block_size, mcap_max_prefetch_blocks):
+    def __init__(self, block_size, local_cache_max_prefetch_blocks):
         super().__init__(block_size)
         self.prefetch_ahead = 0
-        self.max_prefetch = mcap_max_prefetch_blocks
+        self.max_prefetch = local_cache_max_prefetch_blocks
         self.min_prefetch = 0
         self.last_offset = 0
 

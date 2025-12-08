@@ -23,9 +23,9 @@ class AlluxioClientConfig:
         use_local_disk_cache=False,
         local_disk_cache_dir="/tmp/local_cache/",
         local_cache_dir="/tmp/local_cache/",
-        mcap_enabled=False,
-        mcap_prefetch_ahead_blocks=2,
-        mcap_prefetch_concurrency=32,
+        local_cache_enabled=False,
+        local_cache_prefetch_ahead_blocks=2,
+        local_cache_prefetch_concurrency=32,
         local_cache_size_gb=64,
         local_cache_block_size_mb=4,
         use_memory_cache=False,
@@ -33,8 +33,8 @@ class AlluxioClientConfig:
         http_max_retries=ALLUXIO_REQUEST_MAX_RETRIES,
         http_timeouts=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
         read_buffer_size_mb=0.008,
-        mcap_max_prefetch_blocks=16,
-        mcap_prefetch_policy="adaptive_window",
+        local_cache_max_prefetch_blocks=16,
+        local_cache_prefetch_policy="adaptive_window",
         **kwargs,
     ):
         """
@@ -77,22 +77,22 @@ class AlluxioClientConfig:
         ), "'local_disk_cache_dir' should be a string"
 
         assert isinstance(
-            mcap_enabled, bool
-        ), "'mcap_enabled' should be a boolean"
+            local_cache_enabled, bool
+        ), "'local_cache_enabled' should be a boolean"
 
         assert isinstance(
             local_cache_dir, str
         ), "'local_cache_dir' should be a string"
 
         assert (
-            isinstance(mcap_prefetch_ahead_blocks, int)
-            and mcap_prefetch_ahead_blocks >= 0
-        ), "'mcap_prefetch_ahead_blocks' should be a non-negative integer"
+            isinstance(local_cache_prefetch_ahead_blocks, int)
+            and local_cache_prefetch_ahead_blocks >= 0
+        ), "'local_cache_prefetch_ahead_blocks' should be a non-negative integer"
 
         assert (
-            isinstance(mcap_prefetch_concurrency, int)
-            and mcap_prefetch_concurrency > 0
-        ), "'mcap_prefetch_concurrency' should be a positive integer"
+            isinstance(local_cache_prefetch_concurrency, int)
+            and local_cache_prefetch_concurrency > 0
+        ), "'local_cache_prefetch_concurrency' should be a positive integer"
 
         assert (
             (
@@ -135,13 +135,13 @@ class AlluxioClientConfig:
         )
 
         assert (
-            isinstance(mcap_max_prefetch_blocks, int)
-            and mcap_max_prefetch_blocks >= 0
-        ), "'mcap_max_prefetch_blocks' should be a non-negative integer"
+            isinstance(local_cache_max_prefetch_blocks, int)
+            and local_cache_max_prefetch_blocks >= 0
+        ), "'local_cache_max_prefetch_blocks' should be a non-negative integer"
 
         assert isinstance(
-            mcap_prefetch_policy, str
-        ), "'mcap_prefetch_policy' should be a string"
+            local_cache_prefetch_policy, str
+        ), "'local_cache_prefetch_policy' should be a string"
 
         assert (
             isinstance(ufs_info_refresh_interval_minutes, float)
@@ -156,10 +156,14 @@ class AlluxioClientConfig:
         self.mem_map_capacity = mem_map_capacity
         self.use_local_disk_cache = use_local_disk_cache
         self.local_disk_cache_dir = local_disk_cache_dir
-        self.mcap_enabled = mcap_enabled
+        self.local_cache_enabled = local_cache_enabled
         self.local_cache_dir = local_cache_dir
-        self.mcap_prefetch_ahead_blocks = mcap_prefetch_ahead_blocks
-        self.mcap_prefetch_concurrency = mcap_prefetch_concurrency
+        self.local_cache_prefetch_ahead_blocks = (
+            local_cache_prefetch_ahead_blocks
+        )
+        self.local_cache_prefetch_concurrency = (
+            local_cache_prefetch_concurrency
+        )
         self.local_cache_size_gb = local_cache_size_gb
         self.local_cache_block_size_mb = local_cache_block_size_mb
         self.use_memory_cache = use_memory_cache
@@ -167,8 +171,8 @@ class AlluxioClientConfig:
         self.http_max_retries = http_max_retries
         self.http_timeouts = http_timeouts
         self.read_buffer_size_mb = read_buffer_size_mb
-        self.mcap_max_prefetch_blocks = mcap_max_prefetch_blocks
-        self.mcap_prefetch_policy = mcap_prefetch_policy
+        self.local_cache_max_prefetch_blocks = local_cache_max_prefetch_blocks
+        self.local_cache_prefetch_policy = local_cache_prefetch_policy
         self.fallback_to_ufs_enabled = fallback_to_ufs_enabled
         self.ufs_info_refresh_interval_minutes = (
             ufs_info_refresh_interval_minutes

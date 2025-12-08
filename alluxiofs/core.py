@@ -206,7 +206,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             res = file_status.__dict__
             return res
         else:
-            return file_status.path
+            return file_status.name
 
     def fallback_handler(func):
         """
@@ -258,6 +258,11 @@ class AlluxioFileSystem(AbstractFileSystem):
                 else:
                     raise ModuleNotFoundError("alluxio client is None")
             except Exception as e:
+                if (
+                    isinstance(e, FileNotFoundError)
+                    and func.__name__ == "info"
+                ):
+                    raise e
                 if not self.fallback_to_ufs_enabled:
                     raise e
                 self._log_alluxio_error(func.__name__, e)
@@ -372,6 +377,14 @@ class AlluxioFileSystem(AbstractFileSystem):
         return fsspec_info
 
     @fallback_handler
+    def isdir(self, path):
+        try:
+            info = self.info(path)
+            return info.get("type") == "directory"
+        except FileNotFoundError:
+            return path.endswith("/")
+
+    @fallback_handler
     def exists(self, path, **kwargs):
         try:
             self.alluxio.get_file_status(path)
@@ -409,7 +422,10 @@ class AlluxioFileSystem(AbstractFileSystem):
     ):
         """Open a file for reading or writing."""
         ufs = self.ufs_updater.must_get_ufs_from_path(path) if path else None
-        if self.alluxio is not None and self.alluxio.config.mcap_enabled:
+        if (
+            self.alluxio is not None
+            and self.alluxio.config.local_cache_enabled
+        ):
             kwargs["cache_type"] = "none"
         raw_file = AlluxioFile(
             alluxio=self,
@@ -451,13 +467,20 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def rm(self, path, recursive=False, **kwargs):
-        return super().rm(path, recursive=recursive, **kwargs)
+        return self.alluxio.rm(path, RMOption(recursive=recursive))
 
     @fallback_handler
     def rmdir(self, path):
-        raise NotImplementedError(
-            "rmdir is not implemented. Use rm(path, recursive=False) instead."
-        )
+        contents = self.ls(path, detail=False)
+        # Remove the directory itself from the listing, if present
+        contents = [
+            item
+            for item in contents
+            if item.rstrip("/\\") != path.rstrip("/\\")
+        ]
+        if contents:
+            raise OSError(f"Directory not empty: {path}")
+        return self.alluxio.rm(path, RMOption(recursive=True))
 
     @fallback_handler
     def touch(self, path, truncate=True, **kwargs):
@@ -476,7 +499,23 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     # Comment it out as s3fs will return folder as well.
     @fallback_handler
-    def find(self, path, *args, **kwargs):
+    def find(
+        self, path, maxdepth=None, withdirs=False, detail=False, **kwargs
+    ):
+        raise NotImplementedError
+
+    @fallback_handler
+    def glob(self, path, maxdepth=None, **kwargs):
+        raise NotImplementedError
+
+    @fallback_handler
+    def walk(
+        self, path, maxdepth=None, topdown=True, on_error="omit", **kwargs
+    ):
+        raise NotImplementedError
+
+    @fallback_handler
+    def du(self, path, total=True, maxdepth=None, withdirs=False, **kwargs):
         raise NotImplementedError
 
     @fallback_handler
@@ -510,6 +549,17 @@ class AlluxioFileSystem(AbstractFileSystem):
                 "only pipe_file with mode = overwrite is implemented."
             )
         return self.alluxio.write_chunked(path, value)
+
+    @fallback_handler
+    def tail(self, path, size=1024):
+        with self.open(path, "rb") as f:
+            f.seek(0, 2)
+            file_len = f.tell()
+            bytes_to_read = min(file_len, size)
+            if bytes_to_read == 0:
+                return b""
+            f.seek(-bytes_to_read, 2)
+            return f.read()
 
     # need to implement
     @fallback_handler
