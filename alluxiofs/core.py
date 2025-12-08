@@ -471,6 +471,11 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     @fallback_handler
     def rmdir(self, path):
+        contents = self.ls(path, detail=False)
+        # Remove the directory itself from the listing, if present
+        contents = [item for item in contents if item.rstrip("/\\") != path.rstrip("/\\")]
+        if contents:
+            raise OSError(f"Directory not empty: {path}")
         return self.alluxio.rm(path, RMOption(recursive=True))
 
     @fallback_handler

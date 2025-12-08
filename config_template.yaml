@@ -89,7 +89,7 @@ concurrency: 64
 
 # local_cache_enabled: Whether to enable local cache acceleration
 #   Purpose: Controls whether to enable local disk cache functionality
-#   Note: This configuration item may not be directly used in the current version; actual cache functionality is controlled by mcap_enabled
+#   Note: This configuration item controls cache functionality in the current version.
 #   Default Value: false
 local_cache_enabled: false
 
