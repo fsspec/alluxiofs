@@ -158,8 +158,12 @@ class AlluxioClientConfig:
         self.local_disk_cache_dir = local_disk_cache_dir
         self.local_cache_enabled = local_cache_enabled
         self.local_cache_dir = local_cache_dir
-        self.local_cache_prefetch_ahead_blocks = local_cache_prefetch_ahead_blocks
-        self.local_cache_prefetch_concurrency = local_cache_prefetch_concurrency
+        self.local_cache_prefetch_ahead_blocks = (
+            local_cache_prefetch_ahead_blocks
+        )
+        self.local_cache_prefetch_concurrency = (
+            local_cache_prefetch_concurrency
+        )
         self.local_cache_size_gb = local_cache_size_gb
         self.local_cache_block_size_mb = local_cache_block_size_mb
         self.use_memory_cache = use_memory_cache

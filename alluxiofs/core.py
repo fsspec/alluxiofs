@@ -258,6 +258,11 @@ class AlluxioFileSystem(AbstractFileSystem):
                 else:
                     raise ModuleNotFoundError("alluxio client is None")
             except Exception as e:
+                if (
+                    isinstance(e, FileNotFoundError)
+                    and func.__name__ == "info"
+                ):
+                    raise e
                 if not self.fallback_to_ufs_enabled:
                     raise e
                 self._log_alluxio_error(func.__name__, e)
@@ -374,7 +379,8 @@ class AlluxioFileSystem(AbstractFileSystem):
     @fallback_handler
     def isdir(self, path):
         try:
-            return self.info(path)["type"] == "directory"
+            info = self.info(path)
+            return info.get("type") == "directory"
         except FileNotFoundError:
             return path.endswith("/")
 
@@ -416,7 +422,10 @@ class AlluxioFileSystem(AbstractFileSystem):
     ):
         """Open a file for reading or writing."""
         ufs = self.ufs_updater.must_get_ufs_from_path(path) if path else None
-        if self.alluxio is not None and self.alluxio.config.local_cache_enabled:
+        if (
+            self.alluxio is not None
+            and self.alluxio.config.local_cache_enabled
+        ):
             kwargs["cache_type"] = "none"
         raw_file = AlluxioFile(
             alluxio=self,
@@ -481,7 +490,9 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     # Comment it out as s3fs will return folder as well.
     @fallback_handler
-    def find(self, path, maxdepth=None, withdirs=False, detail=False, **kwargs):
+    def find(
+        self, path, maxdepth=None, withdirs=False, detail=False, **kwargs
+    ):
         raise NotImplementedError
 
     @fallback_handler
@@ -489,7 +500,9 @@ class AlluxioFileSystem(AbstractFileSystem):
         raise NotImplementedError
 
     @fallback_handler
-    def walk(self, path, maxdepth=None, topdown=True, on_error="omit", **kwargs):
+    def walk(
+        self, path, maxdepth=None, topdown=True, on_error="omit", **kwargs
+    ):
         raise NotImplementedError
 
     @fallback_handler

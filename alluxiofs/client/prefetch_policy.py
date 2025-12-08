@@ -48,7 +48,9 @@ class NoPrefetchPolicy(PrefetchPolicy):
 class FixedWindowPrefetchPolicy(PrefetchPolicy):
     def __init__(self, block_size, local_cache_prefetch_ahead_blocks):
         super().__init__(block_size)
-        self.local_cache_prefetch_ahead_blocks = local_cache_prefetch_ahead_blocks
+        self.local_cache_prefetch_ahead_blocks = (
+            local_cache_prefetch_ahead_blocks
+        )
 
     def get_blocks(self, offset, length, file_size):
         prefetch_ahead = self.local_cache_prefetch_ahead_blocks
