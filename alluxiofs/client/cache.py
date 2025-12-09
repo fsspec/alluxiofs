@@ -450,7 +450,7 @@ class LocalCacheManager:
         return data, BlockStatus.CACHED
 
     def _get_files_sorted_by_atime_scandir(
-            self, cache_data_dir, reverse=False
+        self, cache_data_dir, reverse=False
     ):
         """Get list of files sorted by access time using os.scandir for efficiency."""
         files = []
@@ -465,16 +465,16 @@ class LocalCacheManager:
                                 "path": entry.path,
                                 "atime": stat.st_atime,
                                 "size": stat.st_size,
-                                "is_evicted": entry.name.endswith("_evicted"),  # 新增字段
+                                "is_evicted": entry.name.endswith(
+                                    "_evicted"
+                                ),  # 新增字段
                             }
                         )
                     except FileNotFoundError:
                         continue
 
         files_sorted = sorted(
-            files,
-            key=lambda x: (x["is_evicted"], x["atime"]),
-            reverse=reverse
+            files, key=lambda x: (x["is_evicted"], x["atime"]), reverse=reverse
         )
         return files_sorted
 

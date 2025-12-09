@@ -169,7 +169,8 @@ class AlluxioClientConfig:
         ), "'local_cache_eviction_low_watermark' should be a float between 0 and 1"
 
         assert (
-                local_cache_eviction_high_watermark > local_cache_eviction_low_watermark
+            local_cache_eviction_high_watermark
+            > local_cache_eviction_low_watermark
         ), "'local_cache_eviction_high_watermark' must be greater than 'local_cache_eviction_low_watermark'"
 
         assert (
