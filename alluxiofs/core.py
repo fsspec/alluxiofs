@@ -159,6 +159,8 @@ class AlluxioFileSystem(AbstractFileSystem):
             return
 
         try:
+            if self.alluxio is not None:
+                self.alluxio.close()
             if hasattr(self, "ufs_updater") and self.ufs_updater is not None:
                 self.ufs_updater.stop_updater()
         except Exception as e:
@@ -171,6 +173,16 @@ class AlluxioFileSystem(AbstractFileSystem):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
+
+    def is_file_in_local_cache(self, file_path):
+        """Check if a file is present in the Alluxio local cache."""
+        if self.alluxio is None:
+            raise RuntimeError("Alluxio client is not initialized.")
+        if self.alluxio.config.local_cache_enabled is False:
+            raise RuntimeError("Alluxio local cache is not enabled.")
+        return self.alluxio.data_manager.cache.is_file_in_local_cache(
+            file_path
+        )
 
     def load_yaml_config(self, path: str) -> dict:
         """Load YAML configuration from file. Returns empty dict if file is missing, None, or empty."""

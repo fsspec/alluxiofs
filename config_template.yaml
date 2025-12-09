@@ -85,9 +85,7 @@ concurrency: 64
 # ----------------------------------------------------------------------------
 # Local Cache Configuration
 # ----------------------------------------------------------------------------
-# Local cache functionality can accelerate data access by caching data blocks to local disk, reducing network transmission
-
-# local_cache_enabled: Whether to enable local cache acceleration
+# Local cache functionality can accelerate data access by caching data blocks to local disk, reducing network transmission# local_cache_enabled: Whether to enable local cache acceleration
 #   Purpose: Controls whether to enable local disk cache functionality
 #   Note: This configuration item controls cache functionality in the current version.
 #   Default Value: false
@@ -95,7 +93,7 @@ local_cache_enabled: false
 
 # local_cache_dir: Local cache directory path
 #   Purpose: Specifies the directory where local cache data is stored
-#   Format: Supports single directory or multiple directories (comma-separated), e.g., "/tmp/cache1/, /tmp/cache2/"
+#   Format: Supports single directory or multiple directories (comma-separated) for better performance, e.g., "/tmp/cache1/, /tmp/cache2/"
 #   How It Works:
 #     - Cache data is distributed to different directories based on file path hash
 #     - Supports multi-directory configuration for distributed cache storage
@@ -103,7 +101,7 @@ local_cache_enabled: false
 #   Important Notes:
 #     - Ensure the directory has sufficient write permissions
 #     - Ensure the disk where the directory is located has sufficient space
-#     - Recommend using SSD for better performance
+#     - Recommend using SSD or NVMe for better performance
 local_cache_dir: "/tmp/local_cache/"
 
 # local_cache_size_gb: Total local cache size (GB)
@@ -125,6 +123,16 @@ local_cache_size_gb: 64
 #     - Many large files: Use larger block size (e.g., 8MB or 16MB)
 #     - Need to balance memory usage and network transmission efficiency
 local_cache_block_size_mb: 4
+
+# local_cache_eviction_high_watermark: High watermark for eviction (0-1)
+#   Purpose: Trigger eviction when cache usage exceeds this ratio
+#   Default Value: 0.8
+local_cache_eviction_high_watermark: 0.8
+
+# local_cache_eviction_low_watermark: Low watermark for eviction (0-1)
+#   Purpose: Eviction continues until usage drops below this ratio
+#   Default Value: 0.7
+local_cache_eviction_low_watermark: 0.7
 
 # ----------------------------------------------------------------------------
 # Prefetch Configuration
@@ -172,6 +180,15 @@ local_cache_prefetch_policy: "adaptive_window"
 #   Note: This parameter is ignored when using other prefetch policies
 local_cache_prefetch_ahead_blocks: 2
 
+# local_cache_eviction_scan_interval_minutes: Interval for eviction scans (minutes)
+#   Purpose: Background eviction monitor scan period
+#   Default Value: 0.5
+local_cache_eviction_scan_interval_minutes: 0.5
+
+# local_cache_ttl_time_minutes: Time-to-live for cache entries (minutes)
+#   Purpose: Expire cached blocks older than the TTL; 0 means disabled
+#   Default Value: 10
+local_cache_ttl_time_minutes: 10
 # ----------------------------------------------------------------------------
 # HTTP Request Configuration
 # ----------------------------------------------------------------------------

@@ -94,7 +94,7 @@ def setup_logger(
 
 
 def get_prefetch_policy(config, block_size):
-    policy_name = config.mcap_prefetch_policy.lower()
+    policy_name = config.local_cache_prefetch_policy.lower()
     if policy_name == "none":
         from alluxiofs.client.prefetch_policy import NoPrefetchPolicy
 
@@ -103,7 +103,7 @@ def get_prefetch_policy(config, block_size):
         from alluxiofs.client.prefetch_policy import FixedWindowPrefetchPolicy
 
         return FixedWindowPrefetchPolicy(
-            block_size, config.mcap_prefetch_ahead_blocks
+            block_size, config.local_cache_prefetch_ahead_blocks
         )
     elif policy_name == "adaptive_window":
         from alluxiofs.client.prefetch_policy import (
@@ -111,11 +111,11 @@ def get_prefetch_policy(config, block_size):
         )
 
         return AdaptiveWindowPrefetchPolicy(
-            block_size, config.mcap_max_prefetch_blocks
+            block_size, config.local_cache_max_prefetch_blocks
         )
     else:
         raise ValueError(
-            f"Unsupported prefetch policy: {config.mcap_prefetch_policy}"
+            f"Unsupported prefetch policy: {config.local_cache_prefetch_policy}"
         )
 
 
