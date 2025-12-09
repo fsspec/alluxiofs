@@ -101,7 +101,7 @@ local_cache_enabled: false
 #   Important Notes:
 #     - Ensure the directory has sufficient write permissions
 #     - Ensure the disk where the directory is located has sufficient space
-#     - Recommend using SSD or nvme for better performance
+#     - Recommend using SSD or NVMe for better performance
 local_cache_dir: "/tmp/local_cache/"
 
 # local_cache_size_gb: Total local cache size (GB)

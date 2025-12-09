@@ -83,6 +83,23 @@ class LocalCacheManager:
             )
         # ----------------------------
 
+    def has_files_with_prefix(self, folder_path, prefix):
+        folder = Path(folder_path)
+        if not folder.is_dir():
+            return False
+        return any(
+            file.name.startswith(prefix)
+            for file in folder.iterdir()
+            if file.is_file()
+        )
+
+    def is_file_in_local_cache(self, file_path):
+        """Check if a file is fully cached locally."""
+        hash_index = self._get_local_cache_index_dir_for_file(file_path)
+        cache_data_dir = self._get_cache_data_dir(hash_index)
+        path_hash = hashlib.sha256(file_path.encode("utf-8")).hexdigest()
+        return self.has_files_with_prefix(cache_data_dir, path_hash)
+
     def _run_eviction_monitor(self):
         """Background thread to periodically scan and clean evicted files."""
         while not self._stop_eviction_event.is_set():
@@ -299,10 +316,11 @@ class LocalCacheManager:
 
     def _fake_evict_file(self, file_path_hashed):
         """Mark the file as evicted without deleting it."""
-        try:
-            os.rename(file_path_hashed, file_path_hashed + "_evicted")
-        except FileExistsError:
-            pass
+        if not file_path_hashed.endswith("_evicted"):
+            try:
+                os.rename(file_path_hashed, file_path_hashed + "_evicted")
+            except FileExistsError:
+                pass
 
     def _truly_evict_file(self, file_path_evicted, hash_index=None):
         """Truly delete the cached file."""
@@ -432,8 +450,9 @@ class LocalCacheManager:
         return data, BlockStatus.CACHED
 
     def _get_files_sorted_by_atime_scandir(
-        self, cache_data_dir, reverse=False
+            self, cache_data_dir, reverse=False
     ):
+        """Get list of files sorted by access time using os.scandir for efficiency."""
         files = []
         with os.scandir(cache_data_dir) as entries:
             for entry in entries:
@@ -446,11 +465,17 @@ class LocalCacheManager:
                                 "path": entry.path,
                                 "atime": stat.st_atime,
                                 "size": stat.st_size,
+                                "is_evicted": entry.name.endswith("_evicted"),  # 新增字段
                             }
                         )
                     except FileNotFoundError:
                         continue
-        files_sorted = sorted(files, key=lambda x: x["atime"], reverse=reverse)
+
+        files_sorted = sorted(
+            files,
+            key=lambda x: (x["is_evicted"], x["atime"]),
+            reverse=reverse
+        )
         return files_sorted
 
     def _fetch_range_via_shell(
@@ -501,8 +526,9 @@ class CachedFileReader:
     def close(self):
         if self.logger:
             self.logger.debug("[FileReader] Closing worker pool...")
-        self.pool.close()
-        self.pool.join()
+        self.pool.shutdown(wait=True)
+        if self.cache:
+            self.cache.shutdown()
 
     def _get_preferred_worker_address(self, file_path):
         """Mock: Returns the preferred worker host and HTTP port."""

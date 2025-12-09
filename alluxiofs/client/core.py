@@ -187,7 +187,6 @@ class AlluxioClient:
             if not os.path.exists(self.local_disk_cache_dir):
                 os.makedirs(self.local_disk_cache_dir)
 
-        self.async_persisting_pool = ThreadPoolExecutor(max_workers=8)
         if self.local_cache_enabled:
             self.magic_bytes_cache = LRUCache(maxsize=10000)
             self.local_cache_async_prefetch_thread_pool = ThreadPoolExecutor(
@@ -231,13 +230,6 @@ class AlluxioClient:
             self.executor.shutdown(wait=True)
         if self.data_manager:
             self.data_manager.close()
-        if self.async_persisting_pool:
-            self.async_persisting_pool.shutdown(wait=True)
-        if (
-            self.local_cache_enabled
-            and self.local_cache_async_prefetch_thread_pool
-        ):
-            self.local_cache_async_prefetch_thread_pool.shutdown(wait=True)
 
     def listdir(self, path):
         """
