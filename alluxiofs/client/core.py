@@ -197,13 +197,23 @@ class AlluxioClient:
                 cache_dir=self.config.local_cache_dir,
                 max_cache_size=self.config.local_cache_size_gb,
                 block_size=self.config.local_cache_block_size_mb,
-                thread_pool=self.local_cache_async_prefetch_thread_pool,
                 http_max_retries=self.config.http_max_retries,
                 http_timeouts=self.config.http_timeouts,
+                eviction_high_watermark=self.config.local_cache_eviction_high_watermark,
+                eviction_low_watermark=self.config.local_cache_eviction_low_watermark,
+                eviction_scan_interval=int(
+                    self.config.local_cache_eviction_scan_interval_minutes * 60
+                ),
+                ttl_time_seconds=int(
+                    self.config.local_cache_ttl_time_minutes * 60
+                ),
                 logger=self.logger,
             )
             self.data_manager = CachedFileReader(
-                self, data_manager, logger=self.logger
+                self,
+                data_manager,
+                thread_pool=self.local_cache_async_prefetch_thread_pool,
+                logger=self.logger,
             )
             # self.mem_cache = MemoryReadAHeadCachePool(
             #     max_size_bytes=(
@@ -212,6 +222,22 @@ class AlluxioClient:
             #     num_shards=self.config.local_cache_prefetch_concurrency,
             #     logger=self.logger,
             # )
+
+    def close(self):
+        """
+        Closes the Alluxio client, releasing any resources held by it.
+        """
+        if self.executor:
+            self.executor.shutdown(wait=True)
+        if self.data_manager:
+            self.data_manager.close()
+        if self.async_persisting_pool:
+            self.async_persisting_pool.shutdown(wait=True)
+        if (
+            self.local_cache_enabled
+            and self.local_cache_async_prefetch_thread_pool
+        ):
+            self.local_cache_async_prefetch_thread_pool.shutdown(wait=True)
 
     def listdir(self, path):
         """

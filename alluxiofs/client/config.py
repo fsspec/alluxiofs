@@ -3,6 +3,7 @@ from typing import Optional
 from .const import ALLUXIO_REQUEST_MAX_RETRIES
 from .const import ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS
 from .const import ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE
+from .const import ALLUXIO_WORKER_S3_SERVER_PORT_DEFAULT_VALUE
 
 
 class AlluxioClientConfig:
@@ -15,6 +16,7 @@ class AlluxioClientConfig:
         load_balance_domain: str = "localhost",
         worker_hosts: Optional[str] = None,
         worker_http_port=ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
+        worker_data_port: int = ALLUXIO_WORKER_S3_SERVER_PORT_DEFAULT_VALUE,
         fallback_to_ufs_enabled=True,
         ufs_info_refresh_interval_minutes=2,
         concurrency=64,
@@ -28,13 +30,17 @@ class AlluxioClientConfig:
         local_cache_prefetch_concurrency=32,
         local_cache_size_gb=64,
         local_cache_block_size_mb=4,
+        local_cache_eviction_high_watermark=0.8,
+        local_cache_eviction_low_watermark=0.7,
+        local_cache_max_prefetch_blocks=16,
+        local_cache_prefetch_policy="adaptive_window",
+        local_cache_eviction_scan_interval_minutes=0.5,
+        local_cache_ttl_time_minutes=10,
         use_memory_cache=False,
         memory_cache_size_mb=256,
         http_max_retries=ALLUXIO_REQUEST_MAX_RETRIES,
         http_timeouts=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
         read_buffer_size_mb=0.008,
-        local_cache_max_prefetch_blocks=16,
-        local_cache_prefetch_policy="adaptive_window",
         **kwargs,
     ):
         """
@@ -51,6 +57,10 @@ class AlluxioClientConfig:
         assert isinstance(worker_http_port, int) and (
             1 <= worker_http_port <= 65535
         ), "'worker_http_port' should be an integer in the range 1-65535"
+
+        assert isinstance(worker_data_port, int) and (
+            1 <= worker_data_port <= 65535
+        ), "'worker_data_port' should be an integer in the range 1-65535"
 
         assert isinstance(
             fallback_to_ufs_enabled, bool
@@ -148,9 +158,32 @@ class AlluxioClientConfig:
             or isinstance(ufs_info_refresh_interval_minutes, int)
         ) and ufs_info_refresh_interval_minutes > 0, "'ufs_info_refresh_interval_minutes' should be a positive float or integer"
 
+        assert (
+            isinstance(local_cache_eviction_high_watermark, float)
+            and 0 < local_cache_eviction_high_watermark < 1
+        ), "'local_cache_eviction_high_watermark' should be a float between 0 and 1"
+
+        assert (
+            isinstance(local_cache_eviction_low_watermark, float)
+            and 0 < local_cache_eviction_low_watermark < 1
+        ), "'local_cache_eviction_low_watermark' should be a float between 0 and 1"
+
+        assert (
+            isinstance(
+                local_cache_eviction_scan_interval_minutes, (int, float)
+            )
+            and local_cache_eviction_scan_interval_minutes > 0
+        ), "'local_cache_eviction_scan_interval_minutes' should be a positive integer or float"
+
+        assert (
+            isinstance(local_cache_ttl_time_minutes, (int, float))
+            and local_cache_ttl_time_minutes > 0
+        ), "'local_cache_ttl_time_minutes' should be a positive integer or float"
+
         self.load_balance_domain = load_balance_domain
         self.worker_hosts = worker_hosts
         self.worker_http_port = worker_http_port
+        self.worker_data_port = worker_data_port
         self.concurrency = concurrency
         self.use_mem_cache = use_mem_cache
         self.mem_map_capacity = mem_map_capacity
@@ -177,3 +210,13 @@ class AlluxioClientConfig:
         self.ufs_info_refresh_interval_minutes = (
             ufs_info_refresh_interval_minutes
         )
+        self.local_cache_eviction_high_watermark = (
+            local_cache_eviction_high_watermark
+        )
+        self.local_cache_eviction_low_watermark = (
+            local_cache_eviction_low_watermark
+        )
+        self.local_cache_eviction_scan_interval_minutes = (
+            local_cache_eviction_scan_interval_minutes
+        )
+        self.local_cache_ttl_time_minutes = local_cache_ttl_time_minutes

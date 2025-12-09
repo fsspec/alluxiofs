@@ -2,16 +2,22 @@ import hashlib
 import os
 import tempfile
 import threading
+import time
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 from enum import auto
 from enum import Enum
 from multiprocessing import Value
+from pathlib import Path
 
 from fsspec.caching import BaseCache
 from fsspec.caching import Fetcher
 from fsspec.caching import ReadAheadCache
 
+from .const import ALLUXIO_LOCAL_CACHE_EVICTION_HIGH_WATERMARK
+from .const import ALLUXIO_LOCAL_CACHE_EVICTION_LOW_WATERMARK
+from .const import ALLUXIO_LOCAL_CACHE_EVICTION_SCAN_INTERVAL_MINUTES
+from .const import ALLUXIO_LOCAL_CACHE_TTL_TIME_MINUTES
 from .const import ALLUXIO_REQUEST_MAX_RETRIES
 from .const import ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS
 from .const import DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB
@@ -39,9 +45,14 @@ class LocalCacheManager:
         cache_dir=LOCAL_CACHE_DIR_DEFAULT,
         max_cache_size=DEFAULT_LOCAL_CACHE_SIZE_GB,
         block_size=DEFAULT_LOCAL_CACHE_BLOCK_SIZE_MB,
-        thread_pool=ThreadPoolExecutor(max_workers=4),
         http_max_retries=ALLUXIO_REQUEST_MAX_RETRIES,
         http_timeouts=ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS,
+        eviction_high_watermark=ALLUXIO_LOCAL_CACHE_EVICTION_HIGH_WATERMARK,
+        eviction_low_watermark=ALLUXIO_LOCAL_CACHE_EVICTION_LOW_WATERMARK,
+        eviction_scan_interval=int(
+            ALLUXIO_LOCAL_CACHE_EVICTION_SCAN_INTERVAL_MINUTES * 60
+        ),
+        ttl_time_seconds=int(ALLUXIO_LOCAL_CACHE_TTL_TIME_MINUTES * 60),
         logger=None,
     ):
         self.cache_dirs, self.max_cache_sizes = self._param_local_cache_dirs(
@@ -50,12 +61,83 @@ class LocalCacheManager:
         self.http_max_retries = http_max_retries
         self.http_timeouts = http_timeouts
         self.block_size = int(block_size * 1024 * 1024)
-        self.evcit_rate = 0.8
+        self.eviction_high_watermark = eviction_high_watermark
+        self.eviction_low_watermark = eviction_low_watermark
         self.logger = logger
-        self.pool = thread_pool
-        self.current_cache_sizes = [Value("l", 0)] * len(self.cache_dirs)
+        self.current_cache_sizes = [Value("l", 0) for _ in self.cache_dirs]
+        self.ttl_time_seconds = ttl_time_seconds
 
         self._load_existing_cache()
+
+        self.eviction_scan_interval = eviction_scan_interval
+        self._stop_eviction_event = threading.Event()
+        self._eviction_thread = threading.Thread(
+            target=self._run_eviction_monitor,
+            name="CacheEvictionMonitor",
+            daemon=True,
+        )
+        self._eviction_thread.start()
+        if self.logger:
+            self.logger.debug(
+                f"[CACHE] Eviction monitor thread started with interval {self.eviction_scan_interval}s"
+            )
+        # ----------------------------
+
+    def _run_eviction_monitor(self):
+        """Background thread to periodically scan and clean evicted files."""
+        while not self._stop_eviction_event.is_set():
+            if self._stop_eviction_event.wait(self.eviction_scan_interval):
+                break
+
+            try:
+                self._scan_and_clean_evicted()
+            except Exception as e:
+                if self.logger:
+                    self.logger.error(
+                        f"[CACHE] Error in eviction monitor: {e}"
+                    )
+
+    def _scan_and_clean_evicted(self):
+        """Scan cache directories for files marked as evicted and delete them."""
+        if self.logger:
+            self.logger.debug("[CACHE] Starting background eviction scan...")
+
+        cleaned_count = 0
+
+        for dir_index in range(len(self.cache_dirs)):
+            data_dir = self._get_cache_data_dir(dir_index)
+            if not os.path.exists(data_dir):
+                continue
+
+            try:
+                with os.scandir(data_dir) as entries:
+                    for entry in entries:
+                        if entry.is_file() and entry.name.endswith("_evicted"):
+                            file_path = entry.path
+
+                            self._truly_evict_file(
+                                file_path, hash_index=dir_index
+                            )
+
+                            cleaned_count += 1
+            except Exception as e:
+                if self.logger:
+                    self.logger.warning(
+                        f"[CACHE] Failed to scan dir {data_dir}: {e}"
+                    )
+
+        if self.logger and cleaned_count > 0:
+            self.logger.debug(
+                f"[CACHE] Background scan finished. Cleaned {cleaned_count} files."
+            )
+
+    def shutdown(self):
+        """Shut down the eviction monitor thread."""
+        self._stop_eviction_event.set()
+        if self._eviction_thread.is_alive():
+            self._eviction_thread.join(timeout=2)
+        if self.logger:
+            self.logger.debug("[CACHE] LocalCacheManager shut down.")
 
     def _param_local_cache_dirs(self, cache_dir, max_cache_size):
         """Parse cache directories and their respective sizes."""
@@ -102,7 +184,7 @@ class LocalCacheManager:
         """Scan existing cache files and rebuild cache index at startup."""
         for f in os.listdir(self._get_cache_data_dir(hash_index)):
             fp = os.path.join(self._get_cache_data_dir(hash_index), f)
-            if fp.endswith("_loading"):
+            if fp.endswith("_loading") or fp.endswith("_evicted"):
                 try:
                     os.remove(fp)
                 except FileNotFoundError:
@@ -171,9 +253,10 @@ class LocalCacheManager:
             self._set_file_cached(file_path_hashed)
             with self.current_cache_sizes[hash_index].get_lock():
                 self.current_cache_sizes[hash_index].value += end - start
-            self.logger.debug(
-                f"[CACHE] Atomic write completed: {file_path_hashed}"
-            )
+            if self.logger:
+                self.logger.debug(
+                    f"[CACHE] Atomic write completed: {file_path_hashed}"
+                )
             return True
 
         except FileExistsError as e:
@@ -181,9 +264,10 @@ class LocalCacheManager:
             if temp_file and os.path.exists(temp_file.name):
                 os.remove(temp_file.name)
             self._set_file_absent(file_path_hashed)
-            self.logger.debug(
-                f"[CACHE] Write failed for {file_path_hashed}: {e}"
-            )
+            if self.logger:
+                self.logger.debug(
+                    f"[CACHE] Write failed for {file_path_hashed}: {e}"
+                )
             return False
 
     def get_file_status(self, file_path, part_index):
@@ -193,11 +277,55 @@ class LocalCacheManager:
     def _get_block_status(self, file_path_hashed):
         """Get or create AtomicBlockStatus for a file path."""
         if os.path.exists(file_path_hashed):
+            if self._is_ttl_timeout(file_path_hashed):
+                self._fake_evict_file(file_path_hashed)
+                return BlockStatus.ABSENT
             return BlockStatus.CACHED
         elif os.path.exists(file_path_hashed + "_loading"):
             return BlockStatus.LOADING
         else:
             return BlockStatus.ABSENT
+
+    def _is_ttl_timeout(self, file_path_hashed):
+        file_path = Path(file_path_hashed)
+        if not file_path.exists():
+            return True
+        try:
+            stat_info = file_path.stat()
+            file_mtime = stat_info.st_mtime
+            return time.time() - file_mtime > self.ttl_time_seconds
+        except OSError:
+            return True
+
+    def _fake_evict_file(self, file_path_hashed):
+        """Mark the file as evicted without deleting it."""
+        try:
+            os.rename(file_path_hashed, file_path_hashed + "_evicted")
+        except FileExistsError:
+            pass
+
+    def _truly_evict_file(self, file_path_evicted, hash_index=None):
+        """Truly delete the cached file."""
+        try:
+            size = os.path.getsize(file_path_evicted)
+        except FileNotFoundError:
+            size = 0
+        try:
+            os.remove(file_path_evicted)
+            if size:
+                with self.current_cache_sizes[hash_index].get_lock():
+                    self.current_cache_sizes[hash_index].value -= size
+            if self.logger:
+                self.logger.debug(
+                    f"[LRU] Evicted old cache: {file_path_evicted} ({size} bytes)"
+                )
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            if self.logger:
+                self.logger.debug(
+                    f"[LRU] Failed to evict cache {file_path_evicted}: {e}"
+                )
 
     def set_file_loading(self, file_path, part_index):
         file_path_hashed = self._get_local_path(file_path, part_index)
@@ -205,7 +333,10 @@ class LocalCacheManager:
 
     def _set_file_loading(self, file_path_hashed):
         """Set the file status to LOADING."""
-        with open(file_path_hashed + "_loading", "x"):
+        try:
+            with open(file_path_hashed + "_loading", "x"):
+                pass
+        except FileExistsError:
             pass
 
     def _set_file_cached(self, file_path_hashed):
@@ -232,7 +363,7 @@ class LocalCacheManager:
             cache_size = self.current_cache_sizes[hash_index].value
         if (
             cache_size + length
-            <= self.max_cache_sizes[hash_index] * self.evcit_rate
+            <= self.max_cache_sizes[hash_index] * self.eviction_high_watermark
         ):
             return
         self._perform_eviction(hash_index, length)
@@ -243,30 +374,11 @@ class LocalCacheManager:
         )
         while (
             self.current_cache_sizes[hash_index].value + length
-            > self.max_cache_sizes[hash_index] / 2
+            > self.max_cache_sizes[hash_index] * self.eviction_low_watermark
             and len(cached_files) > 0
         ):
             old_path = cached_files.pop(0)["path"]
-            try:
-                size = os.path.getsize(old_path)
-            except FileNotFoundError:
-                size = 0
-            try:
-                os.remove(old_path)
-                if size:
-                    with self.current_cache_sizes[hash_index].get_lock():
-                        self.current_cache_sizes[hash_index].value -= size
-                if self.logger:
-                    self.logger.debug(
-                        f"[LRU] Evicted old cache: {old_path} ({size} bytes)"
-                    )
-            except FileNotFoundError:
-                pass
-            except Exception as e:
-                if self.logger:
-                    self.logger.debug(
-                        f"[LRU] Failed to evict cache {old_path}: {e}"
-                    )
+            self._truly_evict_file(old_path, hash_index)
 
     def add_to_cache(
         self,
@@ -369,12 +481,18 @@ class LocalCacheManager:
 # CachedFileReader: Handles remote fetch + cache coordination
 # =========================================================
 class CachedFileReader:
-    def __init__(self, alluxio=None, data_manager=None, logger=None):
+    def __init__(
+        self,
+        alluxio=None,
+        data_manager=None,
+        thread_pool=ThreadPoolExecutor(4),
+        logger=None,
+    ):
         self.cache = data_manager
         self.block_size = data_manager.block_size
         self.logger = logger if logger is not None else None
         self.alluxio_client = alluxio
-        self.pool = data_manager.pool
+        self.pool = thread_pool
         self.prefetch_policy = get_prefetch_policy(
             alluxio.config,
             self.block_size,
@@ -681,7 +799,7 @@ class MemoryReadAHeadCachePool:
             return
 
         if self.logger:
-            self.logger.info(
+            self.logger.debug(
                 f"Cache full ({self.current_size_bytes}/{self.max_size_bytes} bytes), starting eviction..."
             )
 
@@ -698,7 +816,7 @@ class MemoryReadAHeadCachePool:
 
             if file_path in self.cache_shards:
                 if self.logger:
-                    self.logger.info(
+                    self.logger.debug(
                         f"Evicting file: {file_path} (size: {self.block_size} bytes)"
                     )
                 # Remove cache object and clear references to prevent memory leaks
@@ -731,7 +849,7 @@ class MemoryReadAHeadCachePool:
                     pass  # Already removed
 
         if self.logger:
-            self.logger.info(
+            self.logger.debug(
                 f"Eviction completed: freed {bytes_evicted} bytes, new size: {self.current_size_bytes} bytes"
             )
 

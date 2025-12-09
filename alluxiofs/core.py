@@ -159,6 +159,8 @@ class AlluxioFileSystem(AbstractFileSystem):
             return
 
         try:
+            if self.alluxio is not None:
+                self.alluxio.close()
             if hasattr(self, "ufs_updater") and self.ufs_updater is not None:
                 self.ufs_updater.stop_updater()
         except Exception as e:
