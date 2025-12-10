@@ -579,18 +579,12 @@ class AlluxioClient:
             file content (str): The full file content
         """
         self._validate_path(file_path)
-        if self.loadbalancer is None:
-            worker_host = self.config.load_balance_domain
-        else:
-            worker_host = self.loadbalancer.get_worker(file_path).host
-        worker_http_port = ALLUXIO_WORKER_S3_SERVER_PORT_DEFAULT_VALUE
-        path_id = self._get_path_hash(file_path)
+        worker_host, worker_http_port = self._get_s3_worker_address(file_path)
         try:
             if self.data_manager:
                 return self._all_file_range_generator_alluxiocommon(
                     worker_host,
                     worker_http_port,
-                    path_id,
                     alluxio_path,
                     offset,
                     length,
@@ -599,7 +593,6 @@ class AlluxioClient:
                 return self._all_file_range_generator(
                     worker_host,
                     worker_http_port,
-                    path_id,
                     alluxio_path,
                     offset,
                     length,
@@ -1581,7 +1574,7 @@ class AlluxioClient:
                     break
 
     def _all_file_range_generator(
-        self, worker_host, worker_port, path_id, file_path, offset, length
+        self, worker_host, worker_port, file_path, offset, length
     ):
         try:
             headers = {"Range": f"bytes={offset}-{offset + length - 1}"}
@@ -1612,12 +1605,11 @@ class AlluxioClient:
 
     # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
     def _all_file_range_generator_alluxiocommon(
-        self, worker_host, worker_http_port, path_id, file_path, offset, length
+        self, worker_host, worker_http_port, file_path, offset, length
     ):
         return self._all_file_range_generator(
             worker_host,
             worker_http_port,
-            path_id,
             file_path,
             offset,
             length,
@@ -1847,6 +1839,14 @@ class AlluxioClient:
             ip = workers[0].host
             port = workers[0].http_server_port
         return ip, port
+
+    def _get_s3_worker_address(self, file_path):
+        if self.loadbalancer is None:
+            worker_host = self.config.load_balance_domain
+        else:
+            worker_host = self.loadbalancer.get_worker(file_path).host
+        worker_http_port = ALLUXIO_WORKER_S3_SERVER_PORT_DEFAULT_VALUE
+        return worker_host, worker_http_port
 
     def _validate_path(self, path):
         if not isinstance(path, str):
