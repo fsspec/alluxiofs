@@ -584,9 +584,7 @@ class CachedFileReader:
         file_size=None,
     ):
         """Use multiprocessing to download the entire file in parallel (per block)."""
-        worker_host, worker_http_port = self._get_s3_worker_address(
-            file_path
-        )
+        worker_host, worker_http_port = self._get_s3_worker_address(file_path)
         if file_size is None:
             file_size = self.get_file_length(file_path)
         start_block, end_block = self.get_blocks_prefetch(
