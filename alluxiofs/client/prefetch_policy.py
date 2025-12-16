@@ -36,13 +36,18 @@ class PrefetchPolicy(ABC):
 class NoPrefetchPolicy(PrefetchPolicy):
     def __init__(self, block_size, config=None):
         super().__init__(block_size)
-        self.config = config
-        base_logger = setup_logger(
-            self.config.log_dir,
-            self.config.log_level,
-            self.__class__.__name__,
-            self.config.log_tag_allowlist,
-        )
+        if config is None:
+            base_logger = setup_logger(
+                class_name=self.__class__.__name__,
+            )
+        else:
+            self.config = config
+            base_logger = setup_logger(
+                self.config.log_dir,
+                self.config.log_level,
+                self.__class__.__name__,
+                self.config.log_tag_allowlist,
+            )
         self.logger = TagAdapter(base_logger, {"tag": "[PREFETCH]"})
 
     def get_blocks(self, offset, length, file_size):
@@ -60,15 +65,21 @@ class NoPrefetchPolicy(PrefetchPolicy):
 class FixedWindowPrefetchPolicy(PrefetchPolicy):
     def __init__(self, block_size, config=None):
         super().__init__(block_size)
-        self.config = config
-        base_logger = setup_logger(
-            self.config.log_dir,
-            self.config.log_level,
-            self.__class__.__name__,
-            self.config.log_tag_allowlist,
-        )
+        if config is None:
+            base_logger = setup_logger(
+                class_name=self.__class__.__name__,
+            )
+            self.prefetch_ahead = 0
+        else:
+            self.config = config
+            base_logger = setup_logger(
+                self.config.log_dir,
+                self.config.log_level,
+                self.__class__.__name__,
+                self.config.log_tag_allowlist,
+            )
+            self.prefetch_ahead = self.config.local_cache_prefetch_ahead_blocks
         self.logger = TagAdapter(base_logger, {"tag": "[PREFETCH]"})
-        self.prefetch_ahead = self.config.local_cache_prefetch_ahead_blocks
 
     def get_blocks(self, offset, length, file_size):
 
@@ -91,15 +102,21 @@ class AdaptiveWindowPrefetchPolicy(PrefetchPolicy):
     def __init__(self, block_size, config=None):
         super().__init__(block_size)
         self.prefetch_ahead = 0
-        self.config = config
-        base_logger = setup_logger(
-            self.config.log_dir,
-            self.config.log_level,
-            self.__class__.__name__,
-            self.config.log_tag_allowlist,
-        )
+        if config is None:
+            base_logger = setup_logger(
+                class_name=self.__class__.__name__,
+            )
+            self.max_prefetch = 0
+        else:
+            self.config = config
+            base_logger = setup_logger(
+                self.config.log_dir,
+                self.config.log_level,
+                self.__class__.__name__,
+                self.config.log_tag_allowlist,
+            )
+            self.max_prefetch = self.config.local_cache_max_prefetch_blocks
         self.logger = TagAdapter(base_logger, {"tag": "[PREFETCH]"})
-        self.max_prefetch = self.config.local_cache_max_prefetch_blocks
         self.min_prefetch = 0
         self.last_offset = 0
 

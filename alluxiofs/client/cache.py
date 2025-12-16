@@ -237,6 +237,8 @@ class LocalCacheManager:
         """
         import traceback
 
+        tmp_pool_dir = "/tmp/local_cache_tmp_pool"
+        hash_index = 0
         try:
             hash_index = self._get_local_cache_index_dir_for_file(file_path)
             tmp_pool_dir = self._get_cache_tmp_pool_dir(hash_index)
