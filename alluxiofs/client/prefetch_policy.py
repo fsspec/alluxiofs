@@ -1,6 +1,9 @@
 from abc import ABC
 from abc import abstractmethod
 
+from alluxiofs.client.utils import setup_logger
+from alluxiofs.client.utils import TagAdapter
+
 
 class PrefetchPolicy(ABC):
     """
@@ -31,8 +34,16 @@ class PrefetchPolicy(ABC):
 
 
 class NoPrefetchPolicy(PrefetchPolicy):
-    def __init__(self, block_size):
+    def __init__(self, block_size, config=None):
         super().__init__(block_size)
+        self.config = config
+        base_logger = setup_logger(
+            self.config.log_dir,
+            self.config.log_level,
+            self.__class__.__name__,
+            self.config.log_tag_allowlist,
+        )
+        self.logger = TagAdapter(base_logger, {"tag": "[PREFETCH]"})
 
     def get_blocks(self, offset, length, file_size):
         start_block = offset // self.block_size
@@ -42,18 +53,24 @@ class NoPrefetchPolicy(PrefetchPolicy):
         else:
             end_block = (offset + length - 1) // self.block_size
 
+        self.logger.debug(f"The window size is {end_block - start_block}")
         return start_block, end_block
 
 
 class FixedWindowPrefetchPolicy(PrefetchPolicy):
-    def __init__(self, block_size, local_cache_prefetch_ahead_blocks):
+    def __init__(self, block_size, config=None):
         super().__init__(block_size)
-        self.local_cache_prefetch_ahead_blocks = (
-            local_cache_prefetch_ahead_blocks
+        self.config = config
+        base_logger = setup_logger(
+            self.config.log_dir,
+            self.config.log_level,
+            self.__class__.__name__,
+            self.config.log_tag_allowlist,
         )
+        self.logger = TagAdapter(base_logger, {"tag": "[PREFETCH]"})
+        self.prefetch_ahead = self.config.local_cache_prefetch_ahead_blocks
 
     def get_blocks(self, offset, length, file_size):
-        prefetch_ahead = self.local_cache_prefetch_ahead_blocks
 
         start_block = offset // self.block_size
 
@@ -64,17 +81,25 @@ class FixedWindowPrefetchPolicy(PrefetchPolicy):
 
         # apply prefetch window
         end_block = min(
-            end_block + prefetch_ahead, (file_size - 1) // self.block_size
+            end_block + self.prefetch_ahead, (file_size - 1) // self.block_size
         )
-
+        self.logger.debug(f"The prefetch_window size is {self.prefetch_ahead}")
         return start_block, end_block
 
 
 class AdaptiveWindowPrefetchPolicy(PrefetchPolicy):
-    def __init__(self, block_size, local_cache_max_prefetch_blocks):
+    def __init__(self, block_size, config=None):
         super().__init__(block_size)
         self.prefetch_ahead = 0
-        self.max_prefetch = local_cache_max_prefetch_blocks
+        self.config = config
+        base_logger = setup_logger(
+            self.config.log_dir,
+            self.config.log_level,
+            self.__class__.__name__,
+            self.config.log_tag_allowlist,
+        )
+        self.logger = TagAdapter(base_logger, {"tag": "[PREFETCH]"})
+        self.max_prefetch = self.config.local_cache_max_prefetch_blocks
         self.min_prefetch = 0
         self.last_offset = 0
 
@@ -114,4 +139,5 @@ class AdaptiveWindowPrefetchPolicy(PrefetchPolicy):
             end_block + self.prefetch_ahead,
             (file_size - 1) // self.block_size,
         )
+        self.logger.debug(f"The prefetch_window size is {self.prefetch_ahead}")
         return start_block, end_block

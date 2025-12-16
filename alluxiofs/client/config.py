@@ -20,6 +20,9 @@ class AlluxioClientConfig:
         fallback_to_ufs_enabled=True,
         ufs_info_refresh_interval_minutes=2,
         concurrency=64,
+        log_level="INFO",
+        log_dir="./logs/",
+        log_tag_allowlist=None,
         use_mem_cache=False,
         mem_map_capacity=1024,
         use_local_disk_cache=False,
@@ -54,6 +57,10 @@ class AlluxioClientConfig:
             isinstance(load_balance_domain, str) or load_balance_domain is None
         ), "'load_balance_domain' should be string"
 
+        assert (
+            isinstance(worker_hosts, str) or worker_hosts is None
+        ), "'worker_hosts' should be string or None"
+
         assert isinstance(worker_http_port, int) and (
             1 <= worker_http_port <= 65535
         ), "'worker_http_port' should be an integer in the range 1-65535"
@@ -69,6 +76,20 @@ class AlluxioClientConfig:
         assert (
             isinstance(concurrency, int) and concurrency > 0
         ), "'concurrency' should be a positive integer"
+
+        assert isinstance(log_level, str) and log_level in [
+            "DEBUG",
+            "INFO",
+            "WARNING",
+            "ERROR",
+            "CRITICAL",
+        ], "'log_level' should be one of 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'"
+
+        assert isinstance(log_dir, str), "'log_dir' should be a string"
+
+        assert (
+            isinstance(log_tag_allowlist, str) or log_tag_allowlist is None
+        ), "'log_tag_allowlist' should be a string"
 
         assert isinstance(
             use_mem_cache, bool
@@ -190,6 +211,9 @@ class AlluxioClientConfig:
         self.worker_http_port = worker_http_port
         self.worker_data_port = worker_data_port
         self.concurrency = concurrency
+        self.log_level = log_level
+        self.log_dir = log_dir
+        self.log_tag_allowlist = log_tag_allowlist
         self.use_mem_cache = use_mem_cache
         self.mem_map_capacity = mem_map_capacity
         self.use_local_disk_cache = use_local_disk_cache
