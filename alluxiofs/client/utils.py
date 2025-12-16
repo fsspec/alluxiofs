@@ -59,14 +59,49 @@ def register_unregistered_ufs_to_fsspec(protocol):
         fsspec.register_implementation("bos", BOSFileSystem)
 
 
+class TagAdapter(logging.LoggerAdapter):
+    """Logger adapter that prefixes messages with a fixed tag."""
+
+    def process(self, msg, kwargs):
+        return f"{self.extra['tag']} {msg}", kwargs
+
+
+class TagFilter(logging.Filter):
+    """
+    Filter for multi-tag log matching.
+    Allows a log record to pass if its message contains any of the specified tags.
+    """
+
+    def __init__(self, tags):
+        super().__init__()
+        # Ensure tags is always a list for consistent iteration
+        if isinstance(tags, str):
+            self.tags = [t.strip() for t in tags.split(",") if t.strip()]
+        elif tags is None:
+            self.tags = []
+        else:
+            self.tags = tags
+
+    def filter(self, record):
+        # If no tags are specified, allow all logs
+        if not self.tags:
+            return True
+        message = record.getMessage()
+        # Returns True if any tag in the list is found within the message
+        return any(tag in message for tag in self.tags)
+
+
 def setup_logger(
     file_path=os.getenv("ALLUXIO_PYTHON_SDK_LOG_DIR", None),
     level_str=os.getenv("ALLUXIO_PYTHON_SDK_LOG_LEVEL", "INFO"),
     class_name=__name__,
+    log_tags=None,
 ):
-    # log dir
+    # Map string level to logging constants
     level = LOG_LEVEL_MAP.get(level_str.upper(), logging.INFO)
     file_name = "user.log"
+
+    # Configure log directory and file path
     if file_path is None:
         project_dir = os.getcwd()
         logs_dir = os.path.join(project_dir, "logs")
@@ -74,22 +109,39 @@ def setup_logger(
             os.makedirs(logs_dir, exist_ok=True)
         log_file = os.path.join(logs_dir, file_name)
     else:
-        log_file = file_path + "/" + file_name
-    # set handler
+        log_file = os.path.join(file_path, file_name)
+
+    # Initialize handlers
     file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(level)
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(level)
+
+    # Apply TagFilter if log_tags are provided
+    if log_tags:
+        tag_filter = TagFilter(log_tags)
+        file_handler.addFilter(tag_filter)
+        console_handler.addFilter(tag_filter)
+
+    # Set log message format
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-    file_handler.setFormatter(formatter)
-    console_handler.setFormatter(formatter)
-    # init logger
+
+    for handler in [file_handler, console_handler]:
+        handler.setFormatter(formatter)
+        handler.setLevel(level)
+
+    # Initialize logger
     logger = logging.getLogger(class_name)
+
+    # Prevent duplicate logs by disabling propagation and clearing existing handlers
+    logger.propagate = False
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
     logger.setLevel(level)
+
     return logger
 
 
@@ -98,21 +150,17 @@ def get_prefetch_policy(config, block_size):
     if policy_name == "none":
         from alluxiofs.client.prefetch_policy import NoPrefetchPolicy
 
-        return NoPrefetchPolicy(block_size)
+        return NoPrefetchPolicy(block_size, config)
     elif policy_name == "fixed_window":
         from alluxiofs.client.prefetch_policy import FixedWindowPrefetchPolicy
 
-        return FixedWindowPrefetchPolicy(
-            block_size, config.local_cache_prefetch_ahead_blocks
-        )
+        return FixedWindowPrefetchPolicy(block_size, config)
     elif policy_name == "adaptive_window":
         from alluxiofs.client.prefetch_policy import (
             AdaptiveWindowPrefetchPolicy,
         )
 
-        return AdaptiveWindowPrefetchPolicy(
-            block_size, config.local_cache_max_prefetch_blocks
-        )
+        return AdaptiveWindowPrefetchPolicy(block_size, config)
     else:
         raise ValueError(
             f"Unsupported prefetch policy: {config.local_cache_prefetch_policy}"

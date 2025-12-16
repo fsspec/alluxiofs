@@ -10,7 +10,6 @@ import asyncio
 import hashlib
 import io
 import json
-import logging
 import os
 import random
 import re
@@ -62,6 +61,8 @@ from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
 from .loadbalance import WorkerListLoadBalancer
 from .utils import _c_send_get_request_write_bytes
+from .utils import setup_logger
+from .utils import TagAdapter
 
 
 @dataclass
@@ -139,7 +140,6 @@ class AlluxioClient:
 
     def __init__(
         self,
-        logger=logging.getLogger(__name__),
         **kwargs,
     ):
         """
@@ -157,11 +157,17 @@ class AlluxioClient:
             worker_http_port (int, optional):
                 The port of the HTTP server on each Alluxio worker node.
         """
-
         self.config = AlluxioClientConfig(**kwargs)
+        base_logger = setup_logger(
+            self.config.log_dir,
+            self.config.log_level,
+            self.__class__.__name__,
+            self.config.log_tag_allowlist,
+        )
+        self.logger = TagAdapter(base_logger, {"tag": "[ALLUXIO_CLIENT]"})
+
         self.session = self._create_session(self.config.concurrency)
         self.data_manager = None
-        self.logger = logger
         if self.config.load_balance_domain:
             self.loadbalancer = None
         elif self.config.worker_hosts:
@@ -192,27 +198,12 @@ class AlluxioClient:
             self.local_cache_async_prefetch_thread_pool = ThreadPoolExecutor(
                 self.config.local_cache_prefetch_concurrency
             )
-            data_manager = LocalCacheManager(
-                cache_dir=self.config.local_cache_dir,
-                max_cache_size=self.config.local_cache_size_gb,
-                block_size=self.config.local_cache_block_size_mb,
-                http_max_retries=self.config.http_max_retries,
-                http_timeouts=self.config.http_timeouts,
-                eviction_high_watermark=self.config.local_cache_eviction_high_watermark,
-                eviction_low_watermark=self.config.local_cache_eviction_low_watermark,
-                eviction_scan_interval=int(
-                    self.config.local_cache_eviction_scan_interval_minutes * 60
-                ),
-                ttl_time_seconds=int(
-                    self.config.local_cache_ttl_time_minutes * 60
-                ),
-                logger=self.logger,
-            )
+            data_manager = LocalCacheManager(self.config)
             self.data_manager = CachedFileReader(
                 self,
                 data_manager,
                 thread_pool=self.local_cache_async_prefetch_thread_pool,
-                logger=self.logger,
+                config=self.config,
             )
             # self.mem_cache = MemoryReadAHeadCachePool(
             #     max_size_bytes=(
@@ -579,18 +570,12 @@ class AlluxioClient:
             file content (str): The full file content
         """
         self._validate_path(file_path)
-        if self.loadbalancer is None:
-            worker_host = self.config.load_balance_domain
-        else:
-            worker_host = self.loadbalancer.get_worker(file_path).host
-        worker_http_port = ALLUXIO_WORKER_S3_SERVER_PORT_DEFAULT_VALUE
-        path_id = self._get_path_hash(file_path)
+        worker_host, worker_http_port = self._get_s3_worker_address(file_path)
         try:
             if self.data_manager:
                 return self._all_file_range_generator_alluxiocommon(
                     worker_host,
                     worker_http_port,
-                    path_id,
                     alluxio_path,
                     offset,
                     length,
@@ -599,7 +584,6 @@ class AlluxioClient:
                 return self._all_file_range_generator(
                     worker_host,
                     worker_http_port,
-                    path_id,
                     alluxio_path,
                     offset,
                     length,
@@ -1581,7 +1565,7 @@ class AlluxioClient:
                     break
 
     def _all_file_range_generator(
-        self, worker_host, worker_port, path_id, file_path, offset, length
+        self, worker_host, worker_port, file_path, offset, length
     ):
         try:
             headers = {"Range": f"bytes={offset}-{offset + length - 1}"}
@@ -1612,12 +1596,11 @@ class AlluxioClient:
 
     # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
     def _all_file_range_generator_alluxiocommon(
-        self, worker_host, worker_http_port, path_id, file_path, offset, length
+        self, worker_host, worker_http_port, file_path, offset, length
     ):
         return self._all_file_range_generator(
             worker_host,
             worker_http_port,
-            path_id,
             file_path,
             offset,
             length,
@@ -1847,6 +1830,14 @@ class AlluxioClient:
             ip = workers[0].host
             port = workers[0].http_server_port
         return ip, port
+
+    def _get_s3_worker_address(self, file_path):
+        if self.loadbalancer is None:
+            worker_host = self.config.load_balance_domain
+        else:
+            worker_host = self.loadbalancer.get_worker(file_path).host
+        worker_http_port = ALLUXIO_WORKER_S3_SERVER_PORT_DEFAULT_VALUE
+        return worker_host, worker_http_port
 
     def _validate_path(self, path):
         if not isinstance(path, str):

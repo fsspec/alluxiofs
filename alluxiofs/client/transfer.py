@@ -12,6 +12,7 @@ from alluxiofs.client.const import ALLUXIO_UFS_INFO_REFRESH_INTERVAL_MINUTES
 from alluxiofs.client.utils import get_protocol_from_path
 from alluxiofs.client.utils import register_unregistered_ufs_to_fsspec
 from alluxiofs.client.utils import setup_logger
+from alluxiofs.client.utils import TagAdapter
 
 
 class UfsInfo:
@@ -34,16 +35,29 @@ class UFSUpdater:
 
     def __init__(self, alluxio):
         self.alluxio = alluxio
+        self.config = alluxio.config if alluxio else None
         if self.alluxio:
             self.interval_seconds = (
                 self.alluxio.config.ufs_info_refresh_interval_minutes * 60
             )
-            self.logger = self.alluxio.logger
+            base_logger = setup_logger(
+                self.config.log_dir,
+                self.config.log_level,
+                self.__class__.__name__,
+                self.config.log_tag_allowlist,
+            )
+            self.logger = TagAdapter(base_logger, {"tag": "[TRANSFER]"})
         else:
             self.interval_seconds = (
                 ALLUXIO_UFS_INFO_REFRESH_INTERVAL_MINUTES * 60
             )
-            self.logger = setup_logger()
+            base_logger = setup_logger(
+                class_name=self.__class__.__name__,
+                log_tags=self.config.log_tag_allowlist
+                if self.config
+                else None,
+            )
+            self.logger = TagAdapter(base_logger, {"tag": "[TRANSFER]"})
 
         # Stores the latest fetched result
         self._cached_ufs: Optional[Dict[str, Any]] = {}
@@ -238,3 +252,6 @@ class UFSUpdater:
                     protocol, **target_options
                 )
                 self._path_map[ufs_info.ufs_full_path] = ufs_info.alluxio_path
+                self.logger.debug(
+                    f"Registered UFS client for {ufs_info.ufs_full_path}"
+                )

@@ -24,6 +24,7 @@ from alluxiofs.client import AlluxioClient
 from alluxiofs.client.config import AlluxioClientConfig
 from alluxiofs.client.transfer import UFSUpdater
 from alluxiofs.client.utils import setup_logger
+from alluxiofs.client.utils import TagAdapter
 
 
 @dataclass
@@ -108,26 +109,34 @@ class AlluxioFileSystem(AbstractFileSystem):
         ), f"{yaml_path} must be a string or None, got {type(yaml_path).__name__}."
         yaml_cfg = self.load_yaml_config(yaml_path) if yaml_path else {}
         kwargs = self.merge_config(yaml_cfg, kwargs)
-
         super().__init__(**kwargs)
-        log_dir = kwargs.get("log_dir")
-        log_level = kwargs.get("log_level")
-        log_dir = (
-            log_dir
-            if log_dir is not None
+
+        # setup logger
+        kwargs["log_dir"] = (
+            kwargs["log_dir"]
+            if kwargs["log_dir"] is not None
             else os.getenv("ALLUXIO_PYTHON_SDK_LOG_DIR", None)
         )
-        log_level = (
-            log_level
-            if log_level is not None
+        kwargs["log_level"] = (
+            kwargs["log_level"]
+            if kwargs["log_level"] is not None
             else os.getenv("ALLUXIO_PYTHON_SDK_LOG_LEVEL", "INFO")
         )
-        self.logger = setup_logger(log_dir, log_level)
+        log_level = kwargs.get("log_level")
+        log_dir = kwargs.get("log_dir")
+        log_tag_allowlist = kwargs.get("log_tag_allowlist", "")
+        base_logger = setup_logger(
+            log_dir,
+            log_level,
+            self.__class__.__name__,
+            log_tag_allowlist,
+        )
+        self.logger = TagAdapter(base_logger, {"tag": "[FSSPEC]"})
+        self.fallback_logger = TagAdapter(base_logger, {"tag": "[FALLBACK]"})
         # init alluxio client
         test_options = kwargs.get("test_options", {})
         if test_options.get("skip_alluxio") is True:
             self.alluxio = AlluxioClient(
-                logger=self.logger,
                 **kwargs,
             )
             self.ufs_updater = UFSUpdater(self.alluxio)
@@ -135,11 +144,11 @@ class AlluxioFileSystem(AbstractFileSystem):
             self.alluxio = None
         else:
             self.alluxio = AlluxioClient(
-                logger=self.logger,
                 **kwargs,
             )
             self.ufs_updater = UFSUpdater(self.alluxio)
             self.ufs_updater.start_updater()
+
         # init ufs updater
         self.fallback_to_ufs_enabled = (
             (self.alluxio.config.fallback_to_ufs_enabled)
@@ -192,10 +201,10 @@ class AlluxioFileSystem(AbstractFileSystem):
             with open(path, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f) or {}
         except yaml.YAMLError as e:
-            print(f"Error parsing YAML config file '{path}': {e}")
+            self.logger.error(f"Error parsing YAML config file '{path}': {e}")
             return {}
         except Exception as e:
-            print(f"Error loading YAML config file '{path}': {e}")
+            self.logger.error(f"Error loading YAML config file '{path}': {e}")
             return {}
 
     def merge_config(self, yaml_config: dict, other_config: dict) -> dict:
@@ -347,11 +356,15 @@ class AlluxioFileSystem(AbstractFileSystem):
             # Using **final_kwargs maps arguments by name, avoiding positional mismatches.
             res = fs_method(**final_kwargs)
 
-            self.logger.debug(f"Exit(Ok): ufs({fs}) op({method_name})")
+            self.fallback_logger.debug(
+                f"Exit(Ok): ufs({fs}) op({method_name})"
+            )
             return res
 
         except Exception as e:
-            self.logger.error(f"Fallback to UFS failed for {method_name}")
+            self.fallback_logger.error(
+                f"Fallback to UFS failed for {method_name}"
+            )
             # [Critical] Use 'from e' to preserve the original exception stack trace
             raise RuntimeError(
                 f"Fallback to UFS failed for {method_name}"
@@ -362,11 +375,11 @@ class AlluxioFileSystem(AbstractFileSystem):
         Helper method to handle error logging, keeping the main logic clean.
         """
         log_msg = f"Exit(Error): alluxio op({method_name}), fallback to ufs"
-        self.logger.warning(log_msg)
+        self.fallback_logger.warning(log_msg)
         if self.ufs_updater.must_get_ufs_count() > 0:
-            self.logger.debug(f"{error} {traceback.format_exc()}")
+            self.fallback_logger.debug(f"{error} {traceback.format_exc()}")
         else:
-            self.logger.info(f"{error} {traceback.format_exc()}")
+            self.fallback_logger.info(f"{error} {traceback.format_exc()}")
         self.error_metrics.record_error(method_name, error)
 
     @fallback_handler
@@ -613,7 +626,7 @@ class AlluxioFile(AbstractBufferedFile):
         else:
             self.f = None
         self.kwargs = kwargs
-        self.logger = alluxio.logger
+        self.fallback_logger = alluxio.fallback_logger
 
     def fallback_handler(alluxio_impl):
         @wraps(alluxio_impl)
@@ -653,10 +666,10 @@ class AlluxioFile(AbstractBufferedFile):
                     return res
             except Exception as e:
                 if not isinstance(e, NotImplementedError):
-                    self.logger.warning(
+                    self.fallback_logger.warning(
                         f"alluxio's {alluxio_impl.__name__} failed, fallback to ufs"
                     )
-                    self.logger.debug(f"{e} {traceback.format_exc()}")
+                    self.fallback_logger.debug(f"{e} {traceback.format_exc()}")
                 if self.fs.fallback_to_ufs_enabled or self.f is None:
                     raise e
             fs_method = getattr(self.f, alluxio_impl.__name__, None)
@@ -665,7 +678,7 @@ class AlluxioFile(AbstractBufferedFile):
                     res = fs_method(*positional_params, **kwargs)
                     return res
                 except Exception:
-                    self.logger.error("fallback to ufs is failed")
+                    self.fallback_logger.error("fallback to ufs is failed")
                 raise Exception("fallback to ufs is failed")
             raise NotImplementedError(
                 f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.target_protocol}"
