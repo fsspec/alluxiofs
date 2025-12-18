@@ -70,6 +70,7 @@ class TestLocalCacheManager(unittest.TestCase):
         file_path = "/test/file"
         part_index = 0
         path_hash = self.manager.compute_hash(file_path)
+        assert path_hash is not None
         local_path = self.manager._get_local_path(file_path, part_index)
 
         # Mock fetch to write some data
@@ -225,7 +226,7 @@ class TestLocalCacheManager(unittest.TestCase):
         os.remove(local_path + "_loading")
 
         # Fail (already cached)
-        with open(local_path, "w") as f:
+        with open(local_path, "w"):
             pass
         self.assertFalse(self.manager.set_file_loading(file_path, part_index))
 
@@ -292,6 +293,7 @@ class TestCachedFileReader(unittest.TestCase):
         # We need to mock manager.read_from_cache because it's called inside read_file_range
 
         original_read = self.manager.read_from_cache
+        assert original_read is not None
 
         call_count = 0
 

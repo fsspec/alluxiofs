@@ -1,9 +1,13 @@
-import pytest
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
-from alluxiofs.client.transfer import UfsInfo, UFSUpdater
+import pytest
+
 from alluxiofs.client.const import ALLUXIO_UFS_INFO_REFRESH_INTERVAL_MINUTES
+from alluxiofs.client.transfer import UfsInfo
+from alluxiofs.client.transfer import UFSUpdater
+
 
 class TestUfsInfo:
     def test_init(self):
@@ -11,6 +15,7 @@ class TestUfsInfo:
         assert info.alluxio_path == "alluxio_path"
         assert info.ufs_full_path == "ufs_path"
         assert info.options == {"opt": "val"}
+
 
 class TestUFSUpdater:
     @pytest.fixture
@@ -31,17 +36,17 @@ class TestUFSUpdater:
 
     def test_init_without_alluxio(self):
         updater = UFSUpdater(None)
-        assert updater.interval_seconds == ALLUXIO_UFS_INFO_REFRESH_INTERVAL_MINUTES * 60
+        assert (
+            updater.interval_seconds
+            == ALLUXIO_UFS_INFO_REFRESH_INTERVAL_MINUTES * 60
+        )
         assert updater.alluxio is None
 
     def test_parse_ufs_info_valid(self, mock_alluxio):
         updater = UFSUpdater(mock_alluxio)
-        json_str = json.dumps({
-            "s3://bucket/path": {
-                "alluxio_path": "/mnt/s3",
-                "key": "value"
-            }
-        })
+        json_str = json.dumps(
+            {"s3://bucket/path": {"alluxio_path": "/mnt/s3", "key": "value"}}
+        )
         result = updater.parse_ufs_info(json_str)
         assert len(result) == 1
         assert result[0].ufs_full_path == "s3://bucket/path"
@@ -73,12 +78,19 @@ class TestUFSUpdater:
     @patch("alluxiofs.client.transfer.register_unregistered_ufs_to_fsspec")
     @patch("alluxiofs.client.transfer.filesystem")
     @patch("alluxiofs.client.transfer.fsspec.get_filesystem_class")
-    def test_register_ufs_fallback(self, mock_get_fs_class, mock_filesystem, mock_register, mock_get_protocol, mock_alluxio):
+    def test_register_ufs_fallback(
+        self,
+        mock_get_fs_class,
+        mock_filesystem,
+        mock_register,
+        mock_get_protocol,
+        mock_alluxio,
+    ):
         updater = UFSUpdater(mock_alluxio)
         ufs_info = UfsInfo("/mnt/s3", "s3://bucket", {"key": "val"})
 
         mock_get_protocol.return_value = "s3"
-        mock_get_fs_class.return_value = True # Simulate supported protocol
+        mock_get_fs_class.return_value = True  # Simulate supported protocol
         mock_fs_instance = MagicMock()
         mock_filesystem.return_value = mock_fs_instance
 
@@ -92,11 +104,13 @@ class TestUFSUpdater:
 
     @patch("alluxiofs.client.transfer.register_unregistered_ufs_to_fsspec")
     @patch("alluxiofs.client.transfer.fsspec.get_filesystem_class")
-    def test_register_ufs_fallback_unsupported(self, mock_get_fs_class, mock_register, mock_alluxio):
+    def test_register_ufs_fallback_unsupported(
+        self, mock_get_fs_class, mock_register, mock_alluxio
+    ):
         updater = UFSUpdater(mock_alluxio)
         ufs_info = UfsInfo("/mnt/unknown", "unknown://bucket", {})
 
-        mock_get_fs_class.return_value = None # Simulate unsupported protocol
+        mock_get_fs_class.return_value = None  # Simulate unsupported protocol
 
         with pytest.raises(ValueError, match="Unsupported protocol"):
             updater.register_ufs_fallback([ufs_info])
@@ -113,12 +127,20 @@ class TestUFSUpdater:
         updater._cached_ufs = {"s3://bucket": "fs_instance"}
         updater._path_map = {"s3://bucket": "/mnt/s3"}
 
-        assert updater.get_alluxio_path_from_ufs_full_path("s3://bucket/file") == "/mnt/s3/file"
-        assert updater.get_alluxio_path_from_ufs_full_path("hdfs://namenode/file") is None
+        assert (
+            updater.get_alluxio_path_from_ufs_full_path("s3://bucket/file")
+            == "/mnt/s3/file"
+        )
+        assert (
+            updater.get_alluxio_path_from_ufs_full_path("hdfs://namenode/file")
+            is None
+        )
 
     @patch("alluxiofs.client.transfer.UFSUpdater.parse_ufs_info")
     @patch("alluxiofs.client.transfer.UFSUpdater.register_ufs_fallback")
-    def test_execute_update_success(self, mock_register, mock_parse, mock_alluxio):
+    def test_execute_update_success(
+        self, mock_register, mock_parse, mock_alluxio
+    ):
         updater = UFSUpdater(mock_alluxio)
         mock_alluxio.get_ufs_info_from_worker.return_value = '{"json": "data"}'
         mock_parse.return_value = ["parsed_info"]
@@ -139,7 +161,9 @@ class TestUFSUpdater:
 
     def test_execute_update_exception(self, mock_alluxio):
         updater = UFSUpdater(mock_alluxio)
-        mock_alluxio.get_ufs_info_from_worker.side_effect = Exception("Network error")
+        mock_alluxio.get_ufs_info_from_worker.side_effect = Exception(
+            "Network error"
+        )
 
         updater._execute_update()
         # Should catch exception and log error
@@ -186,6 +210,9 @@ class TestUFSUpdater:
         with pytest.raises(ValueError):
             updater.must_get_ufs_from_path("path")
 
-        updater.get_alluxio_path_from_ufs_full_path = MagicMock(return_value="/path")
-        assert updater.must_get_alluxio_path_from_ufs_full_path("path") == "/path"
-
+        updater.get_alluxio_path_from_ufs_full_path = MagicMock(
+            return_value="/path"
+        )
+        assert (
+            updater.must_get_alluxio_path_from_ufs_full_path("path") == "/path"
+        )

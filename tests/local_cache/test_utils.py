@@ -1,28 +1,25 @@
-import pytest
-import logging
-import os
 import sys
-from unittest.mock import MagicMock, patch, ANY
-import pycurl
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
-from alluxiofs.client.utils import (
-    convert_ufs_info_to,
-    get_protocol_from_path,
-    register_unregistered_ufs_to_fsspec,
-    TagAdapter,
-    TagFilter,
-    setup_logger,
-    get_prefetch_policy,
-    retry_on_network,
-    _c_send_get_request_write_bytes,
-    _c_send_get_request_write_file,
-    _c_send_get_request_stream,
-)
-from alluxiofs.client.prefetch_policy import (
-    NoPrefetchPolicy,
-    FixedWindowPrefetchPolicy,
-    AdaptiveWindowPrefetchPolicy,
-)
+import pycurl
+import pytest
+
+from alluxiofs.client.prefetch_policy import AdaptiveWindowPrefetchPolicy
+from alluxiofs.client.prefetch_policy import FixedWindowPrefetchPolicy
+from alluxiofs.client.prefetch_policy import NoPrefetchPolicy
+from alluxiofs.client.utils import _c_send_get_request_stream
+from alluxiofs.client.utils import _c_send_get_request_write_bytes
+from alluxiofs.client.utils import _c_send_get_request_write_file
+from alluxiofs.client.utils import convert_ufs_info_to
+from alluxiofs.client.utils import get_prefetch_policy
+from alluxiofs.client.utils import get_protocol_from_path
+from alluxiofs.client.utils import register_unregistered_ufs_to_fsspec
+from alluxiofs.client.utils import retry_on_network
+from alluxiofs.client.utils import setup_logger
+from alluxiofs.client.utils import TagAdapter
+from alluxiofs.client.utils import TagFilter
+
 
 class TestUtils:
     def test_convert_ufs_info_to(self):
@@ -32,7 +29,12 @@ class TestUtils:
         assert res_oss == {"key": "ak", "secret": "sk", "endpoint": "ep"}
 
         # Test other ufs
-        info_other = {"access_key": "ak", "secret_key": "sk", "endpoint": "ep", "other": "val"}
+        info_other = {
+            "access_key": "ak",
+            "secret_key": "sk",
+            "endpoint": "ep",
+            "other": "val",
+        }
         res_other = convert_ufs_info_to("s3", info_other)
         assert res_other == info_other
 
@@ -63,6 +65,7 @@ class TestUtils:
 
             # We use a side effect on __import__ to raise ImportError only for bosfs
             original_import = __import__
+
             def mock_import(name, *args, **kwargs):
                 if name == "bosfs":
                     raise ImportError("No module named bosfs")
@@ -71,6 +74,7 @@ class TestUtils:
             with patch("builtins.__import__", side_effect=mock_import):
                 with pytest.raises(ImportError, match="Please install bosfs"):
                     register_unregistered_ufs_to_fsspec("bos")
+
 
 class TestLogging:
     def test_tag_adapter(self):
@@ -117,14 +121,18 @@ class TestLogging:
         mock_logging.INFO = 20
         mock_logging.getLevelName.return_value = 20
 
-        logger = setup_logger(file_path="/tmp/logs", level_str="DEBUG", log_tags="TAG1")
+        logger = setup_logger(
+            file_path="/tmp/logs", level_str="DEBUG", log_tags="TAG1"
+        )
+        assert logger is not None
 
         mock_os.makedirs.assert_called_with("/tmp/logs", exist_ok=True)
         mock_logging.FileHandler.assert_called()
         mock_logging.StreamHandler.assert_called()
 
         mock_logger = mock_logging.getLogger.return_value
-        assert mock_logger.addHandler.call_count >= 2 # Stream and File
+        assert mock_logger.addHandler.call_count >= 2  # Stream and File
+
 
 class TestPrefetchPolicy:
     @patch("alluxiofs.client.prefetch_policy.setup_logger")
@@ -138,14 +146,19 @@ class TestPrefetchPolicy:
         assert isinstance(get_prefetch_policy(config, 1024), NoPrefetchPolicy)
 
         config.local_cache_prefetch_policy = "fixed_window"
-        assert isinstance(get_prefetch_policy(config, 1024), FixedWindowPrefetchPolicy)
+        assert isinstance(
+            get_prefetch_policy(config, 1024), FixedWindowPrefetchPolicy
+        )
 
         config.local_cache_prefetch_policy = "adaptive_window"
-        assert isinstance(get_prefetch_policy(config, 1024), AdaptiveWindowPrefetchPolicy)
+        assert isinstance(
+            get_prefetch_policy(config, 1024), AdaptiveWindowPrefetchPolicy
+        )
 
         config.local_cache_prefetch_policy = "unknown"
         with pytest.raises(ValueError):
             get_prefetch_policy(config, 1024)
+
 
 class TestRetry:
     def test_retry_on_network_success(self):
@@ -188,6 +201,7 @@ class TestRetry:
             decorated()
         assert mock_func.call_count == 1
 
+
 class TestCurlRequests:
     @patch("alluxiofs.client.utils.pycurl.Curl")
     def test_c_send_get_request_write_bytes(self, mock_curl_cls):
@@ -198,7 +212,9 @@ class TestCurlRequests:
             mock_buffer = mock_bytes_io.return_value
             mock_buffer.getvalue.return_value = b"data"
 
-            res = _c_send_get_request_write_bytes("http://url", {"header": "val"})
+            res = _c_send_get_request_write_bytes(
+                "http://url", {"header": "val"}
+            )
 
             assert res == b"data"
             mock_curl.perform.assert_called_once()
@@ -235,4 +251,3 @@ class TestCurlRequests:
 
             assert res == mock_buffer
             mock_curl.perform.assert_called_once()
-

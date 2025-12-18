@@ -1,9 +1,9 @@
 from unittest.mock import MagicMock
-from alluxiofs.client.prefetch_policy import (
-    NoPrefetchPolicy,
-    FixedWindowPrefetchPolicy,
-    AdaptiveWindowPrefetchPolicy,
-)
+
+from alluxiofs.client.prefetch_policy import AdaptiveWindowPrefetchPolicy
+from alluxiofs.client.prefetch_policy import FixedWindowPrefetchPolicy
+from alluxiofs.client.prefetch_policy import NoPrefetchPolicy
+
 
 class TestNoPrefetchPolicy:
     def test_get_blocks(self):
@@ -22,6 +22,7 @@ class TestNoPrefetchPolicy:
         # length=-1 -> read until end
         # file_size=5000 -> blocks 0, 1, 2, 3, 4. (4*1024=4096, 5000 is in block 4)
         assert policy.get_blocks(0, -1, 5000) == (0, 4)
+
 
 class TestFixedWindowPrefetchPolicy:
     def test_init_defaults(self):
@@ -66,6 +67,7 @@ class TestFixedWindowPrefetchPolicy:
         # Request block 0. Prefetch 10. Max block is 4.
         # Should return (0, 4)
         assert policy.get_blocks(0, 1024, 5000) == (0, 4)
+
 
 class TestAdaptiveWindowPrefetchPolicy:
     def test_init(self):
@@ -122,7 +124,7 @@ class TestAdaptiveWindowPrefetchPolicy:
 
         policy = AdaptiveWindowPrefetchPolicy(block_size=1024, config=config)
         policy.prefetch_ahead = 5
-        policy.last_offset = 10240 # block 10
+        policy.last_offset = 10240  # block 10
 
         # Jump back to block 0
         # index=0, last_index=10. index < last_index.
@@ -139,11 +141,10 @@ class TestAdaptiveWindowPrefetchPolicy:
 
         policy = AdaptiveWindowPrefetchPolicy(block_size=1024, config=config)
         policy.prefetch_ahead = 2
-        policy.last_offset = 0 # block 0
+        policy.last_offset = 0  # block 0
 
         # Jump far forward to block 10
         # index=10, last_index=0. index-last_index-1 = 9 > prefetch_ahead(2).
         # else branch: prefetch_ahead = min_prefetch (0).
         policy.get_blocks(10240, 1024, 100000)
         assert policy.prefetch_ahead == 0
-
