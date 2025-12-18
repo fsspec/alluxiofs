@@ -26,7 +26,6 @@ from typing import Tuple
 import aiohttp
 import humanfriendly
 import requests
-from cachetools import LRUCache
 from requests import HTTPError
 from requests.adapters import HTTPAdapter
 
@@ -194,7 +193,6 @@ class AlluxioClient:
                 os.makedirs(self.local_disk_cache_dir)
 
         if self.local_cache_enabled:
-            self.magic_bytes_cache = LRUCache(maxsize=10000)
             self.local_cache_async_prefetch_thread_pool = ThreadPoolExecutor(
                 self.config.local_cache_prefetch_concurrency
             )

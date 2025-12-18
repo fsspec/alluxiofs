@@ -98,37 +98,46 @@ def setup_logger(
     log_tags=None,
 ):
     # Map string level to logging constants
-    level = LOG_LEVEL_MAP.get(level_str.upper(), logging.INFO)
-    file_name = "user.log"
+    level = (
+        LOG_LEVEL_MAP.get(level_str.upper(), logging.INFO)
+        if "LOG_LEVEL_MAP" in globals()
+        else logging.getLevelName(level_str.upper())
+    )
 
-    # Configure log directory and file path
-    if file_path is None:
-        project_dir = os.getcwd()
-        logs_dir = os.path.join(project_dir, "logs")
-        if not os.path.exists(logs_dir):
-            os.makedirs(logs_dir, exist_ok=True)
-        log_file = os.path.join(logs_dir, file_name)
-    else:
-        log_file = os.path.join(file_path, file_name)
+    # Initialize handlers list
+    handlers = []
 
-    # Initialize handlers
-    file_handler = logging.FileHandler(log_file)
+    # 1. Console Handler (Always active)
     console_handler = logging.StreamHandler()
+    handlers.append(console_handler)
 
-    # Apply TagFilter if log_tags are provided
-    if log_tags:
-        tag_filter = TagFilter(log_tags)
-        file_handler.addFilter(tag_filter)
-        console_handler.addFilter(tag_filter)
+    # 2. File Handler (Conditional)
+    if file_path:
+        file_name = "user.log"
+
+        if not os.path.exists(file_path):
+            os.makedirs(file_path, exist_ok=True)
+
+        log_file = os.path.join(file_path, file_name)
+        file_handler = logging.FileHandler(log_file)
+        handlers.append(file_handler)
 
     # Set log message format
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
-    for handler in [file_handler, console_handler]:
+    # Prepare TagFilter if needed
+    tag_filter = None
+    if log_tags and "TagFilter" in globals():
+        tag_filter = TagFilter(log_tags)
+
+    # Apply configuration to all active handlers
+    for handler in handlers:
         handler.setFormatter(formatter)
         handler.setLevel(level)
+        if tag_filter:
+            handler.addFilter(tag_filter)
 
     # Initialize logger
     logger = logging.getLogger(class_name)
@@ -138,8 +147,10 @@ def setup_logger(
     if logger.hasHandlers():
         logger.handlers.clear()
 
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+    # Add all configured handlers to the logger
+    for handler in handlers:
+        logger.addHandler(handler)
+
     logger.setLevel(level)
 
     return logger

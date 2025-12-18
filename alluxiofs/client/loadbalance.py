@@ -40,18 +40,18 @@ class WorkerListLoadBalancer:
     def __init__(self, config: AlluxioClientConfig):
         self.workers, self.ports = self._param_worker_addr(config)
 
-    def get_worker(self, path: str) -> WorkerNetAddress:
-        # Simple hash-based load balancing
-        index = hash(path) % len(self.workers)
-        return WorkerNetAddress.from_host_and_port(
-            self.workers[index], self.ports[index]
-        )
-
-    def get_worker(self) -> WorkerNetAddress:
-        index = random.choice(range(len(self.workers)))
-        return WorkerNetAddress.from_host_and_port(
-            self.workers[index], self.ports[index]
-        )
+    def get_worker(self, path: str = None) -> WorkerNetAddress:
+        if path:
+            # Simple hash-based load balancing
+            index = hash(path) % len(self.workers)
+            return WorkerNetAddress.from_host_and_port(
+                self.workers[index], self.ports[index]
+            )
+        else:
+            index = random.choice(range(len(self.workers)))
+            return WorkerNetAddress.from_host_and_port(
+                self.workers[index], self.ports[index]
+            )
 
     def get_multiple_worker(self, path, worker_num):
         # Simple hash-based load balancing
@@ -135,7 +135,7 @@ class DNSLoadBalancer:
             # This exception is raised for address-related errors, like a domain not found.
             raise ValueError(f"Could not resolve domain: {self.domain}")
 
-    def get_worker(self, path: str) -> WorkerNetAddress:
+    def get_worker(self, path: str = None) -> WorkerNetAddress:
         """
         Selects a single worker based on the path domain.
 
