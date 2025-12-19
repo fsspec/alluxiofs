@@ -189,6 +189,7 @@ local_cache_eviction_scan_interval_minutes: 0.5
 #   Purpose: Expire cached blocks older than the TTL; 0 means disabled
 #   Default Value: 10
 local_cache_ttl_time_minutes: 10
+
 # ----------------------------------------------------------------------------
 # HTTP Request Configuration
 # ----------------------------------------------------------------------------

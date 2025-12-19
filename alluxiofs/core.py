@@ -23,6 +23,7 @@ from fsspec.spec import AbstractBufferedFile
 from alluxiofs.client import AlluxioClient
 from alluxiofs.client.config import AlluxioClientConfig
 from alluxiofs.client.transfer import UFSUpdater
+from alluxiofs.client.utils import get_prefetch_policy
 from alluxiofs.client.utils import setup_logger
 from alluxiofs.client.utils import TagAdapter
 
@@ -467,7 +468,10 @@ class AlluxioFileSystem(AbstractFileSystem):
 
         # Local read buffer for optimizing frequent small byte reads
         _read_buffer_size = int(1024 * 1024 * float(read_buffer_size_mb))
-        return io.BufferedReader(raw_file, buffer_size=_read_buffer_size)
+        return (
+            io.BufferedReader(raw_file, buffer_size=_read_buffer_size),
+            raw_file,
+        )
 
     @fallback_handler
     def mkdir(self, path, create_parents=False, **kwargs):
@@ -627,6 +631,17 @@ class AlluxioFile(AbstractBufferedFile):
             self.f = None
         self.kwargs = kwargs
         self.fallback_logger = alluxio.fallback_logger
+        if alluxio.alluxio and alluxio.alluxio.config.local_cache_enabled:
+            block_size = (
+                int(alluxio.alluxio.config.local_cache_block_size_mb)
+                * 1024
+                * 1024
+            )
+            self.prefetch_policy = get_prefetch_policy(
+                alluxio.alluxio.config, block_size
+            )
+        else:
+            self.prefetch_policy = None
 
     def fallback_handler(alluxio_impl):
         @wraps(alluxio_impl)
@@ -696,6 +711,7 @@ class AlluxioFile(AbstractBufferedFile):
                 alluxio_path=self.alluxio_path,
                 offset=start,
                 length=end - start,
+                prefetch_policy=self.prefetch_policy,
             )
         except Exception as e:
             raise IOError(
@@ -745,3 +761,8 @@ class AlluxioFile(AbstractBufferedFile):
         if self._upload_chunk(final=force) is not False:
             self.offset += self.buffer.seek(0, 2)
             self.buffer = io.BytesIO()
+
+    def get_local_cache_prefetch_window_size(self):
+        if self.fs.alluxio and self.fs.alluxio.config.local_cache_enabled:
+            return self.prefetch_policy.get_windows_size()
+        return 0

@@ -631,13 +631,14 @@ class CachedFileReader:
         offset=0,
         length=-1,
         file_size=None,
+        prefetch_policy=None,
     ):
         """Use multiprocessing to download the entire file in parallel (per block)."""
         worker_host, worker_http_port = self._get_s3_worker_address(file_path)
         if file_size is None:
             file_size = self.get_file_length(file_path)
         start_block, end_block = self.get_blocks_prefetch(
-            offset, length, file_size
+            offset, length, file_size, prefetch_policy
         )
         args_list = []
         for i in range(start_block, end_block + 1):
@@ -675,6 +676,7 @@ class CachedFileReader:
         offset=0,
         length=-1,
         file_size=None,
+        prefetch_policy=None,
     ):
         """
         Read the requested file range.
@@ -724,6 +726,7 @@ class CachedFileReader:
                         offset,
                         length,
                         file_size,
+                        prefetch_policy,
                     )
 
                 # Wait for the block to become available
@@ -741,13 +744,19 @@ class CachedFileReader:
                     return self.alluxio_client.read_file_range_normal(
                         file_path, alluxio_path, offset, length
                     )
-
+            if chunk is not None:
+                offset += len(chunk)
+                length -= len(chunk)
             chunks.append(chunk)
 
         # Use join() instead of repeated concatenation - much faster for multiple chunks
         return b"".join(chunks)
 
-    def get_blocks_prefetch(self, offset=0, length=-1, file_size=None):
+    def get_blocks_prefetch(
+        self, offset=0, length=-1, file_size=None, prefetch_policy=None
+    ):
+        if prefetch_policy:
+            return prefetch_policy.get_blocks(offset, length, file_size)
         return self.prefetch_policy.get_blocks(offset, length, file_size)
 
     def get_file_length(self, file_path):

@@ -196,10 +196,10 @@ class AlluxioClient:
             self.local_cache_async_prefetch_thread_pool = ThreadPoolExecutor(
                 self.config.local_cache_prefetch_concurrency
             )
-            data_manager = LocalCacheManager(self.config)
+            local_cache = LocalCacheManager(self.config)
             self.data_manager = CachedFileReader(
                 self,
-                data_manager,
+                local_cache,
                 thread_pool=self.local_cache_async_prefetch_thread_pool,
                 config=self.config,
             )
@@ -543,10 +543,21 @@ class AlluxioClient:
         except Exception as e:
             raise Exception(e)
 
-    def read_file_range(self, file_path, alluxio_path, offset=0, length=-1):
+    def read_file_range(
+        self,
+        file_path,
+        alluxio_path,
+        offset=0,
+        length=-1,
+        prefetch_policy=None,
+    ):
         if self.local_cache_enabled:
             return self.data_manager.read_file_range(
-                file_path, alluxio_path, offset, length
+                file_path,
+                alluxio_path,
+                offset,
+                length,
+                prefetch_policy=prefetch_policy,
             )
         else:
             return self.read_file_range_normal(

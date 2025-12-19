@@ -21,7 +21,7 @@ class AlluxioClientConfig:
         ufs_info_refresh_interval_minutes=2,
         concurrency=64,
         log_level="INFO",
-        log_dir="./logs/",
+        log_dir=None,
         log_tag_allowlist=None,
         use_mem_cache=False,
         mem_map_capacity=1024,
@@ -85,7 +85,7 @@ class AlluxioClientConfig:
             "CRITICAL",
         ], "'log_level' should be one of 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'"
 
-        assert isinstance(log_dir, str), "'log_dir' should be a string"
+        assert isinstance(log_dir, str) or log_dir is None, "'log_dir' should be a string or None"
 
         assert (
             isinstance(log_tag_allowlist, str) or log_tag_allowlist is None
