@@ -98,11 +98,7 @@ def setup_logger(
     log_tags=None,
 ):
     # Map string level to logging constants
-    level = (
-        LOG_LEVEL_MAP.get(level_str.upper(), logging.INFO)
-        if "LOG_LEVEL_MAP" in globals()
-        else logging.getLevelName(level_str.upper())
-    )
+    level = LOG_LEVEL_MAP.get(level_str.upper(), logging.INFO)
 
     # Initialize handlers list
     handlers = []
@@ -129,7 +125,7 @@ def setup_logger(
 
     # Prepare TagFilter if needed
     tag_filter = None
-    if log_tags and "TagFilter" in globals():
+    if log_tags:
         tag_filter = TagFilter(log_tags)
 
     # Apply configuration to all active handlers

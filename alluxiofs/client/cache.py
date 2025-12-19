@@ -66,9 +66,7 @@ class LocalCacheManager:
         self.cache_dirs, self.max_cache_sizes = self._param_local_cache_dirs(
             self.config.local_cache_dir, self.config.local_cache_size_gb
         )
-        self.current_cache_sizes = [
-            Value("l", 0) for _ in range(len(self.cache_dirs))
-        ]
+        self.current_cache_sizes = [Value("l", 0) for _ in self.cache_dirs]
 
         # Initialize cache directories
         self.cache_data_dirs = []
@@ -694,8 +692,9 @@ class CachedFileReader:
         remaining_length = length
 
         path_hash = self.cache.compute_hash(file_path)
-        dir_index = int(path_hash, 16) % len(self.cache.cache_dirs)
-        cache_data_dir = self.cache.cache_data_dirs[dir_index]
+        cache_data_dir = self.cache.cache_data_dirs[
+            int(path_hash, 16) % len(self.cache.cache_dirs)
+        ]
         base_path = os.path.join(cache_data_dir, path_hash)
 
         for blk in range(start_block, end_block + 1):
