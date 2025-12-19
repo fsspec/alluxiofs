@@ -214,7 +214,12 @@ class UFSUpdater:
 
     def must_get_ufs_from_path(self, path: str):
         self._init_event.wait()
-        return self.get_ufs_from_cache(path)
+        ufs = self.get_ufs_from_cache(path)
+        if ufs is None:
+            raise ValueError(
+                f"No registered UFS found in alluxio for path: {path}"
+            )
+        return ufs
 
     def get_ufs_from_cache(self, path: str):
         with self._lock:

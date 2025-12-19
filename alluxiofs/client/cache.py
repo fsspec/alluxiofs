@@ -67,6 +67,18 @@ class LocalCacheManager:
             self.config.local_cache_dir, self.config.local_cache_size_gb
         )
         self.current_cache_sizes = [Value("l", 0) for _ in self.cache_dirs]
+
+        # Initialize cache directories
+        self.cache_data_dirs = []
+        self.cache_tmp_pool_dirs = []
+        for d in self.cache_dirs:
+            data_dir = os.path.join(d, "data")
+            tmp_dir = os.path.join(d, "tmp_pool")
+            os.makedirs(data_dir, exist_ok=True)
+            os.makedirs(tmp_dir, exist_ok=True)
+            self.cache_data_dirs.append(data_dir)
+            self.cache_tmp_pool_dirs.append(tmp_dir)
+
         self._load_existing_cache()
         self._stop_eviction_event = threading.Event()
         self._eviction_thread = threading.Thread(
@@ -168,15 +180,11 @@ class LocalCacheManager:
 
     def _get_cache_data_dir(self, hash_index):
         """Get the data directory for a given cache index."""
-        res = os.path.join(self.cache_dirs[hash_index], "data")
-        os.makedirs(res, exist_ok=True)
-        return res
+        return self.cache_data_dirs[hash_index]
 
     def _get_cache_tmp_pool_dir(self, hash_index):
         """Get the temporary pool directory for a given cache index."""
-        res = os.path.join(self.cache_dirs[hash_index], "tmp_pool")
-        os.makedirs(res, exist_ok=True)
-        return res
+        return self.cache_tmp_pool_dirs[hash_index]
 
     def _get_local_cache_index_dir_for_file(self, file_path):
         """Determine which cache directory to use for a given file based on hash."""
@@ -210,12 +218,15 @@ class LocalCacheManager:
                     continue
         self._evict_if_needed(hash_index, 0)
 
-    def _get_local_path(self, file_path, part_index):
+    def compute_hash(self, file_path):
+        return hashlib.sha256(file_path.encode("utf-8")).hexdigest()
+
+    def _get_local_path(self, file_path, part_index, path_hash=None):
         """Generate local cache file path for a given block."""
-        hash_obj = hashlib.sha256(file_path.encode("utf-8"))
-        path_hash = hash_obj.hexdigest()
-        hash_index = self._get_local_cache_index_dir_for_file(file_path)
-        cache_data_dir = self._get_cache_data_dir(hash_index)
+        if path_hash is None:
+            path_hash = self.compute_hash(file_path)
+        dir_index = int(path_hash, 16) % len(self.cache_dirs)
+        cache_data_dir = self._get_cache_data_dir(dir_index)
         return os.path.join(cache_data_dir, f"{path_hash}_{part_index}")
 
     def _atomic_write(
@@ -437,7 +448,15 @@ class LocalCacheManager:
             end,
         )
 
-    def read_from_cache(self, file_path, part_index, offset, length):
+    def read_from_cache(
+        self,
+        file_path,
+        part_index,
+        offset,
+        length,
+        path_hash=None,
+        base_path=None,
+    ):
         """
         Read data from cache block if available.
         Returns a tuple: (data, status)
@@ -445,25 +464,29 @@ class LocalCacheManager:
         - If block is being written: (None, BlockStatus.LOADING)
         - If block is ready: (data, BlockStatus.CACHED)
         """
-        file_path_hashed = self._get_local_path(file_path, part_index)
-        status = self._get_block_status(file_path_hashed)
-        if status == BlockStatus.ABSENT:
-            return None, BlockStatus.ABSENT
-        elif status == BlockStatus.LOADING:
-            return None, BlockStatus.LOADING
+        if base_path:
+            file_path_hashed = f"{base_path}_{part_index}"
+        else:
+            file_path_hashed = self._get_local_path(
+                file_path, part_index, path_hash
+            )
 
-        # Read file data
         try:
-            with open(file_path_hashed, "rb") as f:
-                data = os.pread(f.fileno(), length, offset)
+            fd = os.open(file_path_hashed, os.O_RDONLY)
+            try:
+                data = os.pread(fd, length, offset)
+            finally:
+                os.close(fd)
+            return data, BlockStatus.CACHED
+        except FileNotFoundError:
+            if os.path.exists(file_path_hashed + "_loading"):
+                return None, BlockStatus.LOADING
+            return None, BlockStatus.ABSENT
         except (IOError, OSError) as e:
             if self.logger:
                 self.logger.debug(f"Read error: {file_path_hashed}: {e}")
             self._set_file_absent(file_path_hashed)
             return None, BlockStatus.ABSENT
-
-        # Update cache index (lazy update - only if significant)
-        return data, BlockStatus.CACHED
 
     def _get_files_sorted_by_atime_scandir(
         self, cache_data_dir, reverse=False
@@ -668,6 +691,12 @@ class CachedFileReader:
         # Calculate remaining length for accurate part_length computation
         remaining_length = length
 
+        path_hash = self.cache.compute_hash(file_path)
+        cache_data_dir = self.cache.cache_data_dirs[
+            int(path_hash, 16) % len(self.cache.cache_dirs)
+        ]
+        base_path = os.path.join(cache_data_dir, path_hash)
+
         for blk in range(start_block, end_block + 1):
             part_offset = (
                 offset - blk * self.block_size if blk == start_block else 0
@@ -680,7 +709,12 @@ class CachedFileReader:
             else:
                 part_length = -1
             chunk, state = self.cache.read_from_cache(
-                file_path, blk, part_offset, part_length
+                file_path,
+                blk,
+                part_offset,
+                part_length,
+                path_hash=path_hash,
+                base_path=base_path,
             )
             if chunk is None:
                 if state == BlockStatus.ABSENT:
@@ -694,7 +728,12 @@ class CachedFileReader:
 
                 # Wait for the block to become available
                 chunk, state = self.cache.read_from_cache(
-                    file_path, blk, part_offset, part_length
+                    file_path,
+                    blk,
+                    part_offset,
+                    part_length,
+                    path_hash=path_hash,
+                    base_path=base_path,
                 )
 
                 if state != BlockStatus.CACHED:
