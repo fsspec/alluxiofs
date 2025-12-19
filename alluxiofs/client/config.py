@@ -85,7 +85,9 @@ class AlluxioClientConfig:
             "CRITICAL",
         ], "'log_level' should be one of 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'"
 
-        assert isinstance(log_dir, str) or log_dir is None, "'log_dir' should be a string or None"
+        assert (
+            isinstance(log_dir, str) or log_dir is None
+        ), "'log_dir' should be a string or None"
 
         assert (
             isinstance(log_tag_allowlist, str) or log_tag_allowlist is None
