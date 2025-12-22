@@ -257,11 +257,13 @@ class LocalCacheManager:
             self._evict_if_needed(hash_index, end - start)
             temp_file = None
         except Exception as e:
-            self.logger.info(
+            self.logger.error(
                 "Exception in _atomic_write pre-check:",
                 e,
                 traceback.print_exc(),
             )
+            return False
+
         try:
             # Step 2: Write to temporary file
             with tempfile.NamedTemporaryFile(
@@ -279,7 +281,16 @@ class LocalCacheManager:
                 )
                 temp_file.flush()
                 os.fsync(temp_file.fileno())
+        except Exception as e:
+            # On failure, reset status to ABSENT and clean up
+            if temp_file and os.path.exists(temp_file.name):
+                os.remove(temp_file.name)
+            self._set_file_absent(file_path_hashed)
+            if self.logger:
+                self.logger.debug(f"Write failed for {file_path_hashed}: {e}")
+            return False
 
+        try:
             # Step 3: Atomic rename
             os.rename(temp_file_name, file_path_hashed)
             self._set_file_cached(file_path_hashed)
@@ -290,7 +301,6 @@ class LocalCacheManager:
                     f"Atomic write completed: {file_path_hashed}"
                 )
             return True
-
         except FileExistsError as e:
             # On failure, reset status to ABSENT and clean up
             if temp_file and os.path.exists(temp_file.name):
@@ -334,6 +344,11 @@ class LocalCacheManager:
                 os.rename(file_path_hashed, file_path_hashed + "_evicted")
             except FileExistsError:
                 pass
+            except Exception:
+                try:
+                    os.remove(file_path_hashed)
+                except FileNotFoundError:
+                    pass
 
     def _truly_evict_file(self, file_path_evicted, hash_index=None):
         """Truly delete the cached file."""

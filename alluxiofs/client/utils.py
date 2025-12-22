@@ -6,6 +6,7 @@
 # either express or implied, as more fully set forth in the License.
 #
 # See the NOTICE file distributed with this work for information regarding copyright ownership.
+import json
 import logging
 import os
 import time
@@ -246,7 +247,30 @@ def _c_send_get_request_write_bytes(
         if status == 104:
             raise ConnectionResetError("Connection reset by peer")
         elif status >= 400:
-            raise RuntimeError(f"HTTP error: {status}")
+            try:
+                content = json.loads(result)
+                message = content.get(
+                    "message", result.decode("utf-8", errors="replace")
+                )
+            except Exception:
+                message = result.decode("utf-8", errors="replace")
+
+            if status == 404:
+                raise FileNotFoundError(message)
+            elif status == 400:
+                raise ValueError(message)
+            elif status == 403:
+                raise PermissionError(message)
+            elif status == 401:
+                raise PermissionError(f"Unauthorized: {message}")
+            elif status == 409:
+                raise FileExistsError(message)
+            elif status == 503:
+                raise ConnectionError(message)
+            elif status == 412:
+                raise RuntimeError(f"Precondition failed: {message}")
+            else:
+                raise RuntimeError(f"HTTP error {status}: {message}")
 
         return result
 

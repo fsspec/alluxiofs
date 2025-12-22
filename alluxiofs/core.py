@@ -468,10 +468,7 @@ class AlluxioFileSystem(AbstractFileSystem):
 
         # Local read buffer for optimizing frequent small byte reads
         _read_buffer_size = int(1024 * 1024 * float(read_buffer_size_mb))
-        return (
-            io.BufferedReader(raw_file, buffer_size=_read_buffer_size),
-            raw_file,
-        )
+        return io.BufferedReader(raw_file, buffer_size=_read_buffer_size)
 
     @fallback_handler
     def mkdir(self, path, create_parents=False, **kwargs):
