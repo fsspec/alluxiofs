@@ -689,9 +689,9 @@ class AlluxioFile(AbstractBufferedFile):
                 try:
                     res = fs_method(*positional_params, **kwargs)
                     return res
-                except Exception:
-                    self.fallback_logger.error("fallback to ufs is failed")
-                raise Exception("fallback to ufs is failed")
+                except Exception as e:
+                    self.fallback_logger.error(f"fallback to ufs failed: {e}")
+                    raise Exception(f"fallback to ufs failed: {e}") from e
             raise NotImplementedError(
                 f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.target_protocol}"
             )
@@ -711,9 +711,12 @@ class AlluxioFile(AbstractBufferedFile):
                 prefetch_policy=self.prefetch_policy,
             )
         except Exception as e:
+            self.fallback_logger.error(
+                f"Failed to fetch range {start}-{end} of {self.alluxio_path}: {e}"
+            )
             raise IOError(
                 f"Failed to fetch range {start}-{end} of {self.alluxio_path}: {e} "
-            )
+            ) from e
         return res
 
     def _upload_chunk(self, final=False):
