@@ -257,11 +257,13 @@ class LocalCacheManager:
             self._evict_if_needed(hash_index, end - start)
             temp_file = None
         except Exception as e:
-            self.logger.info(
+            self.logger.error(
                 "Exception in _atomic_write pre-check:",
                 e,
                 traceback.print_exc(),
             )
+            return False
+
         try:
             # Step 2: Write to temporary file
             with tempfile.NamedTemporaryFile(
@@ -279,7 +281,16 @@ class LocalCacheManager:
                 )
                 temp_file.flush()
                 os.fsync(temp_file.fileno())
+        except Exception as e:
+            # On failure, reset status to ABSENT and clean up
+            if temp_file and os.path.exists(temp_file.name):
+                os.remove(temp_file.name)
+            self._set_file_absent(file_path_hashed)
+            if self.logger:
+                self.logger.debug(f"Write failed for {file_path_hashed}: {e}")
+            return False
 
+        try:
             # Step 3: Atomic rename
             os.rename(temp_file_name, file_path_hashed)
             self._set_file_cached(file_path_hashed)
@@ -290,7 +301,6 @@ class LocalCacheManager:
                     f"Atomic write completed: {file_path_hashed}"
                 )
             return True
-
         except FileExistsError as e:
             # On failure, reset status to ABSENT and clean up
             if temp_file and os.path.exists(temp_file.name):
@@ -334,6 +344,11 @@ class LocalCacheManager:
                 os.rename(file_path_hashed, file_path_hashed + "_evicted")
             except FileExistsError:
                 pass
+            except Exception:
+                try:
+                    os.remove(file_path_hashed)
+                except FileNotFoundError:
+                    pass
 
     def _truly_evict_file(self, file_path_evicted, hash_index=None):
         """Truly delete the cached file."""
@@ -631,13 +646,14 @@ class CachedFileReader:
         offset=0,
         length=-1,
         file_size=None,
+        prefetch_policy=None,
     ):
         """Use multiprocessing to download the entire file in parallel (per block)."""
         worker_host, worker_http_port = self._get_s3_worker_address(file_path)
         if file_size is None:
             file_size = self.get_file_length(file_path)
         start_block, end_block = self.get_blocks_prefetch(
-            offset, length, file_size
+            offset, length, file_size, prefetch_policy
         )
         args_list = []
         for i in range(start_block, end_block + 1):
@@ -675,6 +691,7 @@ class CachedFileReader:
         offset=0,
         length=-1,
         file_size=None,
+        prefetch_policy=None,
     ):
         """
         Read the requested file range.
@@ -724,6 +741,7 @@ class CachedFileReader:
                         offset,
                         length,
                         file_size,
+                        prefetch_policy,
                     )
 
                 # Wait for the block to become available
@@ -741,13 +759,19 @@ class CachedFileReader:
                     return self.alluxio_client.read_file_range_normal(
                         file_path, alluxio_path, offset, length
                     )
-
+            if chunk is not None:
+                offset += len(chunk)
+                length -= len(chunk)
             chunks.append(chunk)
 
         # Use join() instead of repeated concatenation - much faster for multiple chunks
         return b"".join(chunks)
 
-    def get_blocks_prefetch(self, offset=0, length=-1, file_size=None):
+    def get_blocks_prefetch(
+        self, offset=0, length=-1, file_size=None, prefetch_policy=None
+    ):
+        if prefetch_policy:
+            return prefetch_policy.get_blocks(offset, length, file_size)
         return self.prefetch_policy.get_blocks(offset, length, file_size)
 
     def get_file_length(self, file_path):

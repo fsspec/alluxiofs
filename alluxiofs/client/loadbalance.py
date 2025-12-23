@@ -7,6 +7,8 @@ from alluxiofs.client.config import AlluxioClientConfig
 from alluxiofs.client.const import (
     ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
 )
+from alluxiofs.client.utils import setup_logger
+from alluxiofs.client.utils import TagAdapter
 
 
 @dataclass(frozen=True)
@@ -100,6 +102,13 @@ class DNSLoadBalancer:
         """
         self.config = config
         self.domain = config.load_balance_domain
+        base_logger = setup_logger(
+            self.config.log_dir,
+            self.config.log_level,
+            self.__class__.__name__,
+            self.config.log_tag_allowlist,
+        )
+        self.logger = TagAdapter(base_logger, {"tag": "[LOAD_BALANCER]"})
 
     def resolve_address(self) -> str:
         """
@@ -129,11 +138,17 @@ class DNSLoadBalancer:
                 return ip_address
             else:
                 # This case is rare but handled for robustness.
+                self.logger.error(
+                    f"No address found for domain: {self.domain}"
+                )
                 raise ValueError(f"No address found for domain: {self.domain}")
 
-        except socket.gaierror:
+        except socket.gaierror as e:
             # This exception is raised for address-related errors, like a domain not found.
-            raise ValueError(f"Could not resolve domain: {self.domain}")
+            self.logger.error(
+                f"Could not resolve domain: {self.domain}, error: {e}"
+            )
+            raise ValueError(f"Could not resolve domain: {self.domain}") from e
 
     def get_worker(self, path: str = None) -> WorkerNetAddress:
         """

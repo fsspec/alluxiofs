@@ -23,6 +23,7 @@ from fsspec.spec import AbstractBufferedFile
 from alluxiofs.client import AlluxioClient
 from alluxiofs.client.config import AlluxioClientConfig
 from alluxiofs.client.transfer import UFSUpdater
+from alluxiofs.client.utils import get_prefetch_policy
 from alluxiofs.client.utils import setup_logger
 from alluxiofs.client.utils import TagAdapter
 
@@ -627,6 +628,17 @@ class AlluxioFile(AbstractBufferedFile):
             self.f = None
         self.kwargs = kwargs
         self.fallback_logger = alluxio.fallback_logger
+        if alluxio.alluxio and alluxio.alluxio.config.local_cache_enabled:
+            block_size = (
+                int(alluxio.alluxio.config.local_cache_block_size_mb)
+                * 1024
+                * 1024
+            )
+            self.prefetch_policy = get_prefetch_policy(
+                alluxio.alluxio.config, block_size
+            )
+        else:
+            self.prefetch_policy = None
 
     def fallback_handler(alluxio_impl):
         @wraps(alluxio_impl)
@@ -677,9 +689,9 @@ class AlluxioFile(AbstractBufferedFile):
                 try:
                     res = fs_method(*positional_params, **kwargs)
                     return res
-                except Exception:
-                    self.fallback_logger.error("fallback to ufs is failed")
-                raise Exception("fallback to ufs is failed")
+                except Exception as e:
+                    self.fallback_logger.error(f"fallback to ufs failed: {e}")
+                    raise Exception(f"fallback to ufs failed: {e}") from e
             raise NotImplementedError(
                 f"The method {alluxio_impl.__name__} is not implemented in the underlying filesystem {self.target_protocol}"
             )
@@ -696,11 +708,15 @@ class AlluxioFile(AbstractBufferedFile):
                 alluxio_path=self.alluxio_path,
                 offset=start,
                 length=end - start,
+                prefetch_policy=self.prefetch_policy,
             )
         except Exception as e:
+            self.fallback_logger.error(
+                f"Failed to fetch range {start}-{end} of {self.alluxio_path}: {e}"
+            )
             raise IOError(
                 f"Failed to fetch range {start}-{end} of {self.alluxio_path}: {e} "
-            )
+            ) from e
         return res
 
     def _upload_chunk(self, final=False):
@@ -745,3 +761,8 @@ class AlluxioFile(AbstractBufferedFile):
         if self._upload_chunk(final=force) is not False:
             self.offset += self.buffer.seek(0, 2)
             self.buffer = io.BytesIO()
+
+    def get_local_cache_prefetch_window_size(self):
+        if self.fs.alluxio and self.fs.alluxio.config.local_cache_enabled:
+            return self.prefetch_policy.get_window_size()
+        return 0

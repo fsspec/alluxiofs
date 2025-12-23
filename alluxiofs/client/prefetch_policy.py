@@ -15,7 +15,7 @@ class PrefetchPolicy(ABC):
         self.block_size = block_size
 
         # common state
-        self.last_offset = None
+        self.last_end_block = None
         self.last_time = None
         self.last_request_rtt = None  # latest measured RTT
         self.average_rtt = None  # moving average
@@ -81,6 +81,9 @@ class FixedWindowPrefetchPolicy(PrefetchPolicy):
             self.prefetch_ahead = self.config.local_cache_prefetch_ahead_blocks
         self.logger = TagAdapter(base_logger, {"tag": "[PREFETCH]"})
 
+    def get_windows_size(self):
+        return self.prefetch_ahead
+
     def get_blocks(self, offset, length, file_size):
 
         start_block = offset // self.block_size
@@ -118,19 +121,17 @@ class AdaptiveWindowPrefetchPolicy(PrefetchPolicy):
             self.max_prefetch = self.config.local_cache_max_prefetch_blocks
         self.logger = TagAdapter(base_logger, {"tag": "[PREFETCH]"})
         self.min_prefetch = 0
-        self.last_offset = 0
+        self.last_end_block = 0
 
-    def _adjust_prefetch_by_offset(self, offset):
-        if self.last_offset is None:
+    def _adjust_prefetch_by_offset(self, start_block):
+        if self.last_end_block is None:
             return
 
-        last_index = self.last_offset // self.block_size
-        index = offset // self.block_size
-        if index < last_index:
+        if start_block < self.last_end_block:
             self.prefetch_ahead = self.min_prefetch
-        elif index - last_index - 1 < self.prefetch_ahead:
+        elif start_block - self.last_end_block - 1 < self.prefetch_ahead:
             return
-        elif index - last_index - 1 == self.prefetch_ahead:
+        elif start_block - self.last_end_block - 1 == self.prefetch_ahead:
             if self.prefetch_ahead == 0:
                 self.prefetch_ahead = 1
             else:
@@ -139,7 +140,9 @@ class AdaptiveWindowPrefetchPolicy(PrefetchPolicy):
                 )
         else:
             self.prefetch_ahead = self.min_prefetch
-        self.last_offset = offset
+
+    def get_window_size(self):
+        return self.prefetch_ahead
 
     def get_blocks(self, offset, length, file_size):
         start_block = offset // self.block_size
@@ -149,7 +152,8 @@ class AdaptiveWindowPrefetchPolicy(PrefetchPolicy):
         else:
             end_block = (offset + length - 1) // self.block_size
 
-        self._adjust_prefetch_by_offset(offset)
+        self._adjust_prefetch_by_offset(start_block)
+        self.last_end_block = end_block
 
         # apply prefetch window
         end_block = min(

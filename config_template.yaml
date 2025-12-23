@@ -67,6 +67,26 @@ fallback_to_ufs_enabled: true
 ufs_info_refresh_interval_minutes: 2
 
 # ----------------------------------------------------------------------------
+# Logging Configuration
+# ----------------------------------------------------------------------------
+
+# log_level: Logging level
+#   Purpose: Controls the verbosity of logs
+#   Valid Values: "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+#   Default Value: "INFO"
+log_level: "INFO"
+
+# log_dir: Log directory
+#   Purpose: Directory to store log files. If not set, logs might be output to console or default location.
+#   Default Value: null
+log_dir: null
+
+# log_tag_allowlist: Log tag allowlist
+#   Purpose: Filter logs by tags. Only logs with tags in this list will be recorded.
+#   Default Value: null
+log_tag_allowlist: null
+
+# ----------------------------------------------------------------------------
 # Concurrency Control Configuration
 # ----------------------------------------------------------------------------
 
@@ -189,6 +209,7 @@ local_cache_eviction_scan_interval_minutes: 0.5
 #   Purpose: Expire cached blocks older than the TTL; 0 means disabled
 #   Default Value: 10
 local_cache_ttl_time_minutes: 10
+
 # ----------------------------------------------------------------------------
 # HTTP Request Configuration
 # ----------------------------------------------------------------------------
