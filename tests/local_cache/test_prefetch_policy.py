@@ -110,10 +110,10 @@ class TestAdaptiveWindowPrefetchPolicy:
         assert policy.prefetch_ahead == 1
 
         # Access block 3.
-        # index=3, last_index=1. index-last_index-1 = 1 == 1.
-        # prefetch_ahead becomes 2.
+        # index=3, last_index=2. index-last_index-1 = 0 < 1. Returns.
+        # prefetch_ahead remains 1.
         policy.get_blocks(3072, 1024, 100000)
-        assert policy.prefetch_ahead == 2
+        assert policy.prefetch_ahead == 1
 
     def test_random_access_resets_window(self):
         config = MagicMock()
@@ -124,7 +124,7 @@ class TestAdaptiveWindowPrefetchPolicy:
 
         policy = AdaptiveWindowPrefetchPolicy(block_size=1024, config=config)
         policy.prefetch_ahead = 5
-        policy.last_offset = 10240  # block 10
+        policy.last_end_block = 10  # block 10
 
         # Jump back to block 0
         # index=0, last_index=10. index < last_index.
@@ -141,7 +141,7 @@ class TestAdaptiveWindowPrefetchPolicy:
 
         policy = AdaptiveWindowPrefetchPolicy(block_size=1024, config=config)
         policy.prefetch_ahead = 2
-        policy.last_offset = 0  # block 0
+        policy.last_end_block = 0  # block 0
 
         # Jump far forward to block 10
         # index=10, last_index=0. index-last_index-1 = 9 > prefetch_ahead(2).

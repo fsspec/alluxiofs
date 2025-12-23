@@ -764,5 +764,5 @@ class AlluxioFile(AbstractBufferedFile):
 
     def get_local_cache_prefetch_window_size(self):
         if self.fs.alluxio and self.fs.alluxio.config.local_cache_enabled:
-            return self.prefetch_policy.get_windows_size()
+            return self.prefetch_policy.get_window_size()
         return 0

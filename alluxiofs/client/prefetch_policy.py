@@ -15,7 +15,7 @@ class PrefetchPolicy(ABC):
         self.block_size = block_size
 
         # common state
-        self.last_offset = None
+        self.last_end_block = None
         self.last_time = None
         self.last_request_rtt = None  # latest measured RTT
         self.average_rtt = None  # moving average
@@ -141,7 +141,7 @@ class AdaptiveWindowPrefetchPolicy(PrefetchPolicy):
         else:
             self.prefetch_ahead = self.min_prefetch
 
-    def get_windows_size(self):
+    def get_window_size(self):
         return self.prefetch_ahead
 
     def get_blocks(self, offset, length, file_size):
