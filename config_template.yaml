@@ -90,18 +90,6 @@ log_tag_allowlist: null
 # Concurrency Control Configuration
 # ----------------------------------------------------------------------------
 
-# concurrency: Maximum number of concurrent operations
-#   Purpose: Controls the maximum number of concurrent operations the client can execute simultaneously (e.g., concurrent reads, writes)
-#   Affected Areas:
-#     - HTTP request connection pool size (pool_connections and pool_maxsize)
-#     - Thread pool size for concurrent file operations
-#   Default Value: 64
-#   Tuning Recommendations:
-#     - High concurrency scenarios: Consider increasing (e.g., 128 or 256)
-#     - Resource-constrained scenarios: Consider decreasing (e.g., 32 or 16)
-#     - Should be adjusted based on actual network bandwidth and Worker node performance
-concurrency: 64
-
 # ----------------------------------------------------------------------------
 # Local Cache Configuration
 # ----------------------------------------------------------------------------
