@@ -165,7 +165,6 @@ class AlluxioClient:
         )
         self.logger = TagAdapter(base_logger, {"tag": "[ALLUXIO_CLIENT]"})
 
-        self.session = self._create_session(self.config.concurrency)
         self.data_manager = None
         if self.config.load_balance_domain:
             self.loadbalancer = None
@@ -298,7 +297,7 @@ class AlluxioClient:
         )
         params = {"path": path}
 
-        response = self.session.get(
+        response = requests.get(
             LIST_URL_FORMAT.format(
                 worker_host=worker_host, http_port=worker_http_port
             ),
@@ -364,7 +363,7 @@ class AlluxioClient:
         )
         params = {"path": path}
 
-        response = self.session.get(
+        response = requests.get(
             GET_FILE_STATUS_URL_FORMAT.format(
                 worker_host=worker_host,
                 http_port=worker_http_port,
@@ -441,7 +440,7 @@ class AlluxioClient:
             "opType": OpType.SUBMIT.value,
             "verbose": json.dumps(verbose),
         }
-        response = self.session.get(
+        response = requests.get(
             LOAD_URL_FORMAT.format(
                 worker_host=worker_host,
                 http_port=worker_http_port,
@@ -470,7 +469,7 @@ class AlluxioClient:
             path
         )
         params = {"path": path, "opType": OpType.STOP.value}
-        response = self.session.get(
+        response = requests.get(
             LOAD_URL_FORMAT.format(
                 worker_host=worker_host,
                 http_port=worker_http_port,
@@ -1534,7 +1533,7 @@ class AlluxioClient:
             "opType": OpType.SUBMIT.value,
             "verbose": json.dumps(verbose),
         }
-        response = self.session.get(
+        response = requests.get(
             LOAD_URL_FORMAT.format(
                 worker_host=worker_host,
                 http_port=worker_http_port,
@@ -1583,7 +1582,7 @@ class AlluxioClient:
     def _load_progress_internal(
         self, load_url: str, params: Dict
     ) -> (LoadState, str):
-        response = self.session.get(load_url, params=params)
+        response = requests.get(load_url, params=params)
         self._check_response(response)
         content = json.loads(response.content.decode("utf-8"))
         if "jobState" not in content:
@@ -1630,7 +1629,7 @@ class AlluxioClient:
                 page_length=length,
             )
             self.logger.debug(f"Reading page request {page_url}")
-        response = self.session.get(page_url)
+        response = requests.get(page_url)
         self._check_response(response)
         return response.content
 
@@ -1701,7 +1700,7 @@ class AlluxioClient:
                 file_path=full_ufs_path,
             )
         try:
-            response = self.session.get(url)
+            response = requests.get(url)
             response.raise_for_status()
             data = json.loads(response.content)
             ip = data["Host"]
@@ -2202,7 +2201,7 @@ class AlluxioAsyncFileSystem:
                 file_path=full_ufs_path,
             )
         try:
-            response = self.session.get(url)
+            response = requests.get(url)
             response.raise_for_status()
             data = json.loads(response.content)
             ip = data["Host"]
@@ -2230,7 +2229,7 @@ class AlluxioAsyncFileSystem:
         data=None,
     ) -> Tuple[int, bytes]:
         await self._set_session()
-        async with self.session.request(
+        async with requests.request(
             method=method.value,
             url=url,
             params=params,

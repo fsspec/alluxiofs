@@ -19,7 +19,6 @@ class AlluxioClientConfig:
         worker_data_port: int = ALLUXIO_WORKER_S3_SERVER_PORT_DEFAULT_VALUE,
         fallback_to_ufs_enabled=True,
         ufs_info_refresh_interval_minutes=2,
-        concurrency=64,
         log_level="INFO",
         log_dir=None,
         log_tag_allowlist=None,
@@ -72,10 +71,6 @@ class AlluxioClientConfig:
         assert isinstance(
             fallback_to_ufs_enabled, bool
         ), "'fallback_to_ufs_enabled' should be a boolean"
-
-        assert (
-            isinstance(concurrency, int) and concurrency > 0
-        ), "'concurrency' should be a positive integer"
 
         assert isinstance(log_level, str) and log_level in [
             "DEBUG",
@@ -212,7 +207,6 @@ class AlluxioClientConfig:
         self.worker_hosts = worker_hosts
         self.worker_http_port = worker_http_port
         self.worker_data_port = worker_data_port
-        self.concurrency = concurrency
         self.log_level = log_level
         self.log_dir = log_dir
         self.log_tag_allowlist = log_tag_allowlist
