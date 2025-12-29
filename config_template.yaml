@@ -78,12 +78,22 @@ log_level: "INFO"
 
 # log_dir: Log directory
 #   Purpose: Directory to store log files. If not set, logs might be output to console or default location.
-#   Default Value: null
+#   Default Value: null，meaning no specific log directory is set，only console output
 log_dir: null
 
 # log_tag_allowlist: Log tag allowlist
 #   Purpose: Filter logs by tags. Only logs with tags in this list will be recorded.
-#   Default Value: null
+#   Valid Values: Comma-separated list of tags. Available tags:
+#     - "[FSSPEC]": FSSpec interface related logs
+#     - "[FALLBACK]": Fallback to UFS related logs
+#     - "[UFS_MANAGER]": UFS management and updates
+#     - "[LOAD_BALANCER]": Worker load balancing
+#     - "[PREFETCH]": Data prefetching operations
+#     - "[ALLUXIO_CLIENT]": Core Alluxio client operations
+#     - "[LOCAL_CACHE]": Local disk cache operations
+#     - "[MEMORY_CACHE]": In-memory cache operations
+#   Example: "FSSPEC, LOCAL_CACHE"
+#   Default Value: null, meaning no filtering is applied, all logs are recorded
 log_tag_allowlist: null
 
 # ----------------------------------------------------------------------------

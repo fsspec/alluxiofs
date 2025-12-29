@@ -5,6 +5,9 @@ from unittest.mock import patch
 import pycurl
 import pytest
 
+from alluxiofs.client.log import setup_logger
+from alluxiofs.client.log import TagAdapter
+from alluxiofs.client.log import TagFilter
 from alluxiofs.client.prefetch_policy import AdaptiveWindowPrefetchPolicy
 from alluxiofs.client.prefetch_policy import FixedWindowPrefetchPolicy
 from alluxiofs.client.prefetch_policy import NoPrefetchPolicy
@@ -16,9 +19,6 @@ from alluxiofs.client.utils import get_prefetch_policy
 from alluxiofs.client.utils import get_protocol_from_path
 from alluxiofs.client.utils import register_unregistered_ufs_to_fsspec
 from alluxiofs.client.utils import retry_on_network
-from alluxiofs.client.utils import setup_logger
-from alluxiofs.client.utils import TagAdapter
-from alluxiofs.client.utils import TagFilter
 
 
 class TestUtils:
@@ -111,8 +111,8 @@ class TestLogging:
         f = TagFilter([])
         assert f.filter(record) is True
 
-    @patch("alluxiofs.client.utils.logging")
-    @patch("alluxiofs.client.utils.os")
+    @patch("alluxiofs.client.log.logging")
+    @patch("alluxiofs.client.log.os")
     def test_setup_logger(self, mock_os, mock_logging):
         mock_os.getenv.return_value = None
         mock_os.path.exists.return_value = False
@@ -225,7 +225,7 @@ class TestCurlRequests:
         mock_curl = mock_curl_cls.return_value
         mock_curl.getinfo.return_value = 404
 
-        with pytest.raises(RuntimeError, match="HTTP error: 404"):
+        with pytest.raises(FileNotFoundError):
             _c_send_get_request_write_bytes("http://url", {})
 
     @patch("alluxiofs.client.utils.pycurl.Curl")

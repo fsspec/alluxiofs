@@ -75,3 +75,5 @@ LOAD_STOP_URL_FORMAT = (
 EXCEPTION_CONTENT = (
     "Worker's address: {worker_host}:{http_port}, Error: {error}"
 )
+
+S3_RANGE_URL_FORMAT = "http://{worker_host}:{http_port}{alluxio_path}"

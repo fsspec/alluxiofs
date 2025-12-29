@@ -15,10 +15,10 @@ from fsspec.caching import Fetcher
 from fsspec.caching import ReadAheadCache
 
 from .const import MAGIC_SIZE
+from .log import setup_logger
+from .log import TagAdapter
 from .utils import _c_send_get_request_write_file
 from .utils import get_prefetch_policy
-from .utils import setup_logger
-from .utils import TagAdapter
 
 
 # =========================================================

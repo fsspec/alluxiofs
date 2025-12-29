@@ -9,10 +9,11 @@ import fsspec
 from fsspec import filesystem
 
 from alluxiofs.client.const import ALLUXIO_UFS_INFO_REFRESH_INTERVAL_MINUTES
+from alluxiofs.client.log import setup_logger
+from alluxiofs.client.log import TagAdapter
+from alluxiofs.client.utils import convert_ufs_info_to
 from alluxiofs.client.utils import get_protocol_from_path
 from alluxiofs.client.utils import register_unregistered_ufs_to_fsspec
-from alluxiofs.client.utils import setup_logger
-from alluxiofs.client.utils import TagAdapter
 
 
 class UfsInfo:
@@ -46,7 +47,7 @@ class UFSUpdater:
                 self.__class__.__name__,
                 self.config.log_tag_allowlist,
             )
-            self.logger = TagAdapter(base_logger, {"tag": "[TRANSFER]"})
+            self.logger = TagAdapter(base_logger, {"tag": "[UFS_MANAGER]"})
         else:
             self.interval_seconds = (
                 ALLUXIO_UFS_INFO_REFRESH_INTERVAL_MINUTES * 60
@@ -57,7 +58,7 @@ class UFSUpdater:
                 if self.config
                 else None,
             )
-            self.logger = TagAdapter(base_logger, {"tag": "[TRANSFER]"})
+            self.logger = TagAdapter(base_logger, {"tag": "[UFS_MANAGER]"})
 
         # Stores the latest fetched result
         self._cached_ufs: Optional[Dict[str, Any]] = {}
@@ -183,6 +184,11 @@ class UFSUpdater:
                     k: v for k, v in value.items() if k != "alluxio_path"
                 }
 
+                if alluxio_path.endswith("/"):
+                    alluxio_path = alluxio_path[:-1]
+                if ufs_full_path.endswith("/"):
+                    ufs_full_path = ufs_full_path[:-1]
+
                 ufs_info = UfsInfo(
                     alluxio_path=alluxio_path,
                     ufs_full_path=ufs_full_path,
@@ -256,6 +262,7 @@ class UFSUpdater:
                 raise ValueError(f"Unsupported protocol: {protocol}")
             else:
                 target_options = ufs_info.options
+                target_options = convert_ufs_info_to(protocol, target_options)
                 self._cached_ufs[ufs_info.ufs_full_path] = filesystem(
                     protocol, **target_options
                 )
