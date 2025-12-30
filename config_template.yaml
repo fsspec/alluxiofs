@@ -78,7 +78,7 @@ log_level: "INFO"
 
 # log_dir: Log directory
 #   Purpose: Directory to store log files. If not set, logs might be output to console or default location.
-#   Default Value: null，meaning no specific log directory is set，only console output
+#   Default Value: null, meaning no specific log directory is set, only console output
 log_dir: null
 
 # log_tag_allowlist: Log tag allowlist

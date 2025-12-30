@@ -1515,8 +1515,7 @@ class AlluxioClient:
                 EXCEPTION_CONTENT.format(
                     worker_host=worker_host,
                     http_port=worker_port,
-                    error=f"Error when reading file {alluxio_path} with offset {offset} and length {length},"
-                    f" error: {e}",
+                    error=f"Error when reading file {alluxio_path} with offset {offset} and length {length}, error: {e}",
                 )
             )
 

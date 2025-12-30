@@ -53,8 +53,9 @@ def parameters_adapter(fs, fs_method, final_kwargs):
 
     if "bos" in protocols:
         if method_name in ["cp_file"]:
-            adapted_kwargs["src_path"] = final_kwargs.pop("path1")
-            adapted_kwargs["target_path"] = final_kwargs.pop("path2")
+            if "path1" in final_kwargs and "path2" in final_kwargs:
+                adapted_kwargs["src_path"] = final_kwargs.pop("path1")
+                adapted_kwargs["target_path"] = final_kwargs.pop("path2")
 
     if "oss" in protocols:
         if method_name in ["pipe_file"]:
@@ -66,10 +67,12 @@ def parameters_adapter(fs, fs_method, final_kwargs):
             else:  # Or whatever logic you use for "don't overwrite"
                 # This will cause the upload to fail if the file exists
                 headers["x-oss-forbid-overwrite"] = "true"
+            adapted_kwargs["headers"] = headers
 
     if any(p in ["s3", "s3a"] for p in protocols):
         if method_name in ["_pipe_file", "pipe_file"]:
-            adapted_kwargs["data"] = final_kwargs.pop("value")
+            if "value" in final_kwargs:
+                adapted_kwargs["data"] = final_kwargs.pop("value")
 
     return adapted_kwargs
 

@@ -389,14 +389,6 @@ class AlluxioFileSystem(AbstractFileSystem):
             raise RuntimeError(
                 f"Fallback to UFS failed for {method_name}"
             ) from e
-        except Exception as e:
-            self.fallback_logger.error(
-                f"Fallback to UFS failed for {method_name}"
-            )
-            # [Critical] Use 'from e' to preserve the original exception stack trace
-            raise RuntimeError(
-                f"Fallback to UFS failed for {method_name}"
-            ) from e
 
     def _log_alluxio_error(self, method_name, error):
         """
@@ -718,11 +710,7 @@ class AlluxioFile(AbstractBufferedFile):
                     self.f = self.ufs.open(self.path, self.mode, **self.kwargs)
                 else:
                     self.f = None
-                if (
-                    self.fs.fallback_to_ufs_enabled
-                    and self.f is None
-                    or not self.fs.fallback_to_ufs_enabled
-                ):
+                if (not self.fs.fallback_to_ufs_enabled) or self.f is None:
                     raise e
             fs_method = getattr(self.f, alluxio_impl.__name__, None)
             if fs_method:
