@@ -54,14 +54,16 @@ from .const import MKDIR_URL_FORMAT
 from .const import MV_URL_FORMAT
 from .const import PAGE_URL_FORMAT
 from .const import RM_URL_FORMAT
+from .const import S3_RANGE_URL_FORMAT
 from .const import TAIL_URL_FORMAT
 from .const import TOUCH_URL_FORMAT
 from .const import WRITE_CHUNK_URL_FORMAT
 from .const import WRITE_PAGE_URL_FORMAT
 from .loadbalance import WorkerListLoadBalancer
+from .log import setup_logger
+from .log import TagAdapter
 from .utils import _c_send_get_request_write_bytes
-from .utils import setup_logger
-from .utils import TagAdapter
+from .utils import _c_send_get_request_write_file
 
 
 @dataclass
@@ -232,8 +234,9 @@ class AlluxioClient:
         self.logger.debug(
             f"Alluxio server returned {response.status_code}: {message}"
         )
-
-        if response.status_code == 404:
+        if response.status_code == 104:
+            raise ConnectionResetError("Connection reset by peer")
+        elif response.status_code == 404:
             raise FileNotFoundError(message)
         elif response.status_code == 400:
             raise ValueError(message)
@@ -569,7 +572,7 @@ class AlluxioClient:
         self._validate_path(file_path)
         worker_host, worker_http_port = self._get_s3_worker_address(file_path)
         if self.data_manager:
-            return self._all_file_range_generator_alluxiocommon(
+            return self._send_get_range_message_and_return_bytes_alluxiocommon(
                 worker_host,
                 worker_http_port,
                 alluxio_path,
@@ -577,7 +580,7 @@ class AlluxioClient:
                 length,
             )
         else:
-            return self._all_file_range_generator(
+            return self._send_get_range_message_and_return_bytes(
                 worker_host,
                 worker_http_port,
                 alluxio_path,
@@ -824,23 +827,14 @@ class AlluxioClient:
             worker_host = self.config.load_balance_domain
         else:
             worker_host = self.loadbalancer.get_worker().host
-        try:
-            url = GET_UFS_SECRET_INFO.format(
-                domain=worker_host,
-                http_port=self.config.worker_http_port,
-            )
-            response = requests.get(url)
-            response.raise_for_status()
-            info = response.content
-            return info
-        except Exception as e:
-            raise Exception(
-                EXCEPTION_CONTENT.format(
-                    worker_host=worker_host,
-                    http_port=self.config.worker_http_port,
-                    error=f"Error when get ufsInfo, {e}",
-                )
-            )
+        url = GET_UFS_SECRET_INFO.format(
+            domain=worker_host,
+            http_port=self.config.worker_http_port,
+        )
+        response = requests.get(url)
+        self._check_response(response)
+        info = response.content
+        return info
 
     def _all_chunk_generator(
         self, worker_host, worker_http_port, path_id, file_path, chunk_size
@@ -879,10 +873,7 @@ class AlluxioClient:
                     url_chunk, headers=headers, stream=True
                 ) as response:
                     # Check for connection reset error (status code 104)
-                    if response.status_code == 104:
-                        raise ConnectionResetError("Connection reset by peer")
-
-                    response.raise_for_status()
+                    self._check_response(response)
                     for chunk in response.iter_content(chunk_size=chunk_size):
                         if chunk:
                             out.write(chunk)
@@ -1475,18 +1466,15 @@ class AlluxioClient:
                     # read some data successfully, return those data
                     break
 
-    def _all_file_range_generator(
-        self, worker_host, worker_port, file_path, offset, length
+    def _send_get_range_message_and_return_bytes(
+        self, worker_host, worker_port, alluxio_path, offset, length
     ):
         try:
             headers = {"Range": f"bytes={offset}-{offset + length - 1}"}
-            S3_RANGE_URL_FORMAT = (
-                "http://{worker_host}:{http_port}{alluxio_path}"
-            )
             url = S3_RANGE_URL_FORMAT.format(
                 worker_host=worker_host,
                 http_port=worker_port,
-                alluxio_path=file_path,
+                alluxio_path=alluxio_path,
             )
             data = _c_send_get_request_write_bytes(
                 url,
@@ -1500,16 +1488,42 @@ class AlluxioClient:
                 EXCEPTION_CONTENT.format(
                     worker_host=worker_host,
                     http_port=worker_port,
-                    error=f"Error when reading file {file_path} with offset {offset} and length {length},"
+                    error=f"Error when reading file {alluxio_path} with offset {offset} and length {length},"
                     f" error: {e}",
                 )
             )
 
+    def _send_get_range_message_and_write_to_file(
+        self, f, worker_host, worker_port, alluxio_path, offset, length
+    ):
+        try:
+            headers = {"Range": f"bytes={offset}-{offset + length - 1}"}
+            url = S3_RANGE_URL_FORMAT.format(
+                worker_host=worker_host,
+                http_port=worker_port,
+                alluxio_path=alluxio_path,
+            )
+            _c_send_get_request_write_file(
+                url,
+                headers,
+                f,
+                time_out=self.config.http_timeouts,
+                retry_tries=self.config.http_max_retries,
+            )
+        except Exception as e:
+            raise Exception(
+                EXCEPTION_CONTENT.format(
+                    worker_host=worker_host,
+                    http_port=worker_port,
+                    error=f"Error when reading file {alluxio_path} with offset {offset} and length {length}, error: {e}",
+                )
+            )
+
     # TODO(littleEast7): need to implement it more reasonable. It is still single thread now.
-    def _all_file_range_generator_alluxiocommon(
+    def _send_get_range_message_and_return_bytes_alluxiocommon(
         self, worker_host, worker_http_port, file_path, offset, length
     ):
-        return self._all_file_range_generator(
+        return self._send_get_range_message_and_return_bytes(
             worker_host,
             worker_http_port,
             file_path,
@@ -1701,7 +1715,7 @@ class AlluxioClient:
             )
         try:
             response = requests.get(url)
-            response.raise_for_status()
+            self._check_response(response)
             data = json.loads(response.content)
             ip = data["Host"]
             port = data["HttpServerPort"]
@@ -2202,7 +2216,7 @@ class AlluxioAsyncFileSystem:
             )
         try:
             response = requests.get(url)
-            response.raise_for_status()
+            self._check_response(response)
             data = json.loads(response.content)
             ip = data["Host"]
         except HTTPError:

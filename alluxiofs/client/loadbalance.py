@@ -7,8 +7,8 @@ from alluxiofs.client.config import AlluxioClientConfig
 from alluxiofs.client.const import (
     ALLUXIO_WORKER_HTTP_SERVER_PORT_DEFAULT_VALUE,
 )
-from alluxiofs.client.utils import setup_logger
-from alluxiofs.client.utils import TagAdapter
+from alluxiofs.client.log import setup_logger
+from alluxiofs.client.log import TagAdapter
 
 
 @dataclass(frozen=True)

@@ -1,8 +1,8 @@
 from abc import ABC
 from abc import abstractmethod
 
-from alluxiofs.client.utils import setup_logger
-from alluxiofs.client.utils import TagAdapter
+from alluxiofs.client.log import setup_logger
+from alluxiofs.client.log import TagAdapter
 
 
 class PrefetchPolicy(ABC):

@@ -7,8 +7,6 @@
 #
 # See the NOTICE file distributed with this work for information regarding copyright ownership.
 import json
-import logging
-import os
 import time
 from functools import wraps
 from io import BytesIO
@@ -20,28 +18,63 @@ from .const import ALLUXIO_REQUEST_MAX_RETRIES
 from .const import ALLUXIO_REQUEST_MAX_TIMEOUT_SECONDS
 
 
-LOG_LEVEL_MAP = {
-    "CRITICAL": logging.CRITICAL,
-    "ERROR": logging.ERROR,
-    "WARNING": logging.WARNING,
-    "INFO": logging.INFO,
-    "DEBUG": logging.DEBUG,
-    "NOTSET": logging.NOTSET,
-}
-
 OSS_SETUP_OPTIONS_MAP = {
     "access_key": "key",
     "secret_key": "secret",
     "endpoint": "endpoint",
 }
 
+S3_SETUP_OPTIONS_MAP = {
+    "access_key": "key",
+    "secret_key": "secret",
+    "endpoint": "endpoint_url",
+}
+
 
 def convert_ufs_info_to(ufs, info):
     if ufs == "oss":
         res = {OSS_SETUP_OPTIONS_MAP[k]: info[k] for k in info}
+    elif ufs == "s3" or ufs == "s3a":
+        res = {
+            S3_SETUP_OPTIONS_MAP[k]: info[k]
+            for k in info
+            if k in S3_SETUP_OPTIONS_MAP
+        }
     else:
         res = info
     return res
+
+
+def parameters_adapter(fs, fs_method, final_kwargs):
+    """Adapts parameters for different filesystems and methods."""
+    adapted_kwargs = final_kwargs.copy()
+    method_name = getattr(fs_method, "__name__", str(fs_method))
+    protocols = (fs.protocol,) if isinstance(fs.protocol, str) else fs.protocol
+
+    if "bos" in protocols:
+        if method_name in ["cp_file"]:
+            if "path1" in final_kwargs and "path2" in final_kwargs:
+                adapted_kwargs["src_path"] = final_kwargs.pop("path1")
+                adapted_kwargs["target_path"] = final_kwargs.pop("path2")
+
+    if "oss" in protocols:
+        if method_name in ["pipe_file"]:
+            headers = {}
+            mode = adapted_kwargs.pop("mode", "overwrite")
+            if mode == "overwrite":
+                # Default behavior, explicitly allowing overwrite (optional, usually not needed)
+                headers["x-oss-forbid-overwrite"] = "false"
+            else:  # Or whatever logic you use for "don't overwrite"
+                # This will cause the upload to fail if the file exists
+                headers["x-oss-forbid-overwrite"] = "true"
+            adapted_kwargs["headers"] = headers
+
+    if any(p in ["s3", "s3a"] for p in protocols):
+        if method_name in ["_pipe_file", "pipe_file"]:
+            if "value" in final_kwargs:
+                adapted_kwargs["data"] = final_kwargs.pop("value")
+
+    return adapted_kwargs
 
 
 def get_protocol_from_path(path):
@@ -58,99 +91,6 @@ def register_unregistered_ufs_to_fsspec(protocol):
         except ImportError as e:
             raise ImportError(f"Please install bosfs, {e}")
         fsspec.register_implementation("bos", BOSFileSystem)
-
-
-class TagAdapter(logging.LoggerAdapter):
-    """Logger adapter that prefixes messages with a fixed tag."""
-
-    def process(self, msg, kwargs):
-        return f"{self.extra['tag']} {msg}", kwargs
-
-
-class TagFilter(logging.Filter):
-    """
-    Filter for multi-tag log matching.
-    Allows a log record to pass if its message contains any of the specified tags.
-    """
-
-    def __init__(self, tags):
-        super().__init__()
-        # Ensure tags is always a list for consistent iteration
-        if isinstance(tags, str):
-            self.tags = [t.strip() for t in tags.split(",") if t.strip()]
-        elif tags is None:
-            self.tags = []
-        else:
-            self.tags = tags
-
-    def filter(self, record):
-        # If no tags are specified, allow all logs
-        if not self.tags:
-            return True
-        message = record.getMessage()
-        # Returns True if any tag in the list is found within the message
-        return any(tag in message for tag in self.tags)
-
-
-def setup_logger(
-    file_path=os.getenv("ALLUXIO_PYTHON_SDK_LOG_DIR", None),
-    level_str=os.getenv("ALLUXIO_PYTHON_SDK_LOG_LEVEL", "INFO"),
-    class_name=__name__,
-    log_tags=None,
-):
-    # Map string level to logging constants
-    level = LOG_LEVEL_MAP.get(level_str.upper(), logging.INFO)
-
-    # Initialize handlers list
-    handlers = []
-
-    # 1. Console Handler (Always active)
-    console_handler = logging.StreamHandler()
-    handlers.append(console_handler)
-
-    # 2. File Handler (Conditional)
-    if file_path:
-        file_name = "user.log"
-
-        if not os.path.exists(file_path):
-            os.makedirs(file_path, exist_ok=True)
-
-        log_file = os.path.join(file_path, file_name)
-        file_handler = logging.FileHandler(log_file)
-        handlers.append(file_handler)
-
-    # Set log message format
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-
-    # Prepare TagFilter if needed
-    tag_filter = None
-    if log_tags:
-        tag_filter = TagFilter(log_tags)
-
-    # Apply configuration to all active handlers
-    for handler in handlers:
-        handler.setFormatter(formatter)
-        handler.setLevel(level)
-        if tag_filter:
-            handler.addFilter(tag_filter)
-
-    # Initialize logger
-    logger = logging.getLogger(class_name)
-
-    # Prevent duplicate logs by disabling propagation and clearing existing handlers
-    logger.propagate = False
-    if logger.hasHandlers():
-        logger.handlers.clear()
-
-    # Add all configured handlers to the logger
-    for handler in handlers:
-        logger.addHandler(handler)
-
-    logger.setLevel(level)
-
-    return logger
 
 
 def get_prefetch_policy(config, block_size):

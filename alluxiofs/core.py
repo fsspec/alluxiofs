@@ -22,10 +22,11 @@ from fsspec.spec import AbstractBufferedFile
 
 from alluxiofs.client import AlluxioClient
 from alluxiofs.client.config import AlluxioClientConfig
-from alluxiofs.client.transfer import UFSUpdater
+from alluxiofs.client.log import setup_logger
+from alluxiofs.client.log import TagAdapter
+from alluxiofs.client.ufs_manager import UFSUpdater
 from alluxiofs.client.utils import get_prefetch_policy
-from alluxiofs.client.utils import setup_logger
-from alluxiofs.client.utils import TagAdapter
+from alluxiofs.client.utils import parameters_adapter
 
 
 @dataclass
@@ -135,34 +136,36 @@ class AlluxioFileSystem(AbstractFileSystem):
         self.logger = TagAdapter(base_logger, {"tag": "[FSSPEC]"})
         self.fallback_logger = TagAdapter(base_logger, {"tag": "[FALLBACK]"})
         # init alluxio client
-        test_options = kwargs.get("test_options", {})
-        if test_options.get("skip_alluxio") is True:
-            self.alluxio = AlluxioClient(
-                **kwargs,
-            )
-            self.ufs_updater = UFSUpdater(self.alluxio)
-            self.ufs_updater.start_updater()
-            self.alluxio = None
-        else:
-            self.alluxio = AlluxioClient(
-                **kwargs,
-            )
-            self.ufs_updater = UFSUpdater(self.alluxio)
-            self.ufs_updater.start_updater()
-
         # init ufs updater
+        test_options = kwargs.get("test_options", {})
+        skip_alluxio = test_options.get("skip_alluxio") is True
+        client = AlluxioClient(**kwargs)
+        self.ufs_updater = UFSUpdater(client)
+        self.ufs_updater.start_updater()
+        self.alluxio = None if skip_alluxio else client
+
         self.fallback_to_ufs_enabled = (
-            (self.alluxio.config.fallback_to_ufs_enabled)
+            self.alluxio.config.fallback_to_ufs_enabled
             if self.alluxio
             else kwargs.get("fallback_to_ufs_enabled", True)
         )
-
+        self.config = client.config
         self.file_info_cache = LRUCache(maxsize=1000)
         self.error_metrics = AlluxioErrorMetrics()
 
     def __del__(self):
         if not self._closed:
             self.close()
+
+    @classmethod
+    def _strip_protocol(cls, path):
+        """Strips the protocol prefix from a given path."""
+        if isinstance(path, list):
+            return [cls._strip_protocol(p) for p in path]
+        path = str(path)
+        if path.startswith(cls.protocol_prefix):
+            path = path[len(cls.protocol_prefix) :]
+        return path.rstrip("/") or cls.root_marker
 
     def close(self):
         if self._closed:
@@ -317,7 +320,6 @@ class AlluxioFileSystem(AbstractFileSystem):
                 raise RuntimeError(
                     f"No UFS client found for path: {detected_path}"
                 )
-
             # Dynamically retrieve the corresponding method from the UFS client
             fs_method = getattr(fs, method_name, None)
             if not fs_method:
@@ -340,21 +342,38 @@ class AlluxioFileSystem(AbstractFileSystem):
             # 3. Construct the final arguments dictionary (Keyword Arguments only)
             final_kwargs = {}
 
+            # Access the signature from the bound arguments to identify VAR_KEYWORD parameters
+            source_params = bound_args.signature.parameters
+
             for name, value in bound_args.arguments.items():
                 if name == "self":
                     continue  # Never pass the wrapper's 'self' to the UFS instance method
 
-                # Pass the argument ONLY if:
-                # A. The target method explicitly defines this parameter name, OR
-                # B. The target method accepts **kwargs (wildcard)
-                if name in target_params or accepts_kwargs:
-                    final_kwargs[name] = value
+                # Check if the current argument corresponds to **kwargs in the source function
+                is_var_keyword = (
+                    name in source_params
+                    and source_params[name].kind
+                    == inspect.Parameter.VAR_KEYWORD
+                )
+
+                if is_var_keyword:
+                    # If it is **kwargs, unpack the dictionary and merge valid keys
+                    for k, v in value.items():
+                        if k in target_params or accepts_kwargs:
+                            final_kwargs[k] = v
                 else:
-                    # Argument is implicitly dropped because the UFS method doesn't support it.
-                    pass
+                    # Pass the argument ONLY if:
+                    # A. The target method explicitly defines this parameter name, OR
+                    # B. The target method accepts **kwargs (wildcard)
+                    if name in target_params or accepts_kwargs:
+                        final_kwargs[name] = value
+                    else:
+                        # Argument is implicitly dropped because the UFS method doesn't support it.
+                        pass
 
             # 4. Execute the UFS method
             # Using **final_kwargs maps arguments by name, avoiding positional mismatches.
+            final_kwargs = parameters_adapter(fs, fs_method, final_kwargs)
             res = fs_method(**final_kwargs)
 
             self.fallback_logger.debug(
@@ -418,7 +437,6 @@ class AlluxioFileSystem(AbstractFileSystem):
         except FileNotFoundError:
             return False
 
-    @fallback_handler
     def open(
         self,
         path,
@@ -447,11 +465,12 @@ class AlluxioFileSystem(AbstractFileSystem):
         **kwargs,
     ):
         """Open a file for reading or writing."""
-        ufs = self.ufs_updater.must_get_ufs_from_path(path) if path else None
-        if (
-            self.alluxio is not None
-            and self.alluxio.config.local_cache_enabled
-        ):
+        ufs = (
+            self.ufs_updater.must_get_ufs_from_path(path)
+            if path and self.fallback_to_ufs_enabled
+            else None
+        )
+        if self.alluxio and self.alluxio.config.local_cache_enabled:
             kwargs["cache_type"] = "none"
         raw_file = AlluxioFile(
             alluxio=self,
@@ -464,7 +483,7 @@ class AlluxioFileSystem(AbstractFileSystem):
             # cache=self.alluxio.mem_cache,
             **kwargs,
         )
-        read_buffer_size_mb = self.alluxio.config.read_buffer_size_mb
+        read_buffer_size_mb = self.config.read_buffer_size_mb
 
         # Local read buffer for optimizing frequent small byte reads
         _read_buffer_size = int(1024 * 1024 * float(read_buffer_size_mb))
@@ -545,10 +564,6 @@ class AlluxioFileSystem(AbstractFileSystem):
         raise NotImplementedError
 
     @fallback_handler
-    def expand_path(self, path, *args, **kwargs):
-        return super().expand_path(path, *args, **kwargs)
-
-    @fallback_handler
     def mv(self, path1, path2, recursive=False, maxdepth=None, **kwargs):
         return self.alluxio.mv(path1, path2)
 
@@ -587,6 +602,12 @@ class AlluxioFileSystem(AbstractFileSystem):
             f.seek(-bytes_to_read, 2)
             return f.read()
 
+    @fallback_handler
+    def cat(self, path, recursive=False, on_error="raise", **kwargs):
+        return super().cat(
+            path, recursive=recursive, on_error=on_error, **kwargs
+        )
+
     # need to implement
     @fallback_handler
     def cat_file(self, path, start=None, end=None, **kwargs):
@@ -618,14 +639,13 @@ class AlluxioFileSystem(AbstractFileSystem):
 class AlluxioFile(AbstractBufferedFile):
     def __init__(self, alluxio, ufs, path, mode="rb", **kwargs):
         super().__init__(alluxio, path, mode, **kwargs)
-        self.alluxio_path = (
-            alluxio.ufs_updater.must_get_alluxio_path_from_ufs_full_path(path)
-        )
+        if alluxio:
+            self.alluxio_path = (
+                alluxio.ufs_updater.must_get_alluxio_path_from_ufs_full_path(
+                    path
+                )
+            )
         self.ufs = ufs
-        if ufs is not None and isinstance(ufs, AbstractFileSystem):
-            self.f = ufs.open(path, mode, **kwargs)
-        else:
-            self.f = None
         self.kwargs = kwargs
         self.fallback_logger = alluxio.fallback_logger
         if alluxio.alluxio and alluxio.alluxio.config.local_cache_enabled:
@@ -673,16 +693,24 @@ class AlluxioFile(AbstractBufferedFile):
             positional_params = tuple(positional_params)
 
             try:
-                if self.fs:
+                if self.fs and self.fs.alluxio:
                     res = alluxio_impl(self, *positional_params, **kwargs)
                     return res
+                else:
+                    raise ModuleNotFoundError("alluxio client is None")
             except Exception as e:
                 if not isinstance(e, NotImplementedError):
                     self.fallback_logger.warning(
                         f"alluxio's {alluxio_impl.__name__} failed, fallback to ufs"
                     )
                     self.fallback_logger.debug(f"{e} {traceback.format_exc()}")
-                if self.fs.fallback_to_ufs_enabled or self.f is None:
+                if self.ufs is not None and isinstance(
+                    self.ufs, AbstractFileSystem
+                ):
+                    self.f = self.ufs.open(self.path, self.mode, **self.kwargs)
+                else:
+                    self.f = None
+                if (not self.fs.fallback_to_ufs_enabled) or self.f is None:
                     raise e
             fs_method = getattr(self.f, alluxio_impl.__name__, None)
             if fs_method:

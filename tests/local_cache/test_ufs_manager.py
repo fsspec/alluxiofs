@@ -5,8 +5,8 @@ from unittest.mock import patch
 import pytest
 
 from alluxiofs.client.const import ALLUXIO_UFS_INFO_REFRESH_INTERVAL_MINUTES
-from alluxiofs.client.transfer import UfsInfo
-from alluxiofs.client.transfer import UFSUpdater
+from alluxiofs.client.ufs_manager import UfsInfo
+from alluxiofs.client.ufs_manager import UFSUpdater
 
 
 class TestUfsInfo:
@@ -74,10 +74,10 @@ class TestUFSUpdater:
         result = updater.parse_ufs_info(json_str)
         assert result == []
 
-    @patch("alluxiofs.client.transfer.UFSUpdater.get_protocol_from_path")
-    @patch("alluxiofs.client.transfer.register_unregistered_ufs_to_fsspec")
-    @patch("alluxiofs.client.transfer.filesystem")
-    @patch("alluxiofs.client.transfer.fsspec.get_filesystem_class")
+    @patch("alluxiofs.client.ufs_manager.UFSUpdater.get_protocol_from_path")
+    @patch("alluxiofs.client.ufs_manager.register_unregistered_ufs_to_fsspec")
+    @patch("alluxiofs.client.ufs_manager.filesystem")
+    @patch("alluxiofs.client.ufs_manager.fsspec.get_filesystem_class")
     def test_register_ufs_fallback(
         self,
         mock_get_fs_class,
@@ -102,8 +102,8 @@ class TestUFSUpdater:
         assert updater._cached_ufs["s3://bucket"] == mock_fs_instance
         assert updater._path_map["s3://bucket"] == "/mnt/s3"
 
-    @patch("alluxiofs.client.transfer.register_unregistered_ufs_to_fsspec")
-    @patch("alluxiofs.client.transfer.fsspec.get_filesystem_class")
+    @patch("alluxiofs.client.ufs_manager.register_unregistered_ufs_to_fsspec")
+    @patch("alluxiofs.client.ufs_manager.fsspec.get_filesystem_class")
     def test_register_ufs_fallback_unsupported(
         self, mock_get_fs_class, mock_register, mock_alluxio
     ):
@@ -136,8 +136,8 @@ class TestUFSUpdater:
             is None
         )
 
-    @patch("alluxiofs.client.transfer.UFSUpdater.parse_ufs_info")
-    @patch("alluxiofs.client.transfer.UFSUpdater.register_ufs_fallback")
+    @patch("alluxiofs.client.ufs_manager.UFSUpdater.parse_ufs_info")
+    @patch("alluxiofs.client.ufs_manager.UFSUpdater.register_ufs_fallback")
     def test_execute_update_success(
         self, mock_register, mock_parse, mock_alluxio
     ):
