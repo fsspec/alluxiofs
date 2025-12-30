@@ -223,10 +223,10 @@ class UFSUpdater:
         ufs = self.get_ufs_from_cache(path)
         if ufs is None:
             self.logger.error(
-                f"No registered UFS found in alluxio for path: {path}"
+                f"No registered UFS found in alluxio python sdk for path: {path}"
             )
             raise ValueError(
-                f"No registered UFS found in alluxio for path: {path}"
+                f"No registered UFS found in alluxio python sdk for path: {path}"
             )
         return ufs
 

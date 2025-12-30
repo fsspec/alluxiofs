@@ -24,10 +24,22 @@ OSS_SETUP_OPTIONS_MAP = {
     "endpoint": "endpoint",
 }
 
+S3_SETUP_OPTIONS_MAP = {
+    "access_key": "key",
+    "secret_key": "secret",
+    "endpoint": "endpoint_url",
+}
+
 
 def convert_ufs_info_to(ufs, info):
     if ufs == "oss":
         res = {OSS_SETUP_OPTIONS_MAP[k]: info[k] for k in info}
+    elif ufs == "s3" or ufs == "s3a":
+        res = {
+            S3_SETUP_OPTIONS_MAP[k]: info[k]
+            for k in info
+            if k in S3_SETUP_OPTIONS_MAP
+        }
     else:
         res = info
     return res
@@ -37,13 +49,14 @@ def parameters_adapter(fs, fs_method, final_kwargs):
     """Adapts parameters for different filesystems and methods."""
     adapted_kwargs = final_kwargs.copy()
     method_name = getattr(fs_method, "__name__", str(fs_method))
+    protocols = (fs.protocol,) if isinstance(fs.protocol, str) else fs.protocol
 
-    if fs.protocol == "bos":
+    if "bos" in protocols:
         if method_name in ["cp_file"]:
             adapted_kwargs["src_path"] = final_kwargs.pop("path1")
             adapted_kwargs["target_path"] = final_kwargs.pop("path2")
 
-    if fs.protocol == "oss":
+    if "oss" in protocols:
         if method_name in ["pipe_file"]:
             headers = {}
             mode = adapted_kwargs.pop("mode", "overwrite")
@@ -53,6 +66,10 @@ def parameters_adapter(fs, fs_method, final_kwargs):
             else:  # Or whatever logic you use for "don't overwrite"
                 # This will cause the upload to fail if the file exists
                 headers["x-oss-forbid-overwrite"] = "true"
+
+    if any(p in ["s3", "s3a"] for p in protocols):
+        if method_name in ["_pipe_file", "pipe_file"]:
+            adapted_kwargs["data"] = final_kwargs.pop("value")
 
     return adapted_kwargs
 
